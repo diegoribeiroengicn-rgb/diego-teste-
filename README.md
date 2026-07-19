@@ -37,7 +37,10 @@ GAT 2026
 │   └── Visão Geral             (visão executiva integrada)
 ├── Gestão
 │   ├── Central de Alertas       (Pendente de Reunião)
-│   └── Lembretes (Sem PEP)
+│   ├── Lembretes (Sem PEP)
+│   ├── Reuniões                  (vínculo N:N a projetos de Prestadores/Cessionários)
+│   ├── Planos de Ação             (responsável, prazo e conclusão)
+│   └── Histórico                   (auditoria de Reuniões e Planos de Ação)
 └── Sistema
     └── Administração            (somente perfil ADMIN)
 ```
@@ -56,6 +59,7 @@ gat/
   export_excel.py           # Exportação fiel ao layout original
   ui/
     modals.py                # Pop-ups de cadastro/edição
+    modals_gestao.py          # Pop-ups de Reuniões e Planos de Ação
     tables.py                 # Tabela dinâmica com seleção para edição
     charts.py                  # Gráficos Plotly
     kpi_cards.py                # Cartões de KPI
@@ -69,7 +73,10 @@ views/
   consolidado.py                       # Consolidado > Visão Geral
   alertas.py                             # Gestão > Central de Alertas (Pendente de Reunião)
   lembretes_pep.py                         # Gestão > Lembretes (projetos sem PEP)
-  administracao.py                           # Sistema > Administração
+  reunioes.py                                # Gestão > Reuniões
+  planos_acao.py                               # Gestão > Planos de Ação
+  gestao_historico.py                            # Gestão > Histórico
+  administracao.py                                 # Sistema > Administração
 assets/
   tecnoplano_logo.png       # Logomarca institucional
 scripts/
@@ -149,7 +156,7 @@ O campo PEP não é obrigatório para concluir um cadastro. Ao salvar um
 projeto sem PEP, o sistema:
 
 1. Exibe um aviso de atenção e exige confirmação explícita antes de gravar;
-2. Sinaliza o registro com o badge **⚠ Sem PEP** nas tabelas de Prestadores
+2. Sinaliza o registro com o badge **SEM PEP** nas tabelas de Prestadores
    e Cessionários;
 3. Gera automaticamente um lembrete na tela **Lembretes (Sem PEP)**, com a
    contagem de dias sem PEP (a partir da Data de Solicitação) e uma
@@ -159,6 +166,22 @@ projeto sem PEP, o sistema:
 5. Assim que o PEP é informado, a pendência e o lembrete são encerrados
    automaticamente — a auditoria completa (criação e regularização) fica
    registrada no histórico de edições.
+
+## Central de Gestão (Reuniões e Planos de Ação)
+
+Área própria dentro do grupo **Gestão**, independente das telas de cadastro
+de Prestadores/Cessionários:
+
+- **Reuniões** — registro de reuniões de alinhamento, com vínculo N:N a um
+  ou mais projetos de Prestadores e/ou Cessionários (um mesmo projeto pode
+  aparecer em várias reuniões), lista de participantes, ata e decisões.
+- **Planos de Ação** — ações com responsável, prazo e status (Pendente, Em
+  Andamento, Concluído), podendo ser criadas avulsas ou a partir de uma
+  reunião; a conclusão registra automaticamente data e usuário responsável
+  pelo encerramento.
+- **Histórico** — auditoria dedicada de todas as movimentações de Reuniões
+  e Planos de Ação (criação, edição e conclusão), separada do histórico
+  geral de Prestadores/Cessionários.
 
 ## Exportação de relatórios
 

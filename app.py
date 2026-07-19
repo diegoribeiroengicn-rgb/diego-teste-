@@ -29,10 +29,13 @@ from views import (
     cessionarios,
     cessionarios_dashboard,
     consolidado,
+    gestao_historico,
     inicio,
     lembretes_pep,
+    planos_acao,
     prestadores,
     prestadores_dashboard,
+    reunioes,
 )
 
 st.set_page_config(
@@ -101,6 +104,9 @@ paginas: dict[str, list[st.Page]] = {
     "Gestão": [
         _pagina(lambda: alertas.render(usuario), "Central de Alertas", ":material/notifications_active:", "gestao_alertas"),
         _pagina(lambda: lembretes_pep.render(usuario), "Lembretes (Sem PEP)", ":material/pending_actions:", "gestao_lembretes"),
+        _pagina(lambda: reunioes.render(usuario), "Reuniões", ":material/groups:", "gestao_reunioes"),
+        _pagina(lambda: planos_acao.render(usuario), "Planos de Ação", ":material/task_alt:", "gestao_planos_acao"),
+        _pagina(lambda: gestao_historico.render(usuario), "Histórico", ":material/history:", "gestao_historico"),
     ],
 }
 if usuario["perfil"] == PERFIL_ADMIN:

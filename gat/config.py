@@ -131,6 +131,16 @@ TIPO_CESSIONARIO_OPCOES = ["Quiosque", "Loja", "Externo", "Outros"]
 ETG_OPCOES = ["NÃO", "SIM"]
 
 # ---------------------------------------------------------------------------
+# Central de Gestão — Reuniões e Planos de Ação
+# ---------------------------------------------------------------------------
+STATUS_PLANO_ACAO_OPCOES = ["PENDENTE", "EM ANDAMENTO", "CONCLUÍDO"]
+CORES_STATUS_PLANO_ACAO = {
+    "PENDENTE": CORES["laranja"],
+    "EM ANDAMENTO": CORES["azul_2"],
+    "CONCLUÍDO": CORES["verde"],
+}
+
+# ---------------------------------------------------------------------------
 # Avaliação de Prestadores (aba AVALIAÇÃO_PRESTADORES / LEGENDA)
 # ---------------------------------------------------------------------------
 FAIXAS_AVALIACAO = [

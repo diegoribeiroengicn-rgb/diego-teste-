@@ -207,6 +207,46 @@ def init_db() -> None:
                 usuario TEXT,
                 data_hora TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS reunioes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                titulo TEXT NOT NULL,
+                pauta TEXT,
+                data_prevista TEXT,
+                data_realizada TEXT,
+                ata TEXT,
+                decisoes TEXT,
+                criado_em TEXT NOT NULL,
+                criado_por TEXT,
+                atualizado_em TEXT,
+                atualizado_por TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS reuniao_projetos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                reuniao_id INTEGER NOT NULL REFERENCES reunioes(id) ON DELETE CASCADE,
+                modulo TEXT NOT NULL,
+                projeto_id INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS reuniao_participantes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                reuniao_id INTEGER NOT NULL REFERENCES reunioes(id) ON DELETE CASCADE,
+                nome TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS planos_acao (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                reuniao_id INTEGER REFERENCES reunioes(id) ON DELETE SET NULL,
+                descricao TEXT NOT NULL,
+                responsavel TEXT,
+                prazo TEXT,
+                status TEXT NOT NULL DEFAULT 'PENDENTE',
+                criado_em TEXT NOT NULL,
+                criado_por TEXT,
+                concluido_em TEXT,
+                concluido_por TEXT
+            );
             """
         )
 
@@ -470,3 +510,156 @@ def definir_configuracao(chave: str, valor: str) -> None:
 def listar_configuracoes() -> dict[str, str]:
     with _conectar() as conn:
         return {linha["chave"]: linha["valor"] for linha in conn.execute("SELECT chave, valor FROM configuracoes")}
+
+
+# ---------------------------------------------------------------------------
+# Reuniões (Central de Gestão) — relação N:N com projetos de Prestadores/Cessionários
+# ---------------------------------------------------------------------------
+
+COLUNAS_REUNIAO = ["titulo", "pauta", "data_prevista", "data_realizada", "ata", "decisoes"]
+
+
+def _nome_projeto(conn: sqlite3.Connection, modulo: str, projeto_id: int) -> str | None:
+    if modulo == "prestadores":
+        linha = conn.execute("SELECT prestador AS nome, item FROM prestadores WHERE id = ?", (projeto_id,)).fetchone()
+    else:
+        linha = conn.execute("SELECT cessionario AS nome, item FROM cessionarios WHERE id = ?", (projeto_id,)).fetchone()
+    if not linha:
+        return None
+    return f"Item {linha['item']} — {linha['nome']}"
+
+
+def inserir_reuniao(dados: dict[str, Any], projetos: list[tuple[str, int]], participantes: list[str], usuario: str) -> int:
+    agora = datetime.now().isoformat()
+    campos = {c: dados.get(c) for c in COLUNAS_REUNIAO}
+    with _conectar() as conn:
+        cursor = conn.execute(
+            f"INSERT INTO reunioes ({', '.join(campos.keys())}, criado_em, criado_por, atualizado_em, atualizado_por) "
+            f"VALUES ({', '.join(['?'] * len(campos))}, ?, ?, ?, ?)",
+            (*campos.values(), agora, usuario, agora, usuario),
+        )
+        reuniao_id = cursor.lastrowid
+        for modulo, projeto_id in projetos:
+            conn.execute(
+                "INSERT INTO reuniao_projetos (reuniao_id, modulo, projeto_id) VALUES (?, ?, ?)",
+                (reuniao_id, modulo, projeto_id),
+            )
+        for nome in participantes:
+            if nome.strip():
+                conn.execute(
+                    "INSERT INTO reuniao_participantes (reuniao_id, nome) VALUES (?, ?)",
+                    (reuniao_id, nome.strip()),
+                )
+        _registrar_historico(conn, "reunioes", reuniao_id, {}, campos, usuario)
+        return reuniao_id
+
+
+def atualizar_reuniao(reuniao_id: int, dados: dict[str, Any], projetos: list[tuple[str, int]], participantes: list[str], usuario: str) -> None:
+    with _conectar() as conn:
+        antigo = conn.execute("SELECT * FROM reunioes WHERE id = ?", (reuniao_id,)).fetchone()
+        antigo_dict = dict(antigo) if antigo else {}
+        campos = {c: dados.get(c) for c in COLUNAS_REUNIAO}
+        agora = datetime.now().isoformat()
+        set_clause = ", ".join(f"{c} = ?" for c in campos)
+        conn.execute(
+            f"UPDATE reunioes SET {set_clause}, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
+            (*campos.values(), agora, usuario, reuniao_id),
+        )
+        conn.execute("DELETE FROM reuniao_projetos WHERE reuniao_id = ?", (reuniao_id,))
+        for modulo, projeto_id in projetos:
+            conn.execute(
+                "INSERT INTO reuniao_projetos (reuniao_id, modulo, projeto_id) VALUES (?, ?, ?)",
+                (reuniao_id, modulo, projeto_id),
+            )
+        conn.execute("DELETE FROM reuniao_participantes WHERE reuniao_id = ?", (reuniao_id,))
+        for nome in participantes:
+            if nome.strip():
+                conn.execute(
+                    "INSERT INTO reuniao_participantes (reuniao_id, nome) VALUES (?, ?)",
+                    (reuniao_id, nome.strip()),
+                )
+        _registrar_historico(conn, "reunioes", reuniao_id, antigo_dict, campos, usuario)
+
+
+def excluir_reuniao(reuniao_id: int) -> None:
+    with _conectar() as conn:
+        conn.execute("DELETE FROM reunioes WHERE id = ?", (reuniao_id,))
+
+
+def listar_reunioes() -> pd.DataFrame:
+    with _conectar() as conn:
+        return pd.read_sql_query("SELECT * FROM reunioes ORDER BY COALESCE(data_prevista, criado_em) DESC", conn)
+
+
+def obter_reuniao(reuniao_id: int) -> dict[str, Any] | None:
+    with _conectar() as conn:
+        linha = conn.execute("SELECT * FROM reunioes WHERE id = ?", (reuniao_id,)).fetchone()
+        if not linha:
+            return None
+        reuniao = dict(linha)
+        vinculos = conn.execute(
+            "SELECT modulo, projeto_id FROM reuniao_projetos WHERE reuniao_id = ?", (reuniao_id,)
+        ).fetchall()
+        reuniao["projetos"] = [
+            {"modulo": v["modulo"], "projeto_id": v["projeto_id"], "nome": _nome_projeto(conn, v["modulo"], v["projeto_id"])}
+            for v in vinculos
+        ]
+        participantes = conn.execute(
+            "SELECT nome FROM reuniao_participantes WHERE reuniao_id = ?", (reuniao_id,)
+        ).fetchall()
+        reuniao["participantes"] = [p["nome"] for p in participantes]
+        return reuniao
+
+
+def listar_planos_da_reuniao(reuniao_id: int) -> pd.DataFrame:
+    with _conectar() as conn:
+        return pd.read_sql_query("SELECT * FROM planos_acao WHERE reuniao_id = ? ORDER BY id", conn, params=(reuniao_id,))
+
+
+# ---------------------------------------------------------------------------
+# Planos de Ação (Central de Gestão)
+# ---------------------------------------------------------------------------
+
+COLUNAS_PLANO_ACAO = ["reuniao_id", "descricao", "responsavel", "prazo", "status"]
+
+
+def inserir_plano_acao(dados: dict[str, Any], usuario: str) -> int:
+    agora = datetime.now().isoformat()
+    campos = {c: dados.get(c) for c in COLUNAS_PLANO_ACAO}
+    with _conectar() as conn:
+        cursor = conn.execute(
+            f"INSERT INTO planos_acao ({', '.join(campos.keys())}, criado_em, criado_por) "
+            f"VALUES ({', '.join(['?'] * len(campos))}, ?, ?)",
+            (*campos.values(), agora, usuario),
+        )
+        novo_id = cursor.lastrowid
+        _registrar_historico(conn, "planos_acao", novo_id, {}, campos, usuario)
+        return novo_id
+
+
+def atualizar_plano_acao(plano_id: int, dados: dict[str, Any], usuario: str) -> None:
+    with _conectar() as conn:
+        antigo = conn.execute("SELECT * FROM planos_acao WHERE id = ?", (plano_id,)).fetchone()
+        antigo_dict = dict(antigo) if antigo else {}
+        campos = {c: dados.get(c) for c in COLUNAS_PLANO_ACAO}
+        set_clause = ", ".join(f"{c} = ?" for c in campos)
+        conclusao = {}
+        if campos.get("status") == "CONCLUÍDO" and antigo_dict.get("status") != "CONCLUÍDO":
+            conclusao = {"concluido_em": datetime.now().isoformat(), "concluido_por": usuario}
+            set_clause += ", concluido_em = ?, concluido_por = ?"
+        conn.execute(
+            f"UPDATE planos_acao SET {set_clause} WHERE id = ?",
+            (*campos.values(), *conclusao.values(), plano_id),
+        )
+        _registrar_historico(conn, "planos_acao", plano_id, antigo_dict, {**campos, **conclusao}, usuario)
+
+
+def listar_planos_acao() -> pd.DataFrame:
+    with _conectar() as conn:
+        return pd.read_sql_query("SELECT * FROM planos_acao ORDER BY COALESCE(prazo, criado_em) ASC", conn)
+
+
+def obter_plano_acao(plano_id: int) -> dict[str, Any] | None:
+    with _conectar() as conn:
+        linha = conn.execute("SELECT * FROM planos_acao WHERE id = ?", (plano_id,)).fetchone()
+        return dict(linha) if linha else None

@@ -136,7 +136,9 @@ def injetar_css_global() -> None:
         background: #ffffff;
         color: var(--gat-navy);
     }}
-    .stButton > button:hover, .stDownloadButton > button:hover, .stFormSubmitButton > button:hover {{
+    .stButton > button:hover, .stDownloadButton > button:hover, .stFormSubmitButton > button:hover,
+    .stButton > button:focus-visible, .stDownloadButton > button:focus-visible, .stFormSubmitButton > button:focus-visible,
+    .stButton > button:focus, .stDownloadButton > button:focus, .stFormSubmitButton > button:focus {{
         border-color: var(--gat-navy);
         background: var(--gat-azul-3);
         color: var(--gat-navy);
@@ -148,7 +150,7 @@ def injetar_css_global() -> None:
         color: #ffffff;
         border: 1px solid var(--gat-navy);
     }}
-    button[kind*="primary"]:hover {{
+    button[kind*="primary"]:hover, button[kind*="primary"]:focus-visible, button[kind*="primary"]:focus {{
         background: var(--gat-azul-2);
         border-color: var(--gat-azul-2);
         color: #ffffff;
@@ -165,7 +167,9 @@ def injetar_css_global() -> None:
         border-color: var(--gat-vermelho);
         background: #ffffff;
     }}
-    div[class*="st-key-"][class*="destrutivo"] .stButton > button:hover {{
+    div[class*="st-key-"][class*="destrutivo"] .stButton > button:hover,
+    div[class*="st-key-"][class*="destrutivo"] .stButton > button:focus-visible,
+    div[class*="st-key-"][class*="destrutivo"] .stButton > button:focus {{
         background: {CORES['vermelho_bg']};
         color: var(--gat-vermelho);
         border-color: var(--gat-vermelho);
