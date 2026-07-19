@@ -5,13 +5,20 @@ from __future__ import annotations
 import streamlit as st
 
 from gat.config import PERFIS_OPCOES
-from gat.database import criar_usuario, desativar_usuario, listar_historico, listar_usuarios
+from gat.database import (
+    criar_usuario,
+    definir_configuracao,
+    desativar_usuario,
+    listar_historico,
+    listar_usuarios,
+    obter_configuracao,
+)
 
 
 def render(usuario: dict) -> None:
     st.subheader("⚙️ Administração do Sistema")
 
-    tab_usuarios, tab_historico = st.tabs(["Usuários", "Histórico de Edições"])
+    tab_usuarios, tab_historico, tab_config = st.tabs(["Usuários", "Histórico de Edições", "Configurações"])
 
     with tab_usuarios:
         st.markdown("##### Cadastrar novo usuário")
@@ -53,3 +60,27 @@ def render(usuario: dict) -> None:
         filtro_tabela = st.selectbox("Tabela", ["Todas", "prestadores", "cessionarios"])
         df_hist = listar_historico(None if filtro_tabela == "Todas" else filtro_tabela)
         st.dataframe(df_hist, use_container_width=True, hide_index=True)
+
+    with tab_config:
+        st.markdown("##### Criticidade de projetos sem PEP")
+        st.caption(
+            "Define, em dias corridos desde a Data de Solicitação, quando um projeto sem PEP passa a ser "
+            "classificado como Atenção ou Crítico nos Lembretes e nos KPIs dos dashboards."
+        )
+        dias_atencao_atual = int(obter_configuracao("pep_dias_atencao", "3"))
+        dias_critico_atual = int(obter_configuracao("pep_dias_critico", "6"))
+
+        with st.form("form_config_pep"):
+            col1, col2 = st.columns(2)
+            dias_atencao = col1.number_input("Dias para 'Atenção'", min_value=1, step=1, value=dias_atencao_atual)
+            dias_critico = col2.number_input("Dias para 'Crítico'", min_value=1, step=1, value=dias_critico_atual)
+            salvar_config = st.form_submit_button("Salvar limiares")
+
+        if salvar_config:
+            if dias_critico <= dias_atencao:
+                st.error("O limiar de 'Crítico' deve ser maior que o de 'Atenção'.")
+            else:
+                definir_configuracao("pep_dias_atencao", str(int(dias_atencao)))
+                definir_configuracao("pep_dias_critico", str(int(dias_critico)))
+                st.success("Limiares atualizados com sucesso.")
+                st.rerun()

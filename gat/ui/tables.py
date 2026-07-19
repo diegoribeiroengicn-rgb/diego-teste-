@@ -23,16 +23,32 @@ def tabela_com_edicao(
     registro e clicar em "Editar selecionado", abre o pop-up de edição
     pré-preenchido com os dados atuais do banco.
 
-    - `df_exibicao`: DataFrame já formatado para exibição (sem a coluna id).
+    - `df_exibicao`: DataFrame já formatado para exibição (sem a coluna id),
+      já ordenado pelo Item (ordem de chegada) por padrão.
     - `df_ids`: Series com o id do banco de dados, na mesma ordem/índice de `df_exibicao`.
+
+    O usuário pode ordenar visualmente a tabela clicando no cabeçalho de
+    qualquer coluna (recurso nativo do componente) — essa ordenação é
+    apenas visual e não altera o Item nem a ordem real dos registros no
+    banco. O botão "Restaurar ordem de chegada" força a recriação da
+    grade, descartando qualquer ordenação visual aplicada pelo usuário.
     """
+    chave_versao = f"_ordem_versao_{chave}"
+    versao = st.session_state.get(chave_versao, 0)
+
+    col_ordem, _ = st.columns([1, 5])
+    with col_ordem:
+        if st.button("🔄 Restaurar ordem de chegada", key=f"btn_restaurar_ordem_{chave}", use_container_width=True):
+            st.session_state[chave_versao] = versao + 1
+            st.rerun()
+
     evento = st.dataframe(
         df_exibicao,
         use_container_width=True,
         hide_index=True,
         on_select="rerun",
         selection_mode="single-row",
-        key=f"tabela_{chave}",
+        key=f"tabela_{chave}_{versao}",
     )
 
     linhas_selecionadas = evento.selection.rows if evento and evento.selection else []

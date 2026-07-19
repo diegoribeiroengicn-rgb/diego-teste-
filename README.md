@@ -39,7 +39,8 @@ views/
   cessionarios.py            # Aba B — Análise de Cessionários
   avaliacao_prestadores.py    # Avaliação de Prestadores (1-15)
   alertas.py                    # Alertas críticos (Pendente de Reunião)
-  administracao.py               # Gestão de usuários e histórico (admin)
+  lembretes_pep.py                # Lembretes — projetos sem PEP
+  administracao.py                 # Gestão de usuários, histórico e configurações
 assets/
   tecnoplano_logo.png       # Logomarca institucional
 scripts/
@@ -109,6 +110,26 @@ início do sistema:
   **Pendente de Reunião** (gargalo crítico), com view dedicada de alertas.
 - Dias úteis decorridos/saldo de dias úteis são calculados dinamicamente
   com base no calendário oficial de feriados do Rio de Janeiro (RJ).
+- O Item operacional (numeração da planilha original) é preservado e nunca
+  recalculado; Prestadores e Cessionários possuem sequências de Item
+  independentes; cancelamentos não geram renumeração.
+
+## Projeto sem PEP (alerta, pendência e lembrete automáticos)
+
+O campo PEP não é obrigatório para concluir um cadastro. Ao salvar um
+projeto sem PEP, o sistema:
+
+1. Exibe um aviso de atenção e exige confirmação explícita antes de gravar;
+2. Sinaliza o registro com o badge **⚠ Sem PEP** nas tabelas de Prestadores
+   e Cessionários;
+3. Gera automaticamente um lembrete na tela **Lembretes (Sem PEP)**, com a
+   contagem de dias sem PEP (a partir da Data de Solicitação) e uma
+   criticidade que evolui com o tempo — **Informativo → Atenção → Crítico**;
+4. Os limiares de dias para cada criticidade são parametrizáveis em
+   **Administração → Configurações** (não são fixos no código);
+5. Assim que o PEP é informado, a pendência e o lembrete são encerrados
+   automaticamente — a auditoria completa (criação e regularização) fica
+   registrada no histórico de edições.
 
 ## Exportação de relatórios
 

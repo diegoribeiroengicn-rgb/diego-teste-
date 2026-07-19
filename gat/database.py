@@ -54,7 +54,7 @@ COLUNAS_CESSIONARIOS = [
     "revisao", "num_documentos", "data_solicitacao", "tipo", "sla_dias",
     "data_limite", "data_analise", "hold_inicio", "hold_fim", "num_at",
     "revisao_at", "responsavel", "status_analise", "observacoes",
-    "natureza_revisao", "num_erros", "etg",
+    "natureza_revisao", "num_erros", "etg", "pep",
 ]
 
 COLUNAS_AVALIACOES = [
@@ -66,6 +66,28 @@ COLUNAS_AVALIACOES = [
 # ---------------------------------------------------------------------------
 # Inicialização do esquema
 # ---------------------------------------------------------------------------
+
+
+# Limiares padrão (em dias) de criticidade para projetos sem PEP.
+# Ficam armazenados na tabela `configuracoes` (parametrizável via
+# Administração), não fixos no código — estes valores são apenas a
+# semente inicial usada na primeira execução do sistema.
+CONFIGURACOES_PADRAO = {
+    "pep_dias_atencao": "3",
+    "pep_dias_critico": "6",
+}
+
+
+def _garantir_coluna(conn: sqlite3.Connection, tabela: str, coluna: str, definicao_tipo: str) -> None:
+    """Adiciona `coluna` à `tabela` caso ainda não exista (migração idempotente)."""
+    colunas_existentes = {linha[1] for linha in conn.execute(f"PRAGMA table_info({tabela})").fetchall()}
+    if coluna not in colunas_existentes:
+        conn.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {definicao_tipo}")
+
+
+def _semear_configuracoes_padrao(conn: sqlite3.Connection) -> None:
+    for chave, valor in CONFIGURACOES_PADRAO.items():
+        conn.execute("INSERT OR IGNORE INTO configuracoes (chave, valor) VALUES (?, ?)", (chave, valor))
 
 
 def _restaurar_semente_se_necessario() -> None:
@@ -149,10 +171,16 @@ def init_db() -> None:
                 natureza_revisao TEXT,
                 num_erros INTEGER,
                 etg TEXT NOT NULL DEFAULT 'NÃO',
+                pep TEXT,
                 criado_em TEXT NOT NULL,
                 criado_por TEXT,
                 atualizado_em TEXT,
                 atualizado_por TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS configuracoes (
+                chave TEXT PRIMARY KEY,
+                valor TEXT NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS avaliacoes_prestadores (
@@ -182,6 +210,16 @@ def init_db() -> None:
             """
         )
 
+        # Migração idempotente: adiciona colunas novas a bancos criados por
+        # versões anteriores do esquema, sem afetar os dados já existentes.
+        _garantir_coluna(conn, "prestadores", "natureza_revisao", "TEXT")
+        _garantir_coluna(conn, "prestadores", "num_erros", "INTEGER")
+        _garantir_coluna(conn, "prestadores", "etg", "TEXT NOT NULL DEFAULT 'NÃO'")
+        _garantir_coluna(conn, "cessionarios", "natureza_revisao", "TEXT")
+        _garantir_coluna(conn, "cessionarios", "num_erros", "INTEGER")
+        _garantir_coluna(conn, "cessionarios", "etg", "TEXT NOT NULL DEFAULT 'NÃO'")
+        _garantir_coluna(conn, "cessionarios", "pep", "TEXT")
+
         total_usuarios = conn.execute("SELECT COUNT(*) AS n FROM usuarios").fetchone()["n"]
         if total_usuarios == 0:
             senha_hash = bcrypt.hashpw("Tecnoplano@2026".encode(), bcrypt.gensalt()).decode()
@@ -190,6 +228,8 @@ def init_db() -> None:
                 "VALUES (?, ?, ?, ?, 1, ?)",
                 ("admin", senha_hash, "Administrador GAT", PERFIL_ADMIN, datetime.now().isoformat()),
             )
+
+        _semear_configuracoes_padrao(conn)
 
 
 # ---------------------------------------------------------------------------
@@ -405,3 +445,28 @@ def obter_avaliacao(registro_id: int) -> dict[str, Any] | None:
     with _conectar() as conn:
         linha = conn.execute("SELECT * FROM avaliacoes_prestadores WHERE id = ?", (registro_id,)).fetchone()
         return dict(linha) if linha else None
+
+
+# ---------------------------------------------------------------------------
+# Configurações (limiares parametrizáveis, ex.: criticidade de PEP)
+# ---------------------------------------------------------------------------
+
+
+def obter_configuracao(chave: str, padrao: str | None = None) -> str | None:
+    with _conectar() as conn:
+        linha = conn.execute("SELECT valor FROM configuracoes WHERE chave = ?", (chave,)).fetchone()
+        return linha["valor"] if linha else padrao
+
+
+def definir_configuracao(chave: str, valor: str) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO configuracoes (chave, valor) VALUES (?, ?) "
+            "ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor",
+            (chave, valor),
+        )
+
+
+def listar_configuracoes() -> dict[str, str]:
+    with _conectar() as conn:
+        return {linha["chave"]: linha["valor"] for linha in conn.execute("SELECT chave, valor FROM configuracoes")}

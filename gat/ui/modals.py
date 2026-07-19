@@ -54,6 +54,41 @@ def _parse_data(valor: Any) -> date | None:
     return None
 
 
+def _tentativa_salvar_iniciada(chave_tentativa: str, clicou_salvar: bool) -> bool:
+    """
+    Mantém, via `session_state`, a intenção de salvar entre reruns.
+
+    Necessário porque o botão de confirmação "sem PEP" é renderizado em um
+    rerun POSTERIOR ao clique em "Salvar" — se a checagem dependesse
+    diretamente do retorno de `st.button("Salvar")` (válido apenas no run
+    em que ele foi clicado), o clique subsequente no botão de confirmação
+    seria perdido, pois o bloco que o define nunca seria reexecutado.
+    """
+    if clicou_salvar:
+        st.session_state[chave_tentativa] = True
+    return bool(st.session_state.get(chave_tentativa))
+
+
+def _pode_persistir_com_pep(valor_pep: str, chave_confirmacao: str) -> bool:
+    """
+    Retorna True quando o registro já pode ser persistido: PEP preenchido,
+    ou o usuário confirmou explicitamente o cadastro sem PEP neste run.
+
+    Quando o PEP está vazio, exibe a mensagem de atenção e o botão
+    "Confirmar cadastro sem PEP" (o cadastro não é bloqueado, apenas exige
+    confirmação explícita antes de gravar).
+    """
+    if valor_pep and str(valor_pep).strip():
+        return True
+    st.warning(
+        "⚠ Atenção: este projeto será cadastrado sem PEP. O cadastro poderá ser "
+        "concluído, mas o projeto permanecerá sinalizado como pendente (com "
+        "lembrete automático) até que o PEP seja informado.",
+        icon="⚠️",
+    )
+    return st.button("Confirmar cadastro sem PEP", key=f"{chave_confirmacao}_botao")
+
+
 # ---------------------------------------------------------------------------
 # Modal de Prestadores (Aba A)
 # ---------------------------------------------------------------------------
@@ -127,13 +162,17 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
     salvar = col_salvar.button("💾 Salvar", use_container_width=True, key=f"pr_salvar_{sufixo}")
     cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"pr_cancelar_{sufixo}")
 
+    chave_tentativa = f"pr_tentativa_salvar_{sufixo}"
+
     if cancelar:
+        st.session_state[chave_tentativa] = False
         st.rerun()
 
-    if salvar:
-        if not prestador or not data_solicitacao:
-            st.error("Preencha ao menos Prestador de Serviço e Data de Solicitação.")
-            return
+    if salvar and (not prestador or not data_solicitacao):
+        st.error("Preencha ao menos Prestador de Serviço e Data de Solicitação.")
+        salvar = False
+
+    if _tentativa_salvar_iniciada(chave_tentativa, salvar) and _pode_persistir_com_pep(peps, f"pr_confirma_sem_pep_{sufixo}"):
         dados = {
             "item": registro.get("item") if editando else None,
             "codigo": codigo,
@@ -164,6 +203,7 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
         else:
             inserir_prestador(dados, usuario)
             st.toast("Novo registro de prestador cadastrado com sucesso.", icon="✅")
+        st.session_state[chave_tentativa] = False
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
         st.rerun()
 
@@ -188,6 +228,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
         disciplina_sla = st.selectbox("Disciplina (SLA)", DISCIPLINAS_SLA, index=_idx(DISCIPLINAS_SLA, registro.get("disciplina_sla") if registro else None), key=f"ce_discsla_{sufixo}")
         tipo = st.selectbox("Tipo", TIPO_CESSIONARIO_OPCOES, index=_idx(TIPO_CESSIONARIO_OPCOES, registro.get("tipo") if registro else None), key=f"ce_tipo_{sufixo}")
         num_at = st.text_input("N° AT", value=registro.get("num_at", "") if registro else "", key=f"ce_at_{sufixo}")
+        pep = st.text_input("PEP", value=registro.get("pep", "") if registro else "", help="Não obrigatório para concluir o cadastro. Se ficar vazio, o projeto gera pendência e lembrete automáticos.", key=f"ce_pep_{sufixo}")
     with col2:
         revisao = st.number_input("Revisão", min_value=0, step=1, value=int(registro.get("revisao", 0)) if registro else 0, key=f"ce_rev_{sufixo}")
         revisao_at = st.number_input("REV. AT", min_value=0, step=1, value=int(registro.get("revisao_at") or 0) if registro else 0, key=f"ce_revat_{sufixo}")
@@ -243,16 +284,21 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
     salvar = col_salvar.button("💾 Salvar", use_container_width=True, key=f"ce_salvar_{sufixo}")
     cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"ce_cancelar_{sufixo}")
 
+    chave_tentativa = f"ce_tentativa_salvar_{sufixo}"
+
     if cancelar:
+        st.session_state[chave_tentativa] = False
         st.rerun()
 
-    if salvar:
-        if not cessionario or not data_solicitacao:
-            st.error("Preencha ao menos Cessionário e Data de Solicitação.")
-            return
+    if salvar and (not cessionario or not data_solicitacao):
+        st.error("Preencha ao menos Cessionário e Data de Solicitação.")
+        salvar = False
+
+    if _tentativa_salvar_iniciada(chave_tentativa, salvar) and _pode_persistir_com_pep(pep, f"ce_confirma_sem_pep_{sufixo}"):
         dados = {
             "item": registro.get("item") if editando else None,
             "codigo": codigo,
+            "pep": pep,
             "cessionario": cessionario,
             "disciplina": disciplina,
             "disciplina_sla": disciplina_sla,
@@ -280,6 +326,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
         else:
             inserir_cessionario(dados, usuario)
             st.toast("Novo registro de cessionário cadastrado com sucesso.", icon="✅")
+        st.session_state[chave_tentativa] = False
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
         st.rerun()
 

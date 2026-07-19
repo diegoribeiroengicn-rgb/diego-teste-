@@ -147,7 +147,7 @@ def enriquecer_prestadores(df: pd.DataFrame) -> pd.DataFrame:
     from gat.calendario import calcular_hold_dias  # import local evita ciclo
 
     if df.empty:
-        for col in ("hold_dias", "dias_uteis_decorridos", "status_entrega_calc"):
+        for col in ("hold_dias", "dias_uteis_decorridos", "status_entrega_calc", "situacao_pep"):
             df[col] = pd.Series(dtype=object)
         return adicionar_flags_governanca(df)
 
@@ -160,7 +160,84 @@ def enriquecer_prestadores(df: pd.DataFrame) -> pd.DataFrame:
 
     calculados = df.apply(_linha, axis=1)
     df = pd.concat([df, calculados], axis=1)
+    df = enriquecer_situacao_pep(df, "peps")
+    df["situacao_pep"] = df["tem_pep"].map({True: "OK", False: "⚠ Sem PEP"})
     return adicionar_flags_governanca(df)
+
+
+# ---------------------------------------------------------------------------
+# Situação do PEP (projeto sem PEP: alerta, pendência e lembrete automáticos)
+# ---------------------------------------------------------------------------
+
+CRITICIDADE_INFORMATIVO = "INFORMATIVO"
+CRITICIDADE_ATENCAO = "ATENÇÃO"
+CRITICIDADE_CRITICO = "CRÍTICO"
+
+
+def _limiares_criticidade_pep() -> tuple[int, int]:
+    """
+    Lê da tabela `configuracoes` os limiares (em dias) que definem a
+    criticidade de um projeto sem PEP — parametrizável via Administração,
+    nunca fixo no código-fonte.
+    """
+    from gat.database import obter_configuracao  # import local evita ciclo
+
+    dias_atencao = int(obter_configuracao("pep_dias_atencao", "3"))
+    dias_critico = int(obter_configuracao("pep_dias_critico", "6"))
+    return dias_atencao, dias_critico
+
+
+def criticidade_pep(dias_sem_pep: int) -> str:
+    """
+    Classifica a criticidade de um projeto sem PEP conforme os limiares
+    parametrizáveis: INFORMATIVO, ATENÇÃO ou CRÍTICO.
+    """
+    dias_atencao, dias_critico = _limiares_criticidade_pep()
+    if dias_sem_pep >= dias_critico:
+        return CRITICIDADE_CRITICO
+    if dias_sem_pep >= dias_atencao:
+        return CRITICIDADE_ATENCAO
+    return CRITICIDADE_INFORMATIVO
+
+
+def enriquecer_situacao_pep(df: pd.DataFrame, coluna_pep: str) -> pd.DataFrame:
+    """
+    Adiciona ao DataFrame as colunas `tem_pep`, `dias_sem_pep` e
+    `criticidade_pep`. A contagem de dias sem PEP é calculada a partir da
+    Data de Solicitação (data de entrada do projeto no GAT) até hoje,
+    permanecendo dinâmica enquanto o campo PEP estiver vazio.
+    """
+    from datetime import date
+
+    from gat.calendario import _to_date
+
+    if df.empty:
+        df["tem_pep"] = pd.Series(dtype=bool)
+        df["dias_sem_pep"] = pd.Series(dtype="Int64")
+        df["criticidade_pep"] = pd.Series(dtype=str)
+        return df
+
+    df = df.copy()
+    hoje = date.today()
+
+    def _linha(linha):
+        valor_pep = linha.get(coluna_pep)
+        # `valor_pep` pode ser NaN (float) quando lido via pandas a partir de
+        # uma coluna SQL nula — e bool(nan) é True em Python, então a
+        # ausência de PEP precisa ser checada explicitamente com pd.isna()
+        # antes de qualquer teste de "verdadeiro" sobre o valor.
+        if valor_pep is None or (isinstance(valor_pep, float) and pd.isna(valor_pep)):
+            tem_pep = False
+        else:
+            tem_pep = bool(str(valor_pep).strip())
+        if tem_pep:
+            return pd.Series({"tem_pep": True, "dias_sem_pep": None, "criticidade_pep": None})
+        entrada = _to_date(linha.get("data_solicitacao")) or hoje
+        dias = max((hoje - entrada).days, 0)
+        return pd.Series({"tem_pep": False, "dias_sem_pep": dias, "criticidade_pep": criticidade_pep(dias)})
+
+    calculados = df.apply(_linha, axis=1)
+    return pd.concat([df, calculados], axis=1)
 
 
 def enriquecer_cessionarios(df: pd.DataFrame) -> pd.DataFrame:
@@ -172,7 +249,7 @@ def enriquecer_cessionarios(df: pd.DataFrame) -> pd.DataFrame:
     from gat.calendario import calcular_hold_dias  # import local evita ciclo
 
     if df.empty:
-        for col in ("hold_dias", "saldo_dias_uteis", "status_entrega_calc"):
+        for col in ("hold_dias", "saldo_dias_uteis", "status_entrega_calc", "situacao_pep"):
             df[col] = pd.Series(dtype=object)
         return adicionar_flags_governanca(df)
 
@@ -186,4 +263,6 @@ def enriquecer_cessionarios(df: pd.DataFrame) -> pd.DataFrame:
 
     calculados = df.apply(_linha, axis=1)
     df = pd.concat([df, calculados], axis=1)
+    df = enriquecer_situacao_pep(df, "pep")
+    df["situacao_pep"] = df["tem_pep"].map({True: "OK", False: "⚠ Sem PEP"})
     return adicionar_flags_governanca(df)

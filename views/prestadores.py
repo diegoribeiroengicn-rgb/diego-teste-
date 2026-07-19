@@ -5,10 +5,13 @@ from __future__ import annotations
 import streamlit as st
 
 from gat.business_rules import enriquecer_prestadores
-from gat.config import COLUNAS_EXIBICAO_PRESTADORES, RESPONSAVEIS, STATUS_ANALISE_OPCOES
+from gat.config import COLUNAS_EXIBICAO_PRESTADORES, CORES, RESPONSAVEIS, STATUS_ANALISE_OPCOES
 from gat.database import listar_prestadores, obter_prestador
+from gat.ui.kpi_cards import renderizar_kpis
 from gat.ui.modals import dialog_prestador
 from gat.ui.tables import tabela_com_edicao
+
+SITUACAO_PEP_OPCOES = ["Todos", "Com PEP", "Sem PEP"]
 
 
 def render(usuario: dict) -> None:
@@ -25,13 +28,23 @@ def render(usuario: dict) -> None:
         return
 
     df = enriquecer_prestadores(df)
+    df_ativos = df[df["status_analise"] != "CANCELADO"]
+    total_sem_pep = int((~df_ativos["tem_pep"]).sum())
+
+    renderizar_kpis([
+        ("Projetos Ativos", str(len(df_ativos)), CORES["navy"]),
+        ("Atrasados", str(int((df_ativos["status_entrega_calc"] == "ATRASADO").sum())), CORES["vermelho"]),
+        ("Pendente de Reunião", str(int(df_ativos["pendente_reuniao"].sum())), CORES["laranja"]),
+        ("Projetos sem PEP", str(total_sem_pep), CORES["dourado"]),
+    ])
 
     with st.expander("🔎 Filtros", expanded=False):
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5 = st.columns(5)
         f_resp = col1.multiselect("Responsável", RESPONSAVEIS)
         f_status = col2.multiselect("Status Análise", STATUS_ANALISE_OPCOES)
-        f_pendentes = col3.checkbox("Somente Pendente de Reunião")
-        f_cancelados = col4.checkbox("Incluir cancelados", value=False)
+        f_pep = col3.selectbox("Situação do PEP", SITUACAO_PEP_OPCOES)
+        f_pendentes = col4.checkbox("Somente Pendente de Reunião")
+        f_cancelados = col5.checkbox("Incluir cancelados", value=False)
 
     df_filtrado = df.copy()
     if not f_cancelados:
@@ -40,11 +53,15 @@ def render(usuario: dict) -> None:
         df_filtrado = df_filtrado[df_filtrado["responsavel"].isin(f_resp)]
     if f_status:
         df_filtrado = df_filtrado[df_filtrado["status_analise"].isin(f_status)]
+    if f_pep == "Com PEP":
+        df_filtrado = df_filtrado[df_filtrado["tem_pep"]]
+    elif f_pep == "Sem PEP":
+        df_filtrado = df_filtrado[~df_filtrado["tem_pep"]]
     if f_pendentes:
         df_filtrado = df_filtrado[df_filtrado["pendente_reuniao"]]
 
     df_filtrado = df_filtrado.reset_index(drop=True)
-    st.caption(f"{len(df_filtrado)} registro(s) encontrados.")
+    st.caption(f"{len(df_filtrado)} registro(s) encontrados. Ordenação padrão: Item (ordem de chegada).")
 
     colunas = list(COLUNAS_EXIBICAO_PRESTADORES.keys())
     df_exibicao = df_filtrado[colunas].rename(columns=COLUNAS_EXIBICAO_PRESTADORES)

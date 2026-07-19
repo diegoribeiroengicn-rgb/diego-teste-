@@ -20,7 +20,7 @@ from gat.config import PERFIL_ADMIN
 from gat.database import init_db
 from gat.export_excel import gerar_relatorio_excel
 from gat.styles import cabecalho_institucional, injetar_css_global, logo_base64
-from views import administracao, alertas, avaliacao_prestadores, cessionarios, dashboard, prestadores
+from views import administracao, alertas, avaliacao_prestadores, cessionarios, dashboard, lembretes_pep, prestadores
 
 st.set_page_config(
     page_title="GAT 2026 · Tecnoplano",
@@ -64,6 +64,7 @@ with st.sidebar:
         "🏬 Análise de Cessionários",
         "⭐ Avaliação de Prestadores",
         "🚨 Alertas Críticos",
+        "🧷 Lembretes (Sem PEP)",
     ]
     if usuario["perfil"] == PERFIL_ADMIN:
         opcoes_menu.append("⚙️ Administração")
@@ -95,5 +96,7 @@ elif pagina == "⭐ Avaliação de Prestadores":
     avaliacao_prestadores.render(usuario)
 elif pagina == "🚨 Alertas Críticos":
     alertas.render(usuario)
+elif pagina == "🧷 Lembretes (Sem PEP)":
+    lembretes_pep.render(usuario)
 elif pagina == "⚙️ Administração":
     administracao.render(usuario)
