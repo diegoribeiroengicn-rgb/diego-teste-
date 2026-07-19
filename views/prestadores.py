@@ -12,14 +12,19 @@ from gat.ui.tables import tabela_com_edicao
 
 SITUACAO_PEP_OPCOES = ["Todos", "Com PEP", "Sem PEP"]
 
+_CHAVES_FILTRO = [
+    "filtro_prest_resp", "filtro_prest_status", "filtro_prest_pep",
+    "filtro_prest_pendentes", "filtro_prest_cancelados",
+]
+
 
 def render(usuario: dict) -> None:
-    st.subheader("📐 Projetos de Prestadores de Serviço")
+    st.subheader("Projetos de Prestadores de Serviço")
     st.caption("Cadastro, edição e consulta. Para indicadores e gráficos, veja Prestadores → Dashboard.")
 
     col_novo, _ = st.columns([1, 4])
     with col_novo:
-        if st.button("➕ Novo Cadastro", key="novo_prestador", use_container_width=True):
+        if st.button("Novo Cadastro", icon=":material/add:", type="primary", key="novo_prestador", use_container_width=True):
             dialog_prestador(usuario["username"])
 
     if st.session_state.pop("abrir_novo_prestador", False):
@@ -32,13 +37,21 @@ def render(usuario: dict) -> None:
 
     df = enriquecer_prestadores(df)
 
-    with st.expander("🔎 Filtros", expanded=False):
+    status_default = st.session_state.pop("filtro_prest_status_default", None)
+    if status_default is not None:
+        st.session_state["filtro_prest_status"] = status_default
+
+    with st.expander("Filtros", icon=":material/filter_list:", expanded=False):
         col1, col2, col3, col4, col5 = st.columns(5)
-        f_resp = col1.multiselect("Responsável", RESPONSAVEIS)
-        f_status = col2.multiselect("Status Análise", STATUS_ANALISE_OPCOES)
-        f_pep = col3.selectbox("Situação do PEP", SITUACAO_PEP_OPCOES)
-        f_pendentes = col4.checkbox("Somente Pendente de Reunião")
-        f_cancelados = col5.checkbox("Incluir cancelados", value=False)
+        f_resp = col1.multiselect("Responsável", RESPONSAVEIS, key="filtro_prest_resp")
+        f_status = col2.multiselect("Status Análise", STATUS_ANALISE_OPCOES, key="filtro_prest_status")
+        f_pep = col3.selectbox("Situação do PEP", SITUACAO_PEP_OPCOES, key="filtro_prest_pep")
+        f_pendentes = col4.checkbox("Somente Pendente de Reunião", key="filtro_prest_pendentes")
+        f_cancelados = col5.checkbox("Incluir cancelados", value=False, key="filtro_prest_cancelados")
+        if st.button("Limpar filtros", icon=":material/filter_alt_off:", key="limpar_filtros_prest"):
+            for chave in _CHAVES_FILTRO:
+                st.session_state.pop(chave, None)
+            st.rerun()
 
     df_filtrado = df.copy()
     if not f_cancelados:

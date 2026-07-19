@@ -41,7 +41,7 @@ def _badge_criticidade(valor: str) -> str:
 
 
 def render(usuario: dict) -> None:
-    st.subheader("🧷 Lembretes — Projetos sem PEP")
+    st.subheader(":material/pending_actions: Lembretes — Projetos sem PEP")
     st.caption(
         "Reúne, dos módulos de Prestadores e Cessionários, todo projeto ativo cadastrado sem PEP. "
         "O lembrete some automaticamente assim que o PEP é informado no cadastro."
@@ -102,12 +102,18 @@ def render(usuario: dict) -> None:
         st.success("Nenhum projeto ativo está sem PEP no momento.")
         return
 
-    with st.expander("🔎 Filtros", expanded=False):
-        col1, col2, col3, col4 = st.columns(4)
-        f_modulo = col1.multiselect("Módulo", ["Prestadores", "Cessionários"])
-        f_resp = col2.multiselect("Responsável", RESPONSAVEIS)
-        f_criticidade = col3.multiselect("Criticidade", [CRITICIDADE_CRITICO, CRITICIDADE_ATENCAO, CRITICIDADE_INFORMATIVO])
-        f_dias_min = col4.number_input("Dias sem PEP (mínimo)", min_value=0, step=1, value=0)
+    with st.expander("Filtros", icon=":material/filter_list:", expanded=False):
+        col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 1.4, 1])
+        f_modulo = col1.multiselect("Módulo", ["Prestadores", "Cessionários"], key="filtro_lemb_modulo")
+        f_resp = col2.multiselect("Responsável", RESPONSAVEIS, key="filtro_lemb_resp")
+        f_criticidade = col3.multiselect("Criticidade", [CRITICIDADE_CRITICO, CRITICIDADE_ATENCAO, CRITICIDADE_INFORMATIVO], key="filtro_lemb_criticidade")
+        f_dias_min = col4.number_input("Dias sem PEP (mínimo)", min_value=0, step=1, value=0, key="filtro_lemb_dias")
+        with col5:
+            st.write("")
+            if st.button("Limpar", icon=":material/filter_alt_off:", key="limpar_filtros_lemb"):
+                for chave in ("filtro_lemb_modulo", "filtro_lemb_resp", "filtro_lemb_criticidade", "filtro_lemb_dias"):
+                    st.session_state.pop(chave, None)
+                st.rerun()
 
     df_filtrado = df_lembretes.copy()
     if f_modulo:
@@ -136,7 +142,7 @@ def render(usuario: dict) -> None:
         with col_badge:
             st.markdown(_badge_criticidade(linha["criticidade_pep"]), unsafe_allow_html=True)
         with col_acao:
-            if st.button("Abrir projeto", key=f"abrir_lembrete_{linha['modulo']}_{linha['id']}", use_container_width=True):
+            if st.button("Abrir projeto", icon=":material/open_in_new:", key=f"abrir_lembrete_{linha['modulo']}_{linha['id']}", use_container_width=True):
                 if linha["modulo"] == "Prestadores":
                     dialog_prestador(usuario["username"], obter_prestador(int(linha["id"])))
                 else:

@@ -161,7 +161,7 @@ def enriquecer_prestadores(df: pd.DataFrame) -> pd.DataFrame:
     calculados = df.apply(_linha, axis=1)
     df = pd.concat([df, calculados], axis=1)
     df = enriquecer_situacao_pep(df, "peps")
-    df["situacao_pep"] = df["tem_pep"].map({True: "OK", False: "⚠ Sem PEP"})
+    df["situacao_pep"] = df["tem_pep"].map({True: "OK", False: "SEM PEP"})
     return adicionar_flags_governanca(df)
 
 
@@ -264,5 +264,5 @@ def enriquecer_cessionarios(df: pd.DataFrame) -> pd.DataFrame:
     calculados = df.apply(_linha, axis=1)
     df = pd.concat([df, calculados], axis=1)
     df = enriquecer_situacao_pep(df, "pep")
-    df["situacao_pep"] = df["tem_pep"].map({True: "OK", False: "⚠ Sem PEP"})
+    df["situacao_pep"] = df["tem_pep"].map({True: "OK", False: "SEM PEP"})
     return adicionar_flags_governanca(df)

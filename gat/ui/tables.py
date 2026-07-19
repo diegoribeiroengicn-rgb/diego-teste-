@@ -38,7 +38,7 @@ def tabela_com_edicao(
 
     col_ordem, _ = st.columns([1, 5])
     with col_ordem:
-        if st.button("🔄 Restaurar ordem de chegada", key=f"btn_restaurar_ordem_{chave}", use_container_width=True):
+        if st.button("Restaurar ordem de chegada", icon=":material/restart_alt:", key=f"btn_restaurar_ordem_{chave}", use_container_width=True):
             st.session_state[chave_versao] = versao + 1
             st.rerun()
 
@@ -57,7 +57,7 @@ def tabela_com_edicao(
         registro_id = int(df_ids.iloc[posicao])
         col_a, col_b = st.columns([1, 5])
         with col_a:
-            if st.button("✏️ Editar selecionado", key=f"btn_editar_{chave}", use_container_width=True):
+            if st.button("Editar selecionado", icon=":material/edit:", type="primary", key=f"btn_editar_{chave}", use_container_width=True):
                 abrir_dialog_edicao(obter_registro(registro_id))
     else:
         st.caption("Selecione uma linha na tabela para editar o registro.")

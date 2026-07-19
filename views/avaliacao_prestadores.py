@@ -15,12 +15,12 @@ from gat.ui.tables import tabela_com_edicao
 
 
 def render(usuario: dict) -> None:
-    st.subheader("⭐ Avaliação de Prestadores")
+    st.subheader(":material/grade: Avaliação de Prestadores")
     st.caption("Escala 1–15 · Crítico ≤3 · Baixo 4–6 · Regular 7–9 · Bom 10–12 · Excelente 13–15")
 
     col_novo, _ = st.columns([1, 4])
     with col_novo:
-        if st.button("➕ Nova Avaliação", key="nova_avaliacao", use_container_width=True):
+        if st.button("Nova Avaliação", icon=":material/add:", type="primary", key="nova_avaliacao", use_container_width=True):
             dialog_avaliacao(usuario["username"])
 
     df = listar_avaliacoes()
@@ -30,10 +30,16 @@ def render(usuario: dict) -> None:
 
     df["classificacao"] = df["nota"].apply(lambda n: classificar_nota(n)[0])
 
-    with st.expander("🔎 Filtros", expanded=False):
-        col1, col2 = st.columns(2)
-        f_prestador = col1.multiselect("Prestador", sorted(df["nome_prestador"].dropna().unique().tolist()))
-        f_analista = col2.multiselect("Analista", RESPONSAVEIS)
+    with st.expander("Filtros", icon=":material/filter_list:", expanded=False):
+        col1, col2, col3 = st.columns([2, 2, 1])
+        f_prestador = col1.multiselect("Prestador", sorted(df["nome_prestador"].dropna().unique().tolist()), key="filtro_aval_prestador")
+        f_analista = col2.multiselect("Analista", RESPONSAVEIS, key="filtro_aval_analista")
+        with col3:
+            st.write("")
+            if st.button("Limpar filtros", icon=":material/filter_alt_off:", key="limpar_filtros_aval"):
+                for chave in ("filtro_aval_prestador", "filtro_aval_analista"):
+                    st.session_state.pop(chave, None)
+                st.rerun()
 
     df_filtrado = df.copy()
     if f_prestador:

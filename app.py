@@ -37,7 +37,7 @@ from views import (
 
 st.set_page_config(
     page_title="GAT 2026 · Tecnoplano",
-    page_icon="📐",
+    page_icon=":material/architecture:",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -84,28 +84,28 @@ def _pagina(render_fn, title: str, icon: str, url_path: str, default: bool = Fal
 
 paginas: dict[str, list[st.Page]] = {
     "": [
-        _pagina(lambda: inicio.render(usuario), "Início", "🏠", "inicio", default=True),
+        _pagina(lambda: inicio.render(usuario), "Início", ":material/home:", "inicio", default=True),
     ],
     "Prestadores": [
-        _pagina(lambda: prestadores_dashboard.render(usuario), "Dashboard", "📊", "prestadores_dashboard"),
-        _pagina(lambda: prestadores.render(usuario), "Projetos", "📐", "prestadores_projetos"),
-        _pagina(lambda: avaliacao_prestadores.render(usuario), "Avaliação", "⭐", "prestadores_avaliacao"),
+        _pagina(lambda: prestadores_dashboard.render(usuario), "Dashboard", ":material/dashboard:", "prestadores_dashboard"),
+        _pagina(lambda: prestadores.render(usuario), "Projetos", ":material/folder_open:", "prestadores_projetos"),
+        _pagina(lambda: avaliacao_prestadores.render(usuario), "Avaliação", ":material/grade:", "prestadores_avaliacao"),
     ],
     "Cessionários": [
-        _pagina(lambda: cessionarios_dashboard.render(usuario), "Dashboard", "📊", "cessionarios_dashboard"),
-        _pagina(lambda: cessionarios.render(usuario), "Projetos", "🏬", "cessionarios_projetos"),
+        _pagina(lambda: cessionarios_dashboard.render(usuario), "Dashboard", ":material/dashboard:", "cessionarios_dashboard"),
+        _pagina(lambda: cessionarios.render(usuario), "Projetos", ":material/store:", "cessionarios_projetos"),
     ],
     "Consolidado": [
-        _pagina(lambda: consolidado.render(usuario), "Visão Geral", "📈", "consolidado_visao"),
+        _pagina(lambda: consolidado.render(usuario), "Visão Geral", ":material/insights:", "consolidado_visao"),
     ],
     "Gestão": [
-        _pagina(lambda: alertas.render(usuario), "Central de Alertas", "🚨", "gestao_alertas"),
-        _pagina(lambda: lembretes_pep.render(usuario), "Lembretes (Sem PEP)", "🧷", "gestao_lembretes"),
+        _pagina(lambda: alertas.render(usuario), "Central de Alertas", ":material/notifications_active:", "gestao_alertas"),
+        _pagina(lambda: lembretes_pep.render(usuario), "Lembretes (Sem PEP)", ":material/pending_actions:", "gestao_lembretes"),
     ],
 }
 if usuario["perfil"] == PERFIL_ADMIN:
     paginas["Sistema"] = [
-        _pagina(lambda: administracao.render(usuario), "Administração", "⚙️", "administracao"),
+        _pagina(lambda: administracao.render(usuario), "Administração", ":material/settings:", "administracao"),
     ]
 
 st.session_state["_gat_paginas"] = _paginas_por_caminho
@@ -115,13 +115,15 @@ pagina_atual = st.navigation(paginas, position="sidebar")
 with st.sidebar:
     st.divider()
     st.download_button(
-        "⬇️ Exportar Relatório Excel",
+        "Exportar Relatório Excel",
         data=gerar_relatorio_excel(),
         file_name=f"GAT_2026_Relatorio_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        icon=":material/download:",
+        type="primary",
         use_container_width=True,
     )
-    if st.button("🚪 Sair", use_container_width=True):
+    if st.button("Sair", icon=":material/logout:", use_container_width=True):
         logout()
 
 # ---------------------------------------------------------------------------

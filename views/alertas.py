@@ -10,7 +10,7 @@ from gat.database import listar_cessionarios, listar_prestadores
 
 
 def render(usuario: dict) -> None:
-    st.subheader("🚨 Alertas Críticos — Pendente de Reunião")
+    st.subheader(":material/notifications_active: Alertas Críticos — Pendente de Reunião")
     st.caption(
         f"Projetos com status **NÃO LIBERADO** e revisão igual ou superior à meta corporativa "
         f"(**REV{META_REVISAO_APROVACAO}**) são categorizados como gargalos críticos e exigem reunião de alinhamento."

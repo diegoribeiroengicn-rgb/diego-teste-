@@ -20,7 +20,7 @@ from gat.ui.kpi_cards import renderizar_kpis
 
 
 def render(usuario: dict) -> None:
-    st.subheader("📊 Dashboard — Cessionários")
+    st.subheader(":material/dashboard: Dashboard — Cessionários")
     st.caption("Indicadores exclusivos do módulo de Cessionários. Projetos CANCELADOS são excluídos.")
 
     df = enriquecer_cessionarios(filtrar_ativos(listar_cessionarios()))

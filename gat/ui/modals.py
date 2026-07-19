@@ -81,12 +81,12 @@ def _pode_persistir_com_pep(valor_pep: str, chave_confirmacao: str) -> bool:
     if valor_pep and str(valor_pep).strip():
         return True
     st.warning(
-        "⚠ Atenção: este projeto será cadastrado sem PEP. O cadastro poderá ser "
+        "Atenção: este projeto será cadastrado sem PEP. O cadastro poderá ser "
         "concluído, mas o projeto permanecerá sinalizado como pendente (com "
         "lembrete automático) até que o PEP seja informado.",
-        icon="⚠️",
+        icon=":material/warning:",
     )
-    return st.button("Confirmar cadastro sem PEP", key=f"{chave_confirmacao}_botao")
+    return st.button("Confirmar cadastro sem PEP", key=f"{chave_confirmacao}_botao", type="primary")
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +159,7 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
     observacoes = st.text_area("Observações", value=registro.get("observacoes", "") if registro else "", key=f"pr_obs_{sufixo}")
 
     col_salvar, col_cancelar = st.columns(2)
-    salvar = col_salvar.button("💾 Salvar", use_container_width=True, key=f"pr_salvar_{sufixo}")
+    salvar = col_salvar.button("Salvar", icon=":material/save:", type="primary", use_container_width=True, key=f"pr_salvar_{sufixo}")
     cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"pr_cancelar_{sufixo}")
 
     chave_tentativa = f"pr_tentativa_salvar_{sufixo}"
@@ -199,10 +199,10 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
         }
         if editando:
             atualizar_prestador(registro["id"], dados, usuario)
-            st.toast("Registro de prestador atualizado com sucesso.", icon="✅")
+            st.toast("Registro de prestador atualizado com sucesso.", icon=":material/check_circle:")
         else:
             inserir_prestador(dados, usuario)
-            st.toast("Novo registro de prestador cadastrado com sucesso.", icon="✅")
+            st.toast("Novo registro de prestador cadastrado com sucesso.", icon=":material/check_circle:")
         st.session_state[chave_tentativa] = False
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
         st.rerun()
@@ -281,7 +281,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
     observacoes = st.text_area("Observações", value=registro.get("observacoes", "") if registro else "", key=f"ce_obs_{sufixo}")
 
     col_salvar, col_cancelar = st.columns(2)
-    salvar = col_salvar.button("💾 Salvar", use_container_width=True, key=f"ce_salvar_{sufixo}")
+    salvar = col_salvar.button("Salvar", icon=":material/save:", type="primary", use_container_width=True, key=f"ce_salvar_{sufixo}")
     cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"ce_cancelar_{sufixo}")
 
     chave_tentativa = f"ce_tentativa_salvar_{sufixo}"
@@ -322,10 +322,10 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
         }
         if editando:
             atualizar_cessionario(registro["id"], dados, usuario)
-            st.toast("Registro de cessionário atualizado com sucesso.", icon="✅")
+            st.toast("Registro de cessionário atualizado com sucesso.", icon=":material/check_circle:")
         else:
             inserir_cessionario(dados, usuario)
-            st.toast("Novo registro de cessionário cadastrado com sucesso.", icon="✅")
+            st.toast("Novo registro de cessionário cadastrado com sucesso.", icon=":material/check_circle:")
         st.session_state[chave_tentativa] = False
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
         st.rerun()
@@ -364,7 +364,7 @@ def dialog_avaliacao(usuario: str, registro: dict[str, Any] | None = None) -> No
     observacoes = st.text_area("Observações", value=registro.get("observacoes", "") if registro else "", key=f"av_obs_{sufixo}")
 
     col_salvar, col_cancelar = st.columns(2)
-    salvar = col_salvar.button("💾 Salvar", use_container_width=True, key=f"av_salvar_{sufixo}")
+    salvar = col_salvar.button("Salvar", icon=":material/save:", type="primary", use_container_width=True, key=f"av_salvar_{sufixo}")
     cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"av_cancelar_{sufixo}")
 
     if cancelar:
@@ -386,10 +386,10 @@ def dialog_avaliacao(usuario: str, registro: dict[str, Any] | None = None) -> No
         }
         if editando:
             atualizar_avaliacao(registro["id"], dados, usuario)
-            st.toast("Avaliação atualizada com sucesso.", icon="✅")
+            st.toast("Avaliação atualizada com sucesso.", icon=":material/check_circle:")
         else:
             inserir_avaliacao(dados, usuario)
-            st.toast("Nova avaliação registrada com sucesso.", icon="✅")
+            st.toast("Nova avaliação registrada com sucesso.", icon=":material/check_circle:")
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
         st.rerun()
 

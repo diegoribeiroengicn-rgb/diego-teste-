@@ -20,7 +20,7 @@ from gat.ui.kpi_cards import renderizar_kpis
 
 
 def render(usuario: dict) -> None:
-    st.subheader("📊 Painel Geral Consolidado")
+    st.subheader(":material/insights: Painel Geral Consolidado")
     st.caption("União (consolidação) das abas de Prestadores e Cessionários. Projetos CANCELADOS são rigorosamente excluídos.")
 
     df_prest_bruto = listar_prestadores()

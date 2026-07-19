@@ -1,7 +1,9 @@
 """
 Injeção de CSS customizado para dar identidade visual Tecnoplano ao
-Streamlit, incluindo a aparência de "janela flutuante" para os
-pop-ups/modais (`st.dialog`) de cadastro e edição.
+Streamlit — inspirada em sistemas corporativos (Microsoft 365, SAP Fiori,
+Azure Portal, Power BI Service): sóbria, com tipografia legível e ícones
+padronizados (Material Symbols), incluindo a aparência de "janela
+flutuante" para os pop-ups/modais (`st.dialog`) de cadastro e edição.
 """
 
 import base64
@@ -26,17 +28,40 @@ def injetar_css_global() -> None:
         --gat-navy: {CORES['navy']};
         --gat-azul: {CORES['azul']};
         --gat-azul-2: {CORES['azul_2']};
+        --gat-azul-3: {CORES['azul_3']};
         --gat-verde: {CORES['verde']};
         --gat-vermelho: {CORES['vermelho']};
         --gat-laranja: {CORES['laranja']};
         --gat-dourado: {CORES['dourado']};
         --gat-bg: {CORES['bg']};
         --gat-borda: {CORES['borda']};
+        --gat-texto: {CORES['texto']};
+        --gat-texto-fraco: {CORES['texto_fraco']};
     }}
 
     /* ---- Fundo geral e tipografia ---- */
-    .stApp {{
+    html, body, .stApp {{
         background: var(--gat-bg);
+        font-size: 16px;
+        color: var(--gat-texto);
+    }}
+    p, li, label, .stMarkdown {{
+        font-size: 0.95rem;
+        line-height: 1.55;
+    }}
+    h1, h2, h3 {{
+        color: var(--gat-navy);
+        font-weight: 700;
+        letter-spacing: -.2px;
+    }}
+    h3 {{ font-size: 1.35rem; margin-bottom: .3rem; }}
+
+    /* ---- Bloco principal: respiro entre seções ---- */
+    div[data-testid="stMainBlockContainer"] {{
+        padding-top: 1.6rem;
+    }}
+    div[data-testid="stVerticalBlock"] > div[data-testid="stElementContainer"] {{
+        margin-bottom: .15rem;
     }}
 
     /* ---- Cabeçalho institucional ---- */
@@ -46,86 +71,104 @@ def injetar_css_global() -> None:
         justify-content: space-between;
         background: #ffffff;
         border-bottom: 3px solid var(--gat-navy);
-        padding: 10px 24px;
+        padding: 14px 26px;
         border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(27,58,138,.15);
-        margin-bottom: 18px;
+        box-shadow: 0 2px 10px rgba(27,58,138,.12);
+        margin-bottom: 24px;
     }}
     .gat-topbar-title {{
         font-size: 13px;
         color: var(--gat-navy);
-        letter-spacing: 2px;
+        letter-spacing: 1.6px;
         text-transform: uppercase;
         font-weight: 700;
-        margin-left: 14px;
+        margin-left: 16px;
     }}
     .gat-topbar-sub {{
-        font-size: 11px;
-        color: #64748B;
+        font-size: 12px;
+        color: var(--gat-texto-fraco);
     }}
 
     /* ---- Cartões de KPI ---- */
     .gat-kpi-card {{
         background: #ffffff;
         border: 1px solid var(--gat-borda);
-        border-left: 5px solid var(--gat-navy);
-        border-radius: 10px;
-        padding: 14px 16px;
-        box-shadow: 0 1px 4px rgba(15,23,42,.06);
+        border-left: 4px solid var(--gat-navy);
+        border-radius: 8px;
+        padding: 18px 20px;
+        box-shadow: 0 1px 3px rgba(15,23,42,.05);
+        margin-bottom: 4px;
     }}
     .gat-kpi-label {{
-        font-size: 11px;
-        color: #64748B;
+        font-size: 11.5px;
+        color: var(--gat-texto-fraco);
         text-transform: uppercase;
-        letter-spacing: .5px;
+        letter-spacing: .6px;
         font-weight: 600;
     }}
     .gat-kpi-value {{
-        font-size: 26px;
+        font-size: 28px;
         font-weight: 700;
         color: var(--gat-navy);
-    }}
-    .gat-kpi-delta {{
-        font-size: 11px;
-        font-weight: 600;
+        margin-top: 4px;
     }}
 
     /* ---- Badges de status ---- */
     .gat-badge {{
         display: inline-block;
-        padding: 3px 10px;
-        border-radius: 100px;
-        font-size: 11px;
+        padding: 3px 11px;
+        border-radius: 4px;
+        font-size: 11.5px;
         font-weight: 600;
         color: #ffffff;
         white-space: nowrap;
+        letter-spacing: .2px;
     }}
 
-    /* ---- Botões padrão Streamlit com identidade Tecnoplano ---- */
-    .stButton > button {{
-        background: var(--gat-navy);
-        color: #ffffff;
-        border: none;
-        border-radius: 8px;
+    /* ---- Botões: primário (navy sólido), secundário (contorno discreto) ---- */
+    .stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {{
+        border-radius: 6px;
         font-weight: 600;
-        transition: all .15s ease-in-out;
-    }}
-    .stButton > button:hover {{
-        background: var(--gat-azul-2);
-        color: #ffffff;
-        box-shadow: 0 2px 8px rgba(27,58,138,.35);
-    }}
-    .stButton > button[kind="secondary"] {{
+        font-size: .92rem;
+        padding: .45rem 1.1rem;
+        transition: all .12s ease-in-out;
+        border: 1px solid var(--gat-borda-forte, #CBD5E1);
         background: #ffffff;
         color: var(--gat-navy);
+    }}
+    .stButton > button:hover, .stDownloadButton > button:hover, .stFormSubmitButton > button:hover {{
+        border-color: var(--gat-navy);
+        background: var(--gat-azul-3);
+        color: var(--gat-navy);
+    }}
+    /* Streamlit usa kind="primary" para st.button e kind="primaryFormSubmit"
+       para st.form_submit_button — por isso o seletor usa `*=` (contém). */
+    button[kind*="primary"] {{
+        background: var(--gat-navy);
+        color: #ffffff;
         border: 1px solid var(--gat-navy);
     }}
-    .stDownloadButton > button {{
-        background: var(--gat-verde);
+    button[kind*="primary"]:hover {{
+        background: var(--gat-azul-2);
+        border-color: var(--gat-azul-2);
         color: #ffffff;
-        border: none;
-        border-radius: 8px;
-        font-weight: 600;
+        box-shadow: 0 2px 6px rgba(27,58,138,.25);
+    }}
+    button[kind*="primary"] p, button[kind*="primary"] span[data-testid="stIconMaterial"] {{
+        color: #ffffff !important;
+    }}
+
+    /* ---- Botão destrutivo (uso pontual: ex. desativar usuário) ----
+       Aplicado envolvendo o botão em st.container(key="...destrutivo...") */
+    div[class*="st-key-"][class*="destrutivo"] .stButton > button {{
+        color: var(--gat-vermelho);
+        border-color: var(--gat-vermelho);
+        background: #ffffff;
+    }}
+    div[class*="st-key-"][class*="destrutivo"] .stButton > button:hover {{
+        background: {CORES['vermelho_bg']};
+        color: var(--gat-vermelho);
+        border-color: var(--gat-vermelho);
     }}
 
     /* ---- Sidebar ---- */
@@ -133,11 +176,42 @@ def injetar_css_global() -> None:
         background: #ffffff;
         border-right: 1px solid var(--gat-borda);
     }}
+    section[data-testid="stSidebar"] p {{
+        font-size: .9rem;
+    }}
+
+    /* ---- Navegação lateral (st.navigation): item ativo em destaque ---- */
+    header[data-testid="stNavSectionHeader"] p {{
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: .8px;
+        font-weight: 700;
+        color: var(--gat-texto-fraco);
+    }}
+    a[data-testid="stSidebarNavLink"] {{
+        border-radius: 6px;
+        margin: 1px 0;
+        transition: background .12s ease-in-out;
+    }}
+    a[data-testid="stSidebarNavLink"]:hover {{
+        background: var(--gat-superficie-2, #F1F5F9);
+    }}
+    a[data-testid="stSidebarNavLink"][aria-current="page"] {{
+        background: var(--gat-azul-3);
+        border-left: 3px solid var(--gat-navy);
+    }}
+    a[data-testid="stSidebarNavLink"][aria-current="page"] p {{
+        color: var(--gat-navy) !important;
+        font-weight: 700;
+    }}
+    a[data-testid="stSidebarNavLink"][aria-current="page"] span[data-testid="stIconMaterial"] {{
+        color: var(--gat-navy) !important;
+    }}
 
     /* ---- Aparência de pop-up flutuante para st.dialog ---- */
     div[data-testid="stDialog"] div[role="dialog"] {{
         border-top: 6px solid var(--gat-navy);
-        border-radius: 14px;
+        border-radius: 12px;
         box-shadow: 0 20px 60px rgba(15,23,42,.35);
     }}
     div[data-testid="stDialog"] h1,
@@ -149,17 +223,39 @@ def injetar_css_global() -> None:
     /* ---- Tabelas ---- */
     div[data-testid="stDataFrame"] {{
         border: 1px solid var(--gat-borda);
-        border-radius: 8px;
+        border-radius: 6px;
+    }}
+
+    /* ---- Expanders (filtros) ---- */
+    div[data-testid="stExpander"] summary {{
+        font-weight: 600;
+        font-size: .92rem;
     }}
 
     /* ---- Tabs ---- */
     .stTabs [data-baseweb="tab"] {{
         font-weight: 600;
-        color: #64748B;
+        font-size: .92rem;
+        color: var(--gat-texto-fraco);
     }}
     .stTabs [aria-selected="true"] {{
         color: var(--gat-navy) !important;
         border-bottom-color: var(--gat-azul) !important;
+    }}
+
+    /* ---- Métricas nativas (st.metric) ---- */
+    div[data-testid="stMetric"] {{
+        background: #ffffff;
+        border: 1px solid var(--gat-borda);
+        border-radius: 8px;
+        padding: 12px 16px;
+    }}
+    div[data-testid="stMetricLabel"] p {{
+        font-size: 11.5px;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+        color: var(--gat-texto-fraco);
+        font-weight: 600;
     }}
 
     #MainMenu {{visibility: hidden;}}

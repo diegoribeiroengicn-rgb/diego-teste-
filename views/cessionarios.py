@@ -12,14 +12,19 @@ from gat.ui.tables import tabela_com_edicao
 
 SITUACAO_PEP_OPCOES = ["Todos", "Com PEP", "Sem PEP"]
 
+_CHAVES_FILTRO = [
+    "filtro_cess_resp", "filtro_cess_status", "filtro_cess_tipo",
+    "filtro_cess_pep", "filtro_cess_pendentes", "filtro_cess_cancelados",
+]
+
 
 def render(usuario: dict) -> None:
-    st.subheader("🏬 Projetos de Cessionários")
+    st.subheader("Projetos de Cessionários")
     st.caption("Cadastro, edição e consulta. Para indicadores e gráficos, veja Cessionários → Dashboard.")
 
     col_novo, _ = st.columns([1, 4])
     with col_novo:
-        if st.button("➕ Novo Cadastro", key="novo_cessionario", use_container_width=True):
+        if st.button("Novo Cadastro", icon=":material/add:", type="primary", key="novo_cessionario", use_container_width=True):
             dialog_cessionario(usuario["username"])
 
     if st.session_state.pop("abrir_novo_cessionario", False):
@@ -32,14 +37,22 @@ def render(usuario: dict) -> None:
 
     df = enriquecer_cessionarios(df)
 
-    with st.expander("🔎 Filtros", expanded=False):
+    status_default = st.session_state.pop("filtro_cess_status_default", None)
+    if status_default is not None:
+        st.session_state["filtro_cess_status"] = status_default
+
+    with st.expander("Filtros", icon=":material/filter_list:", expanded=False):
         col1, col2, col3, col4, col5, col6 = st.columns(6)
-        f_resp = col1.multiselect("Responsável", RESPONSAVEIS)
-        f_status = col2.multiselect("Status Análise", STATUS_ANALISE_OPCOES)
-        f_tipo = col3.multiselect("Tipo", TIPO_CESSIONARIO_OPCOES)
-        f_pep = col4.selectbox("Situação do PEP", SITUACAO_PEP_OPCOES)
-        f_pendentes = col5.checkbox("Somente Pendente de Reunião")
-        f_cancelados = col6.checkbox("Incluir cancelados", value=False)
+        f_resp = col1.multiselect("Responsável", RESPONSAVEIS, key="filtro_cess_resp")
+        f_status = col2.multiselect("Status Análise", STATUS_ANALISE_OPCOES, key="filtro_cess_status")
+        f_tipo = col3.multiselect("Tipo", TIPO_CESSIONARIO_OPCOES, key="filtro_cess_tipo")
+        f_pep = col4.selectbox("Situação do PEP", SITUACAO_PEP_OPCOES, key="filtro_cess_pep")
+        f_pendentes = col5.checkbox("Somente Pendente de Reunião", key="filtro_cess_pendentes")
+        f_cancelados = col6.checkbox("Incluir cancelados", value=False, key="filtro_cess_cancelados")
+        if st.button("Limpar filtros", icon=":material/filter_alt_off:", key="limpar_filtros_cess"):
+            for chave in _CHAVES_FILTRO:
+                st.session_state.pop(chave, None)
+            st.rerun()
 
     df_filtrado = df.copy()
     if not f_cancelados:

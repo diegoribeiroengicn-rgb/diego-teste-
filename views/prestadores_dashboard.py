@@ -19,7 +19,7 @@ from gat.ui.kpi_cards import renderizar_kpis
 
 
 def render(usuario: dict) -> None:
-    st.subheader("📊 Dashboard — Prestadores de Serviço")
+    st.subheader(":material/dashboard: Dashboard — Prestadores de Serviço")
     st.caption("Indicadores exclusivos do módulo de Prestadores. Projetos CANCELADOS são excluídos.")
 
     df = enriquecer_prestadores(filtrar_ativos(listar_prestadores()))
