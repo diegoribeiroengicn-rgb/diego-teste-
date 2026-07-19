@@ -5,9 +5,8 @@ from __future__ import annotations
 import streamlit as st
 
 from gat.business_rules import enriquecer_cessionarios
-from gat.config import COLUNAS_EXIBICAO_CESSIONARIOS, CORES, RESPONSAVEIS, STATUS_ANALISE_OPCOES, TIPO_CESSIONARIO_OPCOES
+from gat.config import COLUNAS_EXIBICAO_CESSIONARIOS, RESPONSAVEIS, STATUS_ANALISE_OPCOES, TIPO_CESSIONARIO_OPCOES
 from gat.database import listar_cessionarios, obter_cessionario
-from gat.ui.kpi_cards import renderizar_kpis
 from gat.ui.modals import dialog_cessionario
 from gat.ui.tables import tabela_com_edicao
 
@@ -15,12 +14,16 @@ SITUACAO_PEP_OPCOES = ["Todos", "Com PEP", "Sem PEP"]
 
 
 def render(usuario: dict) -> None:
-    st.subheader("🏬 Análise de Cessionários")
+    st.subheader("🏬 Projetos de Cessionários")
+    st.caption("Cadastro, edição e consulta. Para indicadores e gráficos, veja Cessionários → Dashboard.")
 
     col_novo, _ = st.columns([1, 4])
     with col_novo:
         if st.button("➕ Novo Cadastro", key="novo_cessionario", use_container_width=True):
             dialog_cessionario(usuario["username"])
+
+    if st.session_state.pop("abrir_novo_cessionario", False):
+        dialog_cessionario(usuario["username"])
 
     df = listar_cessionarios()
     if df.empty:
@@ -28,15 +31,6 @@ def render(usuario: dict) -> None:
         return
 
     df = enriquecer_cessionarios(df)
-    df_ativos = df[df["status_analise"] != "CANCELADO"]
-    total_sem_pep = int((~df_ativos["tem_pep"]).sum())
-
-    renderizar_kpis([
-        ("Projetos Ativos", str(len(df_ativos)), CORES["navy"]),
-        ("Atrasados", str(int((df_ativos["status_entrega_calc"] == "ATRASADO").sum())), CORES["vermelho"]),
-        ("Pendente de Reunião", str(int(df_ativos["pendente_reuniao"].sum())), CORES["laranja"]),
-        ("Projetos sem PEP", str(total_sem_pep), CORES["dourado"]),
-    ])
 
     with st.expander("🔎 Filtros", expanded=False):
         col1, col2, col3, col4, col5, col6 = st.columns(6)

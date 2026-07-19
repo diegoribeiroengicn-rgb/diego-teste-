@@ -16,6 +16,32 @@ governança e exportação fiel para Excel.
 - **pandas / openpyxl** — manipulação de dados e exportação de relatórios
 - **Plotly** — gráficos interativos do painel
 
+## Navegação
+
+A navegação usa `st.navigation` (nativo do Streamlit) agrupada por módulo —
+**sem bolinhas ou botões de rádio** para alternar entre eles. Cada módulo é
+um ambiente próprio, com sequência de Item, filtros, KPIs e gráficos
+exclusivos:
+
+```
+GAT 2026
+├── Início                    (portal com cards de acesso rápido)
+├── Prestadores
+│   ├── Dashboard              (KPIs e gráficos exclusivos)
+│   ├── Projetos                (cadastro/edição/consulta)
+│   └── Avaliação
+├── Cessionários
+│   ├── Dashboard
+│   └── Projetos
+├── Consolidado
+│   └── Visão Geral             (visão executiva integrada)
+├── Gestão
+│   ├── Central de Alertas       (Pendente de Reunião)
+│   └── Lembretes (Sem PEP)
+└── Sistema
+    └── Administração            (somente perfil ADMIN)
+```
+
 ## Estrutura do projeto
 
 ```
@@ -34,13 +60,16 @@ gat/
     charts.py                  # Gráficos Plotly
     kpi_cards.py                # Cartões de KPI
 views/
-  dashboard.py             # Painel Geral Consolidado
-  prestadores.py            # Aba A — Análise de Prestadores
-  cessionarios.py            # Aba B — Análise de Cessionários
-  avaliacao_prestadores.py    # Avaliação de Prestadores (1-15)
-  alertas.py                    # Alertas críticos (Pendente de Reunião)
-  lembretes_pep.py                # Lembretes — projetos sem PEP
-  administracao.py                 # Gestão de usuários, histórico e configurações
+  inicio.py                 # Portal inicial (cards de acesso aos módulos)
+  prestadores_dashboard.py   # Prestadores > Dashboard (KPIs e gráficos exclusivos)
+  prestadores.py               # Prestadores > Projetos (cadastro/edição/consulta)
+  avaliacao_prestadores.py       # Prestadores > Avaliação (1-15)
+  cessionarios_dashboard.py        # Cessionários > Dashboard (KPIs e gráficos exclusivos)
+  cessionarios.py                    # Cessionários > Projetos (cadastro/edição/consulta)
+  consolidado.py                       # Consolidado > Visão Geral
+  alertas.py                             # Gestão > Central de Alertas (Pendente de Reunião)
+  lembretes_pep.py                         # Gestão > Lembretes (projetos sem PEP)
+  administracao.py                           # Sistema > Administração
 assets/
   tecnoplano_logo.png       # Logomarca institucional
 scripts/

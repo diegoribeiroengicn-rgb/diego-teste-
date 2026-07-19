@@ -61,6 +61,37 @@ def grafico_evolucao_mensal(df_prest: pd.DataFrame, df_cess: pd.DataFrame) -> go
     return _aplicar_layout(fig, "Evolução Mensal — Pranchas Analisadas")
 
 
+def grafico_evolucao_mensal_unico(df: pd.DataFrame, nome_serie: str, cor: str) -> go.Figure:
+    """Evolução mensal do volume de pranchas analisadas de um único módulo."""
+    if df.empty or "data_analise" not in df.columns:
+        serie = pd.Series(0, index=MESES_PT)
+    else:
+        datas = pd.to_datetime(df["data_analise"], errors="coerce").dropna()
+        if datas.empty:
+            serie = pd.Series(0, index=MESES_PT)
+        else:
+            contagem = datas.dt.month.value_counts()
+            serie = pd.Series({mes: contagem.get(i + 1, 0) for i, mes in enumerate(MESES_PT)})
+
+    fig = go.Figure(go.Bar(x=MESES_PT, y=serie.values, name=nome_serie, marker_color=cor))
+    return _aplicar_layout(fig, f"Evolução Mensal — {nome_serie}")
+
+
+def grafico_por_categoria(df: pd.DataFrame, coluna: str, titulo: str, cor: str, top_n: int | None = None) -> go.Figure:
+    """Gráfico de barras genérico de contagem por uma coluna categórica (ex.: Tipo, Cessionário)."""
+    if df.empty or coluna not in df.columns:
+        fig = go.Figure()
+        return _aplicar_layout(fig, titulo)
+    contagem = df[coluna].value_counts()
+    if top_n:
+        contagem = contagem.head(top_n)
+    contagem = contagem.reset_index()
+    contagem.columns = [coluna, "quantidade"]
+    fig = px.bar(contagem, x=coluna, y="quantidade", color_discrete_sequence=[cor])
+    fig.update_xaxes(tickangle=-35)
+    return _aplicar_layout(fig, titulo)
+
+
 def grafico_top_responsaveis(df: pd.DataFrame, coluna_responsavel: str = "responsavel", top_n: int = 10) -> go.Figure:
     """Ranking dos analistas por volume de projetos sob responsabilidade."""
     if df.empty or coluna_responsavel not in df.columns:

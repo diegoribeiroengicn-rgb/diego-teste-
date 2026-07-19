@@ -6,7 +6,9 @@ Ponto de entrada da aplicação Streamlit. Responsável por:
 * Inicializar o banco de dados SQLite;
 * Aplicar a identidade visual institucional Tecnoplano;
 * Bloquear o acesso até autenticação válida (login seguro);
-* Orquestrar a navegação entre os módulos do sistema.
+* Orquestrar a navegação entre os módulos do sistema — organizada por
+  módulo (Prestadores, Cessionários, Consolidado, Gestão, Administração),
+  sem bolinhas ou botões de rádio para alternar entre eles.
 """
 
 from __future__ import annotations
@@ -20,7 +22,18 @@ from gat.config import PERFIL_ADMIN
 from gat.database import init_db
 from gat.export_excel import gerar_relatorio_excel
 from gat.styles import cabecalho_institucional, injetar_css_global, logo_base64
-from views import administracao, alertas, avaliacao_prestadores, cessionarios, dashboard, lembretes_pep, prestadores
+from views import (
+    administracao,
+    alertas,
+    avaliacao_prestadores,
+    cessionarios,
+    cessionarios_dashboard,
+    consolidado,
+    inicio,
+    lembretes_pep,
+    prestadores,
+    prestadores_dashboard,
+)
 
 st.set_page_config(
     page_title="GAT 2026 · Tecnoplano",
@@ -39,12 +52,7 @@ if not usuario_autenticado():
 usuario = usuario_atual()
 
 # ---------------------------------------------------------------------------
-# Cabeçalho institucional
-# ---------------------------------------------------------------------------
-cabecalho_institucional(subtitulo=f"{usuario['nome_completo'] or usuario['username']} · {datetime.now().strftime('%d/%m/%Y')}")
-
-# ---------------------------------------------------------------------------
-# Sidebar — navegação
+# Sidebar — identidade institucional
 # ---------------------------------------------------------------------------
 with st.sidebar:
     logo_b64 = logo_base64()
@@ -58,19 +66,53 @@ with st.sidebar:
     st.caption(f"Perfil: {usuario['perfil']}")
     st.divider()
 
-    opcoes_menu = [
-        "📊 Painel Geral",
-        "📐 Análise de Prestadores",
-        "🏬 Análise de Cessionários",
-        "⭐ Avaliação de Prestadores",
-        "🚨 Alertas Críticos",
-        "🧷 Lembretes (Sem PEP)",
+# ---------------------------------------------------------------------------
+# Navegação — agrupada por módulo (menu lateral, sem rádio/bolinhas)
+# ---------------------------------------------------------------------------
+# `st.switch_page` exige o objeto `st.Page` (não aceita a string `url_path`
+# diretamente para páginas baseadas em função) — por isso cada página
+# construída aqui também é indexada por `url_path` em session_state, para
+# que outras views (ex.: os cartões da Início) consigam navegar até ela.
+_paginas_por_caminho: dict[str, st.Page] = {}
+
+
+def _pagina(render_fn, title: str, icon: str, url_path: str, default: bool = False) -> st.Page:
+    pagina = st.Page(render_fn, title=title, icon=icon, url_path=url_path, default=default)
+    _paginas_por_caminho[url_path] = pagina
+    return pagina
+
+
+paginas: dict[str, list[st.Page]] = {
+    "": [
+        _pagina(lambda: inicio.render(usuario), "Início", "🏠", "inicio", default=True),
+    ],
+    "Prestadores": [
+        _pagina(lambda: prestadores_dashboard.render(usuario), "Dashboard", "📊", "prestadores_dashboard"),
+        _pagina(lambda: prestadores.render(usuario), "Projetos", "📐", "prestadores_projetos"),
+        _pagina(lambda: avaliacao_prestadores.render(usuario), "Avaliação", "⭐", "prestadores_avaliacao"),
+    ],
+    "Cessionários": [
+        _pagina(lambda: cessionarios_dashboard.render(usuario), "Dashboard", "📊", "cessionarios_dashboard"),
+        _pagina(lambda: cessionarios.render(usuario), "Projetos", "🏬", "cessionarios_projetos"),
+    ],
+    "Consolidado": [
+        _pagina(lambda: consolidado.render(usuario), "Visão Geral", "📈", "consolidado_visao"),
+    ],
+    "Gestão": [
+        _pagina(lambda: alertas.render(usuario), "Central de Alertas", "🚨", "gestao_alertas"),
+        _pagina(lambda: lembretes_pep.render(usuario), "Lembretes (Sem PEP)", "🧷", "gestao_lembretes"),
+    ],
+}
+if usuario["perfil"] == PERFIL_ADMIN:
+    paginas["Sistema"] = [
+        _pagina(lambda: administracao.render(usuario), "Administração", "⚙️", "administracao"),
     ]
-    if usuario["perfil"] == PERFIL_ADMIN:
-        opcoes_menu.append("⚙️ Administração")
 
-    pagina = st.radio("Navegação", opcoes_menu, label_visibility="collapsed")
+st.session_state["_gat_paginas"] = _paginas_por_caminho
 
+pagina_atual = st.navigation(paginas, position="sidebar")
+
+with st.sidebar:
     st.divider()
     st.download_button(
         "⬇️ Exportar Relatório Excel",
@@ -79,24 +121,11 @@ with st.sidebar:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True,
     )
-
     if st.button("🚪 Sair", use_container_width=True):
         logout()
 
 # ---------------------------------------------------------------------------
-# Roteamento de páginas
+# Cabeçalho institucional + conteúdo da página selecionada
 # ---------------------------------------------------------------------------
-if pagina == "📊 Painel Geral":
-    dashboard.render(usuario)
-elif pagina == "📐 Análise de Prestadores":
-    prestadores.render(usuario)
-elif pagina == "🏬 Análise de Cessionários":
-    cessionarios.render(usuario)
-elif pagina == "⭐ Avaliação de Prestadores":
-    avaliacao_prestadores.render(usuario)
-elif pagina == "🚨 Alertas Críticos":
-    alertas.render(usuario)
-elif pagina == "🧷 Lembretes (Sem PEP)":
-    lembretes_pep.render(usuario)
-elif pagina == "⚙️ Administração":
-    administracao.render(usuario)
+cabecalho_institucional(subtitulo=f"{usuario['nome_completo'] or usuario['username']} · {datetime.now().strftime('%d/%m/%Y')}")
+pagina_atual.run()
