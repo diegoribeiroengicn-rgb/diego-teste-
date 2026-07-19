@@ -3,4 +3,5 @@ __pycache__/
 .venv/
 venv/
 data/*.db
+!data/seed_gat_tecnoplano.db
 .streamlit/secrets.toml

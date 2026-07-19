@@ -15,9 +15,9 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
-from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos
-from gat.config import COLUNAS_EXIBICAO_CESSIONARIOS, COLUNAS_EXIBICAO_PRESTADORES
-from gat.database import listar_cessionarios, listar_prestadores
+from gat.business_rules import classificar_nota, enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos
+from gat.config import COLUNAS_EXIBICAO_AVALIACOES, COLUNAS_EXIBICAO_CESSIONARIOS, COLUNAS_EXIBICAO_PRESTADORES
+from gat.database import listar_avaliacoes, listar_cessionarios, listar_prestadores
 
 _COR_CABECALHO = "1B3A8A"  # Navy Tecnoplano
 _FONTE_CABECALHO = Font(name="Arial", bold=True, color="FFFFFF", size=11)
@@ -81,6 +81,15 @@ def gerar_relatorio_excel() -> bytes:
     colunas_cess = list(COLUNAS_EXIBICAO_CESSIONARIOS.keys())
     df_cess_export = df_cess[colunas_cess].rename(columns=COLUNAS_EXIBICAO_CESSIONARIOS) if not df_cess.empty else pd.DataFrame(columns=list(COLUNAS_EXIBICAO_CESSIONARIOS.values()))
     _escrever_dataframe(ws_cess, df_cess_export, "ANÁLISE DE PROJETOS - CESSIONÁRIOS")
+
+    # --- Aba AVALIACOES ---
+    ws_aval = wb.create_sheet("AVALIACOES")
+    df_aval = listar_avaliacoes()
+    if not df_aval.empty:
+        df_aval["classificacao"] = df_aval["nota"].apply(lambda n: classificar_nota(n)[0])
+    colunas_aval = list(COLUNAS_EXIBICAO_AVALIACOES.keys())
+    df_aval_export = df_aval[colunas_aval].rename(columns=COLUNAS_EXIBICAO_AVALIACOES) if not df_aval.empty else pd.DataFrame(columns=list(COLUNAS_EXIBICAO_AVALIACOES.values()))
+    _escrever_dataframe(ws_aval, df_aval_export, "AVALIAÇÃO DE PRESTADORES — GAT")
 
     # --- Aba ALERTAS CRÍTICOS (Pendente de Reunião, apenas projetos ativos) ---
     ws_alertas = wb.create_sheet("ALERTAS CRITICOS")

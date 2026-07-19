@@ -18,6 +18,7 @@ DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
 
 DB_PATH = DATA_DIR / "gat_tecnoplano.db"
+SEED_DB_PATH = DATA_DIR / "seed_gat_tecnoplano.db"
 LOGO_PATH = BASE_DIR / "assets" / "tecnoplano_logo.png"
 
 # ---------------------------------------------------------------------------
@@ -127,6 +128,27 @@ STATUS_ENTREGA_OPCOES = ["ANTES DO PRAZO", "NO PRAZO", "ATRASADO"]
 
 TIPO_CESSIONARIO_OPCOES = ["Quiosque", "Loja", "Externo", "Outros"]
 
+ETG_OPCOES = ["NÃO", "SIM"]
+
+# ---------------------------------------------------------------------------
+# Avaliação de Prestadores (aba AVALIAÇÃO_PRESTADORES / LEGENDA)
+# ---------------------------------------------------------------------------
+FAIXAS_AVALIACAO = [
+    (13, 15, "EXCELENTE", "Projeto com alto nível de maturidade e alta probabilidade de liberação total ou parcial na revisão atual. Não demanda acompanhamento especial."),
+    (10, 12, "BOM", "Projeto com poucas pendências e bom nível de maturidade. Boa probabilidade de liberação parcial na revisão seguinte. Não demanda acompanhamento especial."),
+    (7, 9, "REGULAR", "Projeto em desenvolvimento. Pode demandar acompanhamento próximo para melhor aproveitamento na revisão seguinte."),
+    (4, 6, "BAIXO", "Projeto com baixo nível de maturidade. Demanda acompanhamento semanal dos projetistas."),
+    (1, 3, "CRÍTICO", "Projeto com baixíssimo nível de maturidade. Demanda alerta ao prestador, cobrança semanal e atenção para possível ciclo extenso de revisões."),
+]
+
+CORES_CLASSIFICACAO_AVALIACAO = {
+    "EXCELENTE": CORES["verde"],
+    "BOM": CORES["lima"],
+    "REGULAR": CORES["dourado"],
+    "BAIXO": CORES["laranja"],
+    "CRÍTICO": CORES["vermelho"],
+}
+
 PRIORIDADE_OPCOES = ["BAIXA", "NORMAL", "ALTA"]
 
 MESES_PT = [
@@ -160,6 +182,9 @@ COLUNAS_EXIBICAO_PRESTADORES = {
     "responsavel": "Responsável",
     "status_analise": "Status Análise",
     "observacoes": "Observações",
+    "natureza_revisao": "Natureza da Revisão",
+    "num_erros": "N° de Erros Encontrados",
+    "etg": "ETG",
     "categoria_governanca": "Categoria (Governança)",
 }
 
@@ -186,7 +211,22 @@ COLUNAS_EXIBICAO_CESSIONARIOS = {
     "responsavel": "Responsável",
     "status_analise": "Status Análise",
     "observacoes": "Observações",
+    "natureza_revisao": "Natureza da Revisão",
+    "num_erros": "N° de Erros Encontrados",
+    "etg": "ETG",
     "categoria_governanca": "Categoria (Governança)",
+}
+
+COLUNAS_EXIBICAO_AVALIACOES = {
+    "codigo_prestador": "Cód. Prestador",
+    "nome_prestador": "Nome do Prestador",
+    "data_avaliacao": "Data Avaliação",
+    "nome_projeto": "Nome do Projeto",
+    "at_referencia": "AT de Referência",
+    "nota": "Nota (1-15)",
+    "classificacao": "Status",
+    "analista_responsavel": "Analista Responsável",
+    "observacoes": "Observações",
 }
 
 # ---------------------------------------------------------------------------

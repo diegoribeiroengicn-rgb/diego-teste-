@@ -24,14 +24,15 @@ def _aplicar_layout(fig: go.Figure, titulo: str | None = None) -> go.Figure:
     return fig
 
 
-def grafico_status_donut(df: pd.DataFrame, coluna: str, titulo: str) -> go.Figure:
+def grafico_status_donut(df: pd.DataFrame, coluna: str, titulo: str, mapa_cores: dict[str, str] | None = None) -> go.Figure:
     """Gráfico de rosca com a distribuição de uma coluna categórica (ex.: status de análise)."""
     if df.empty or coluna not in df.columns:
         fig = go.Figure()
         return _aplicar_layout(fig, titulo)
     contagem = df[coluna].fillna("SEM STATUS").value_counts().reset_index()
     contagem.columns = [coluna, "quantidade"]
-    mapa_cores = CORES_STATUS_ANALISE if coluna == "status_analise" else CORES_STATUS_ENTREGA
+    if mapa_cores is None:
+        mapa_cores = CORES_STATUS_ANALISE if coluna == "status_analise" else CORES_STATUS_ENTREGA
     cores = [mapa_cores.get(v, SEQUENCIA_GRAFICOS[i % len(SEQUENCIA_GRAFICOS)]) for i, v in enumerate(contagem[coluna])]
     fig = go.Figure(
         data=[go.Pie(labels=contagem[coluna], values=contagem["quantidade"], hole=0.55, marker=dict(colors=cores))]

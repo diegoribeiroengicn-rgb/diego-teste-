@@ -16,6 +16,7 @@ import pandas as pd
 
 from gat.calendario import dias_uteis_decorridos, saldo_dias_uteis
 from gat.config import (
+    FAIXAS_AVALIACAO,
     META_REVISAO_APROVACAO,
     SLA_CESSIONARIOS_NOVO,
     SLA_CESSIONARIOS_REVISAO,
@@ -24,6 +25,22 @@ from gat.config import (
     STATUS_NAO_LIBERADO,
     STATUS_PENDENTE_REUNIAO,
 )
+
+
+def classificar_nota(nota: int) -> tuple[str, str]:
+    """
+    Classifica a nota de avaliação de prestador (1-15) conforme a legenda
+    oficial da planilha "Avaliacao_Prestadores_GAT.xlsx", retornando a
+    tupla (classificação, interpretação gerencial).
+    """
+    try:
+        valor = int(nota)
+    except (TypeError, ValueError):
+        return "SEM NOTA", ""
+    for minimo, maximo, rotulo, interpretacao in FAIXAS_AVALIACAO:
+        if minimo <= valor <= maximo:
+            return rotulo, interpretacao
+    return "FORA DA ESCALA", "Nota fora da escala oficial (1 a 15)."
 
 
 def calcular_sla_cessionario(tipo: str, revisao: int) -> int:

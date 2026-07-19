@@ -10,6 +10,7 @@ Responsável por:
 
 from __future__ import annotations
 
+import shutil
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
@@ -18,7 +19,7 @@ from typing import Any, Iterator
 import bcrypt
 import pandas as pd
 
-from gat.config import DB_PATH, PERFIL_ADMIN
+from gat.config import DB_PATH, PERFIL_ADMIN, SEED_DB_PATH
 
 # ---------------------------------------------------------------------------
 # Conexão
@@ -45,6 +46,7 @@ COLUNAS_PRESTADORES = [
     "obra_referencia", "revisao", "num_documentos", "data_solicitacao",
     "data_limite", "data_analise", "hold_inicio", "hold_fim", "num_at",
     "revisao_at", "responsavel", "status_analise", "observacoes",
+    "natureza_revisao", "num_erros", "etg",
 ]
 
 COLUNAS_CESSIONARIOS = [
@@ -52,6 +54,12 @@ COLUNAS_CESSIONARIOS = [
     "revisao", "num_documentos", "data_solicitacao", "tipo", "sla_dias",
     "data_limite", "data_analise", "hold_inicio", "hold_fim", "num_at",
     "revisao_at", "responsavel", "status_analise", "observacoes",
+    "natureza_revisao", "num_erros", "etg",
+]
+
+COLUNAS_AVALIACOES = [
+    "codigo_prestador", "nome_prestador", "data_avaliacao", "nome_projeto",
+    "at_referencia", "nota", "analista_responsavel", "observacoes",
 ]
 
 
@@ -60,8 +68,20 @@ COLUNAS_CESSIONARIOS = [
 # ---------------------------------------------------------------------------
 
 
+def _restaurar_semente_se_necessario() -> None:
+    """
+    Em uma implantação nova (banco de dados ainda inexistente), restaura o
+    banco de sementes versionado no repositório — contendo todo o histórico
+    real importado da planilha Controle_GAT_Projetos_2026.xlsm — para que a
+    aplicação já nasça povoada. Não sobrescreve um banco já existente.
+    """
+    if not DB_PATH.exists() and SEED_DB_PATH.exists():
+        shutil.copy(SEED_DB_PATH, DB_PATH)
+
+
 def init_db() -> None:
     """Cria as tabelas do sistema (caso não existam) e semeia o usuário admin padrão."""
+    _restaurar_semente_se_necessario()
     with _conectar() as conn:
         conn.executescript(
             """
@@ -96,6 +116,9 @@ def init_db() -> None:
                 responsavel TEXT,
                 status_analise TEXT NOT NULL DEFAULT 'EM ANÁLISE',
                 observacoes TEXT,
+                natureza_revisao TEXT,
+                num_erros INTEGER,
+                etg TEXT NOT NULL DEFAULT 'NÃO',
                 criado_em TEXT NOT NULL,
                 criado_por TEXT,
                 atualizado_em TEXT,
@@ -123,10 +146,27 @@ def init_db() -> None:
                 responsavel TEXT,
                 status_analise TEXT NOT NULL DEFAULT 'EM ANÁLISE',
                 observacoes TEXT,
+                natureza_revisao TEXT,
+                num_erros INTEGER,
+                etg TEXT NOT NULL DEFAULT 'NÃO',
                 criado_em TEXT NOT NULL,
                 criado_por TEXT,
                 atualizado_em TEXT,
                 atualizado_por TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS avaliacoes_prestadores (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                codigo_prestador TEXT,
+                nome_prestador TEXT NOT NULL,
+                data_avaliacao TEXT NOT NULL,
+                nome_projeto TEXT,
+                at_referencia TEXT,
+                nota INTEGER NOT NULL,
+                analista_responsavel TEXT,
+                observacoes TEXT,
+                criado_em TEXT NOT NULL,
+                criado_por TEXT
             );
 
             CREATE TABLE IF NOT EXISTS historico_edicoes (
@@ -326,4 +366,42 @@ def listar_cessionarios() -> pd.DataFrame:
 def obter_cessionario(registro_id: int) -> dict[str, Any] | None:
     with _conectar() as conn:
         linha = conn.execute("SELECT * FROM cessionarios WHERE id = ?", (registro_id,)).fetchone()
+        return dict(linha) if linha else None
+
+
+# ---------------------------------------------------------------------------
+# Avaliação de Prestadores
+# ---------------------------------------------------------------------------
+
+
+def inserir_avaliacao(dados: dict[str, Any], usuario: str) -> int:
+    agora = datetime.now().isoformat()
+    campos = {c: dados.get(c) for c in COLUNAS_AVALIACOES}
+    with _conectar() as conn:
+        cursor = conn.execute(
+            f"INSERT INTO avaliacoes_prestadores ({', '.join(campos.keys())}, criado_em, criado_por) "
+            f"VALUES ({', '.join(['?'] * len(campos))}, ?, ?)",
+            (*campos.values(), agora, usuario),
+        )
+        return cursor.lastrowid
+
+
+def atualizar_avaliacao(registro_id: int, dados: dict[str, Any], usuario: str) -> None:
+    campos = {c: dados.get(c) for c in COLUNAS_AVALIACOES}
+    with _conectar() as conn:
+        set_clause = ", ".join(f"{c} = ?" for c in campos)
+        conn.execute(
+            f"UPDATE avaliacoes_prestadores SET {set_clause} WHERE id = ?",
+            (*campos.values(), registro_id),
+        )
+
+
+def listar_avaliacoes() -> pd.DataFrame:
+    with _conectar() as conn:
+        return pd.read_sql_query("SELECT * FROM avaliacoes_prestadores ORDER BY data_avaliacao DESC, id DESC", conn)
+
+
+def obter_avaliacao(registro_id: int) -> dict[str, Any] | None:
+    with _conectar() as conn:
+        linha = conn.execute("SELECT * FROM avaliacoes_prestadores WHERE id = ?", (registro_id,)).fetchone()
         return dict(linha) if linha else None

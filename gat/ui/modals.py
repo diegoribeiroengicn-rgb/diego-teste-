@@ -15,17 +15,30 @@ from typing import Any
 
 import streamlit as st
 
-from gat.business_rules import calcular_sla_cessionario, status_entrega_cessionario, status_entrega_prestador
+from gat.business_rules import (
+    calcular_sla_cessionario,
+    classificar_nota,
+    status_entrega_cessionario,
+    status_entrega_prestador,
+)
 from gat.calendario import calcular_data_limite, calcular_hold_dias
 from gat.config import (
     DISCIPLINAS,
     DISCIPLINAS_SLA,
+    ETG_OPCOES,
     RESPONSAVEIS,
     SLA_PRESTADORES_DIAS_UTEIS,
     STATUS_ANALISE_OPCOES,
     TIPO_CESSIONARIO_OPCOES,
 )
-from gat.database import atualizar_cessionario, atualizar_prestador, inserir_cessionario, inserir_prestador
+from gat.database import (
+    atualizar_avaliacao,
+    atualizar_cessionario,
+    atualizar_prestador,
+    inserir_avaliacao,
+    inserir_cessionario,
+    inserir_prestador,
+)
 
 
 def _parse_data(valor: Any) -> date | None:
@@ -100,6 +113,14 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
     m2.metric("Dias em Hold", hold_dias)
     m3.metric("Status de Entrega", status_calc)
 
+    col8, col9, col10 = st.columns(3)
+    with col8:
+        natureza_revisao = st.text_input("Natureza da Revisão", value=registro.get("natureza_revisao", "") if registro else "", key=f"pr_natrev_{sufixo}")
+    with col9:
+        num_erros = st.number_input("N° de erros encontrados", min_value=0, step=1, value=int(registro.get("num_erros") or 0) if registro else 0, key=f"pr_nerros_{sufixo}")
+    with col10:
+        etg = st.selectbox("ETG", ETG_OPCOES, index=_idx(ETG_OPCOES, registro.get("etg") if registro else "NÃO"), key=f"pr_etg_{sufixo}")
+
     observacoes = st.text_area("Observações", value=registro.get("observacoes", "") if registro else "", key=f"pr_obs_{sufixo}")
 
     col_salvar, col_cancelar = st.columns(2)
@@ -133,6 +154,9 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
             "responsavel": responsavel,
             "status_analise": status_analise,
             "observacoes": observacoes,
+            "natureza_revisao": natureza_revisao,
+            "num_erros": int(num_erros),
+            "etg": etg,
         }
         if editando:
             atualizar_prestador(registro["id"], dados, usuario)
@@ -205,6 +229,14 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
     m3.metric("Dias em Hold", hold_dias)
     m4.metric("Status de Entrega", status_calc)
 
+    col8, col9, col10 = st.columns(3)
+    with col8:
+        natureza_revisao = st.text_input("Natureza da Revisão", value=registro.get("natureza_revisao", "") if registro else "", key=f"ce_natrev_{sufixo}")
+    with col9:
+        num_erros = st.number_input("N° de erros encontrados", min_value=0, step=1, value=int(registro.get("num_erros") or 0) if registro else 0, key=f"ce_nerros_{sufixo}")
+    with col10:
+        etg = st.selectbox("ETG", ETG_OPCOES, index=_idx(ETG_OPCOES, registro.get("etg") if registro else "NÃO"), key=f"ce_etg_{sufixo}")
+
     observacoes = st.text_area("Observações", value=registro.get("observacoes", "") if registro else "", key=f"ce_obs_{sufixo}")
 
     col_salvar, col_cancelar = st.columns(2)
@@ -238,6 +270,9 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
             "responsavel": responsavel,
             "status_analise": status_analise,
             "observacoes": observacoes,
+            "natureza_revisao": natureza_revisao,
+            "num_erros": int(num_erros),
+            "etg": etg,
         }
         if editando:
             atualizar_cessionario(registro["id"], dados, usuario)
@@ -245,6 +280,69 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
         else:
             inserir_cessionario(dados, usuario)
             st.toast("Novo registro de cessionário cadastrado com sucesso.", icon="✅")
+        st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
+        st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# Modal de Avaliação de Prestadores
+# ---------------------------------------------------------------------------
+
+
+@st.dialog("Avaliação de Prestador", width="large")
+def dialog_avaliacao(usuario: str, registro: dict[str, Any] | None = None) -> None:
+    editando = registro is not None
+    sufixo = f"edit_{registro['id']}" if editando else "novo"
+
+    col1, col2 = st.columns(2)
+    with col1:
+        nome_prestador = st.text_input("Nome do Prestador *", value=registro.get("nome_prestador", "") if registro else "", key=f"av_nome_{sufixo}")
+        codigo_prestador = st.text_input("Cód. Prestador", value=registro.get("codigo_prestador", "") if registro else "", key=f"av_codigo_{sufixo}")
+        nome_projeto = st.text_input("Nome do Projeto", value=registro.get("nome_projeto", "") if registro else "", key=f"av_projeto_{sufixo}")
+        at_referencia = st.text_input("AT de Referência", value=registro.get("at_referencia", "") if registro else "", key=f"av_at_{sufixo}")
+    with col2:
+        data_avaliacao = st.date_input("Data da Avaliação *", value=_parse_data(registro.get("data_avaliacao")) if registro else date.today(), format="DD/MM/YYYY", key=f"av_data_{sufixo}")
+        nota = st.slider("Nota (1-15)", min_value=1, max_value=15, value=int(registro.get("nota", 8)) if registro else 8, key=f"av_nota_{sufixo}")
+        analista_responsavel = st.selectbox("Analista Responsável", RESPONSAVEIS, index=_idx(RESPONSAVEIS, registro.get("analista_responsavel") if registro else None), key=f"av_analista_{sufixo}")
+
+    classificacao, interpretacao = classificar_nota(nota)
+    from gat.config import CORES_CLASSIFICACAO_AVALIACAO
+    cor = CORES_CLASSIFICACAO_AVALIACAO.get(classificacao, "#64748B")
+    st.markdown(
+        f'<div style="padding:10px 14px;border-radius:8px;background:{cor}22;border-left:4px solid {cor};">'
+        f'<strong style="color:{cor}">{classificacao}</strong> — {interpretacao}</div>',
+        unsafe_allow_html=True,
+    )
+
+    observacoes = st.text_area("Observações", value=registro.get("observacoes", "") if registro else "", key=f"av_obs_{sufixo}")
+
+    col_salvar, col_cancelar = st.columns(2)
+    salvar = col_salvar.button("💾 Salvar", use_container_width=True, key=f"av_salvar_{sufixo}")
+    cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"av_cancelar_{sufixo}")
+
+    if cancelar:
+        st.rerun()
+
+    if salvar:
+        if not nome_prestador or not data_avaliacao:
+            st.error("Preencha ao menos Nome do Prestador e Data da Avaliação.")
+            return
+        dados = {
+            "codigo_prestador": codigo_prestador,
+            "nome_prestador": nome_prestador,
+            "data_avaliacao": data_avaliacao.isoformat(),
+            "nome_projeto": nome_projeto,
+            "at_referencia": at_referencia,
+            "nota": int(nota),
+            "analista_responsavel": analista_responsavel,
+            "observacoes": observacoes,
+        }
+        if editando:
+            atualizar_avaliacao(registro["id"], dados, usuario)
+            st.toast("Avaliação atualizada com sucesso.", icon="✅")
+        else:
+            inserir_avaliacao(dados, usuario)
+            st.toast("Nova avaliação registrada com sucesso.", icon="✅")
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
         st.rerun()
 

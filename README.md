@@ -37,10 +37,15 @@ views/
   dashboard.py             # Painel Geral Consolidado
   prestadores.py            # Aba A — Análise de Prestadores
   cessionarios.py            # Aba B — Análise de Cessionários
-  alertas.py                  # Alertas críticos (Pendente de Reunião)
-  administracao.py             # Gestão de usuários e histórico (admin)
+  avaliacao_prestadores.py    # Avaliação de Prestadores (1-15)
+  alertas.py                    # Alertas críticos (Pendente de Reunião)
+  administracao.py               # Gestão de usuários e histórico (admin)
 assets/
   tecnoplano_logo.png       # Logomarca institucional
+scripts/
+  importar_planilha.py      # Importação em lote a partir das planilhas Excel
+data/
+  seed_gat_tecnoplano.db    # Banco de sementes com o histórico real importado
 ```
 
 ## Instalação
@@ -58,7 +63,31 @@ streamlit run app.py
 ```
 
 O banco de dados SQLite é criado automaticamente na primeira execução, em
-`data/gat_tecnoplano.db`.
+`data/gat_tecnoplano.db`. Se o arquivo ainda não existir, ele é restaurado
+automaticamente a partir do banco de sementes versionado no repositório
+(`data/seed_gat_tecnoplano.db`) — que já contém todo o histórico real
+importado da planilha `Controle_GAT_Projetos_2026.xlsm` (455 registros de
+Prestadores e 496 de Cessionários). Ou seja: **a aplicação já nasce
+povoada com os dados reais** — só é necessário cadastrar manualmente os
+projetos novos a partir daqui em diante.
+
+### Reimportar ou atualizar a base de sementes
+
+Caso a planilha oficial seja atualizada e você queira regerar a base de
+sementes com uma versão mais recente:
+
+```bash
+python scripts/importar_planilha.py \
+  --xlsm caminho/Controle_GAT_Projetos_2026.xlsm \
+  --avaliacao caminho/Avaliacao_Prestadores_GAT.xlsx \
+  --destino data/seed_gat_tecnoplano.db \
+  --forcar
+```
+
+> ⚠️ O script recusa a execução se o banco de destino já tiver registros
+> (para não duplicar dados), a menos que `--forcar` seja informado. Nunca
+> rode este comando apontando `--destino` para o banco de produção em uso
+> — ele foi desenhado para (re)gerar apenas o arquivo de sementes.
 
 ### Acesso inicial
 
