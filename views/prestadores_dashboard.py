@@ -15,10 +15,14 @@ from gat.ui.charts import (
     grafico_status_donut,
     grafico_top_responsaveis,
 )
+from gat.permissions import exigir_area, exigir_modulo
 from gat.ui.kpi_cards import renderizar_kpis
 
 
 def render(usuario: dict) -> None:
+    exigir_modulo(usuario, "prestadores")
+    exigir_area(usuario, "dashboard")
+
     st.subheader(":material/dashboard: Dashboard — Prestadores de Serviço")
     st.caption("Indicadores exclusivos do módulo de Prestadores. Projetos CANCELADOS são excluídos.")
 

@@ -5,11 +5,14 @@ from __future__ import annotations
 import streamlit as st
 
 from gat.database import listar_planos_da_reuniao, listar_reunioes, obter_reuniao
+from gat.permissions import exigir_area
 from gat.ui.kpi_cards import renderizar_kpis
 from gat.ui.modals_gestao import dialog_plano_acao, dialog_reuniao
 
 
 def render(usuario: dict) -> None:
+    exigir_area(usuario, "reunioes")
+
     st.subheader(":material/groups: Reuniões")
     st.caption("Reuniões de alinhamento vinculadas a um ou mais projetos de Prestadores e/ou Cessionários.")
 

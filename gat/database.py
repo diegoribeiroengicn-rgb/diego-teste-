@@ -19,7 +19,14 @@ from typing import Any, Iterator
 import bcrypt
 import pandas as pd
 
-from gat.config import DB_PATH, PERFIL_ADMIN, SEED_DB_PATH
+from gat.config import (
+    AREAS_PERMISSAO,
+    DB_PATH,
+    MODULOS_CONTROLADOS,
+    PERFIL_ADMIN,
+    PERFIS_PADRAO,
+    SEED_DB_PATH,
+)
 
 # ---------------------------------------------------------------------------
 # Conexão
@@ -90,6 +97,25 @@ def _semear_configuracoes_padrao(conn: sqlite3.Connection) -> None:
         conn.execute("INSERT OR IGNORE INTO configuracoes (chave, valor) VALUES (?, ?)", (chave, valor))
 
 
+def _semear_permissoes_perfil(conn: sqlite3.Connection, usuario_id: int, perfil: str) -> None:
+    """Materializa, para `usuario_id`, as permissões padrão de `perfil` como
+    linhas individuais em permissoes_modulo/permissoes_area — a partir daí
+    são permissões do usuário (editáveis livremente), não mais do perfil."""
+    template = PERFIS_PADRAO.get(perfil, PERFIS_PADRAO[PERFIL_ADMIN])
+    for modulo in MODULOS_CONTROLADOS:
+        permitido = template["modulos"].get(modulo, True)
+        conn.execute(
+            "INSERT OR REPLACE INTO permissoes_modulo (usuario_id, modulo, permitido) VALUES (?, ?, ?)",
+            (usuario_id, modulo, 1 if permitido else 0),
+        )
+    for area in AREAS_PERMISSAO:
+        permitido = template["areas"].get(area, True)
+        conn.execute(
+            "INSERT OR REPLACE INTO permissoes_area (usuario_id, area, permitido) VALUES (?, ?, ?)",
+            (usuario_id, area, 1 if permitido else 0),
+        )
+
+
 def _restaurar_semente_se_necessario() -> None:
     """
     Em uma implantação nova (banco de dados ainda inexistente), restaura o
@@ -114,7 +140,23 @@ def init_db() -> None:
                 nome_completo TEXT,
                 perfil TEXT NOT NULL DEFAULT 'ANALISTA',
                 ativo INTEGER NOT NULL DEFAULT 1,
+                deve_trocar_senha INTEGER NOT NULL DEFAULT 0,
+                ultimo_acesso TEXT,
                 criado_em TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS permissoes_modulo (
+                usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+                modulo TEXT NOT NULL,
+                permitido INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY (usuario_id, modulo)
+            );
+
+            CREATE TABLE IF NOT EXISTS permissoes_area (
+                usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+                area TEXT NOT NULL,
+                permitido INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY (usuario_id, area)
             );
 
             CREATE TABLE IF NOT EXISTS prestadores (
@@ -259,15 +301,30 @@ def init_db() -> None:
         _garantir_coluna(conn, "cessionarios", "num_erros", "INTEGER")
         _garantir_coluna(conn, "cessionarios", "etg", "TEXT NOT NULL DEFAULT 'NÃO'")
         _garantir_coluna(conn, "cessionarios", "pep", "TEXT")
+        _garantir_coluna(conn, "usuarios", "deve_trocar_senha", "INTEGER NOT NULL DEFAULT 0")
+        _garantir_coluna(conn, "usuarios", "ultimo_acesso", "TEXT")
 
         total_usuarios = conn.execute("SELECT COUNT(*) AS n FROM usuarios").fetchone()["n"]
         if total_usuarios == 0:
             senha_hash = bcrypt.hashpw("Tecnoplano@2026".encode(), bcrypt.gensalt()).decode()
-            conn.execute(
-                "INSERT INTO usuarios (username, senha_hash, nome_completo, perfil, ativo, criado_em) "
-                "VALUES (?, ?, ?, ?, 1, ?)",
+            cursor = conn.execute(
+                "INSERT INTO usuarios (username, senha_hash, nome_completo, perfil, ativo, deve_trocar_senha, criado_em) "
+                "VALUES (?, ?, ?, ?, 1, 0, ?)",
                 ("admin", senha_hash, "Administrador GAT", PERFIL_ADMIN, datetime.now().isoformat()),
             )
+            _semear_permissoes_perfil(conn, cursor.lastrowid, PERFIL_ADMIN)
+
+        # Usuários pré-existentes (bancos de versões anteriores ao controle de
+        # acesso granular) recebem acesso total por padrão — preservando o
+        # comportamento que já tinham antes deste ajuste, já que o sistema
+        # ainda não fazia nenhuma restrição de módulo/área. O administrador
+        # pode restringi-los normalmente a partir de agora.
+        for linha in conn.execute("SELECT id FROM usuarios").fetchall():
+            tem_permissoes = conn.execute(
+                "SELECT 1 FROM permissoes_modulo WHERE usuario_id = ? LIMIT 1", (linha["id"],)
+            ).fetchone()
+            if not tem_permissoes:
+                _semear_permissoes_perfil(conn, linha["id"], PERFIL_ADMIN)
 
         _semear_configuracoes_padrao(conn)
 
@@ -285,32 +342,239 @@ def buscar_usuario(username: str) -> dict[str, Any] | None:
         return dict(linha) if linha else None
 
 
-def criar_usuario(username: str, senha: str, nome_completo: str, perfil: str) -> None:
-    senha_hash = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
+def buscar_usuario_por_id(usuario_id: int) -> dict[str, Any] | None:
     with _conectar() as conn:
-        conn.execute(
-            "INSERT INTO usuarios (username, senha_hash, nome_completo, perfil, ativo, criado_em) "
-            "VALUES (?, ?, ?, ?, 1, ?)",
-            (username, senha_hash, nome_completo, perfil, datetime.now().isoformat()),
+        linha = conn.execute("SELECT * FROM usuarios WHERE id = ?", (usuario_id,)).fetchone()
+        return dict(linha) if linha else None
+
+
+def criar_usuario(username: str, senha: str, nome_completo: str, perfil: str, executor: str) -> int:
+    """Cria um usuário com senha inicial temporária — o próprio usuário será
+    obrigado a defini-la novamente no primeiro acesso (`deve_trocar_senha`)."""
+    senha_hash = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
+    agora = datetime.now().isoformat()
+    with _conectar() as conn:
+        cursor = conn.execute(
+            "INSERT INTO usuarios (username, senha_hash, nome_completo, perfil, ativo, deve_trocar_senha, criado_em) "
+            "VALUES (?, ?, ?, ?, 1, 1, ?)",
+            (username, senha_hash, nome_completo, perfil, agora),
         )
+        usuario_id = cursor.lastrowid
+        _semear_permissoes_perfil(conn, usuario_id, perfil)
+        _registrar_evento_seguranca(conn, "CRIACAO_USUARIO", username, executor, f"Usuário criado com perfil {perfil}.")
+        return usuario_id
 
 
 def listar_usuarios() -> pd.DataFrame:
     with _conectar() as conn:
         return pd.read_sql_query(
-            "SELECT id, username, nome_completo, perfil, ativo, criado_em FROM usuarios ORDER BY username", conn
+            "SELECT id, username, nome_completo, perfil, ativo, deve_trocar_senha, ultimo_acesso, criado_em "
+            "FROM usuarios ORDER BY username",
+            conn,
         )
 
 
 def alterar_senha(username: str, nova_senha: str) -> None:
+    """Uso interno/legado — prefira `redefinir_senha_admin` ou `alterar_senha_usuario`."""
     senha_hash = bcrypt.hashpw(nova_senha.encode(), bcrypt.gensalt()).decode()
     with _conectar() as conn:
         conn.execute("UPDATE usuarios SET senha_hash = ? WHERE username = ?", (senha_hash, username))
 
 
-def desativar_usuario(username: str) -> None:
+def redefinir_senha_admin(username: str, nova_senha: str, executor: str) -> None:
+    """Administrador redefine a senha de um usuário — força troca no próximo
+    login e nunca expõe a senha atual (o hash antigo é apenas substituído)."""
+    senha_hash = bcrypt.hashpw(nova_senha.encode(), bcrypt.gensalt()).decode()
+    with _conectar() as conn:
+        conn.execute(
+            "UPDATE usuarios SET senha_hash = ?, deve_trocar_senha = 1 WHERE username = ?",
+            (senha_hash, username),
+        )
+        _registrar_evento_seguranca(conn, "REDEFINICAO_SENHA_ADMIN", username, executor, "Senha redefinida pelo administrador; troca exigida no próximo login.")
+
+
+def alterar_senha_usuario(username: str, senha_atual: str, nova_senha: str) -> bool:
+    """Alteração de senha pelo próprio usuário (Meu Perfil). Retorna False se
+    a senha atual informada não confere — nenhuma alteração é feita nesse caso."""
+    with _conectar() as conn:
+        linha = conn.execute("SELECT senha_hash FROM usuarios WHERE username = ?", (username,)).fetchone()
+        if not linha:
+            return False
+        try:
+            confere = bcrypt.checkpw(senha_atual.encode(), linha["senha_hash"].encode())
+        except (ValueError, AttributeError):
+            confere = False
+        if not confere:
+            return False
+        senha_hash = bcrypt.hashpw(nova_senha.encode(), bcrypt.gensalt()).decode()
+        conn.execute(
+            "UPDATE usuarios SET senha_hash = ?, deve_trocar_senha = 0 WHERE username = ?",
+            (senha_hash, username),
+        )
+        _registrar_evento_seguranca(conn, "ALTERACAO_SENHA_PROPRIA", username, username, "Usuário alterou a própria senha.")
+        return True
+
+
+def concluir_troca_senha_obrigatoria(username: str, nova_senha: str) -> None:
+    """Define a nova senha pessoal no primeiro acesso (ou após redefinição pelo
+    administrador), encerrando a exigência de troca."""
+    senha_hash = bcrypt.hashpw(nova_senha.encode(), bcrypt.gensalt()).decode()
+    with _conectar() as conn:
+        conn.execute(
+            "UPDATE usuarios SET senha_hash = ?, deve_trocar_senha = 0 WHERE username = ?",
+            (senha_hash, username),
+        )
+        _registrar_evento_seguranca(conn, "ALTERACAO_SENHA_PROPRIA", username, username, "Senha pessoal definida no primeiro acesso.")
+
+
+def registrar_ultimo_acesso(username: str) -> None:
+    with _conectar() as conn:
+        conn.execute("UPDATE usuarios SET ultimo_acesso = ? WHERE username = ?", (datetime.now().isoformat(), username))
+
+
+def atualizar_usuario(username: str, nome_completo: str, perfil: str, executor: str) -> None:
+    with _conectar() as conn:
+        anterior = conn.execute("SELECT nome_completo, perfil FROM usuarios WHERE username = ?", (username,)).fetchone()
+        conn.execute(
+            "UPDATE usuarios SET nome_completo = ?, perfil = ? WHERE username = ?",
+            (nome_completo, perfil, username),
+        )
+        if anterior and anterior["perfil"] != perfil:
+            _registrar_evento_seguranca(
+                conn, "ALTERACAO_PERFIL", username, executor,
+                f"Perfil alterado de {anterior['perfil']} para {perfil}.",
+            )
+
+
+def ativar_usuario(username: str, executor: str) -> None:
+    with _conectar() as conn:
+        conn.execute("UPDATE usuarios SET ativo = 1 WHERE username = ?", (username,))
+        _registrar_evento_seguranca(conn, "ATIVACAO_USUARIO", username, executor, "Usuário ativado.")
+
+
+def desativar_usuario(username: str, executor: str | None = None) -> None:
     with _conectar() as conn:
         conn.execute("UPDATE usuarios SET ativo = 0 WHERE username = ?", (username,))
+        _registrar_evento_seguranca(conn, "INATIVACAO_USUARIO", username, executor or username, "Usuário inativado.")
+
+
+def exigir_troca_senha_proximo_login(username: str, executor: str) -> None:
+    with _conectar() as conn:
+        conn.execute("UPDATE usuarios SET deve_trocar_senha = 1 WHERE username = ?", (username,))
+        _registrar_evento_seguranca(conn, "EXIGENCIA_TROCA_SENHA", username, executor, "Troca de senha exigida no próximo login.")
+
+
+# ---------------------------------------------------------------------------
+# Permissões (módulos e áreas)
+# ---------------------------------------------------------------------------
+
+
+def permissoes_usuario(usuario_id: int) -> dict[str, dict[str, bool]]:
+    """Retorna as permissões efetivas do usuário: {"modulos": {...}, "areas": {...}}."""
+    with _conectar() as conn:
+        modulos = {
+            linha["modulo"]: bool(linha["permitido"])
+            for linha in conn.execute("SELECT modulo, permitido FROM permissoes_modulo WHERE usuario_id = ?", (usuario_id,)).fetchall()
+        }
+        areas = {
+            linha["area"]: bool(linha["permitido"])
+            for linha in conn.execute("SELECT area, permitido FROM permissoes_area WHERE usuario_id = ?", (usuario_id,)).fetchall()
+        }
+    # Módulos/áreas sem linha própria (esquema mais novo que o usuário)
+    # herdam o padrão liberado, para não quebrar contas já existentes.
+    for modulo in MODULOS_CONTROLADOS:
+        modulos.setdefault(modulo, True)
+    for area in AREAS_PERMISSAO:
+        areas.setdefault(area, True)
+    return {"modulos": modulos, "areas": areas}
+
+
+def modulo_permitido(usuario: dict, modulo: str) -> bool:
+    if usuario.get("perfil") == PERFIL_ADMIN:
+        return True
+    return permissoes_usuario(usuario["id"])["modulos"].get(modulo, True)
+
+
+def area_permitida(usuario: dict, area: str) -> bool:
+    if usuario.get("perfil") == PERFIL_ADMIN:
+        return True
+    return permissoes_usuario(usuario["id"])["areas"].get(area, True)
+
+
+def definir_permissao_modulo(usuario_id: int, username_alvo: str, modulo: str, permitido: bool, executor: str) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO permissoes_modulo (usuario_id, modulo, permitido) VALUES (?, ?, ?) "
+            "ON CONFLICT(usuario_id, modulo) DO UPDATE SET permitido = excluded.permitido",
+            (usuario_id, modulo, 1 if permitido else 0),
+        )
+        acao = "CONCESSAO_ACESSO" if permitido else "RETIRADA_ACESSO"
+        _registrar_evento_seguranca(conn, acao, username_alvo, executor, f"Módulo '{modulo}': {'liberado' if permitido else 'bloqueado'}.")
+
+
+def definir_permissao_area(usuario_id: int, username_alvo: str, area: str, permitido: bool, executor: str) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO permissoes_area (usuario_id, area, permitido) VALUES (?, ?, ?) "
+            "ON CONFLICT(usuario_id, area) DO UPDATE SET permitido = excluded.permitido",
+            (usuario_id, area, 1 if permitido else 0),
+        )
+        acao = "CONCESSAO_ACESSO" if permitido else "RETIRADA_ACESSO"
+        _registrar_evento_seguranca(conn, acao, username_alvo, executor, f"Área '{area}': {'liberada' if permitido else 'bloqueada'}.")
+
+
+def registrar_tentativa_acesso_bloqueado(username: str, alvo: str) -> None:
+    with _conectar() as conn:
+        _registrar_evento_seguranca(conn, "TENTATIVA_ACESSO_BLOQUEADO", username, username, f"Tentativa de acesso a '{alvo}' sem permissão.")
+
+
+def _registrar_evento_seguranca(conn: sqlite3.Connection, evento: str, usuario_alvo: str, executor: str, detalhes: str) -> None:
+    """Grava um evento de auditoria de segurança — nunca inclui senha ou hash."""
+    conn.execute(
+        "INSERT INTO historico_edicoes (tabela, registro_id, campo, valor_anterior, valor_novo, usuario, data_hora) "
+        "VALUES ('seguranca', 0, ?, NULL, ?, ?, ?)",
+        (evento, f"[{usuario_alvo}] {detalhes}", executor, datetime.now().isoformat()),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Validação de importação (item 1 do ajuste de governança)
+# ---------------------------------------------------------------------------
+
+
+def _diagnostico_item(conn: sqlite3.Connection, tabela: str) -> dict[str, Any]:
+    total = conn.execute(f"SELECT COUNT(*) AS n FROM {tabela}").fetchone()["n"]
+    limites = conn.execute(f"SELECT MIN(item) AS mn, MAX(item) AS mx FROM {tabela} WHERE item IS NOT NULL").fetchone()
+    minimo, maximo = limites["mn"], limites["mx"]
+    faltantes: list[int] = []
+    if minimo is not None and maximo is not None:
+        existentes = {
+            linha["item"] for linha in conn.execute(f"SELECT DISTINCT item AS item FROM {tabela} WHERE item IS NOT NULL").fetchall()
+        }
+        faltantes = sorted(set(range(minimo, maximo + 1)) - existentes)
+    return {
+        "total_importados": total,
+        "item_minimo": minimo,
+        "item_maximo": maximo,
+        "itens_ausentes_na_origem": faltantes,
+    }
+
+
+def relatorio_validacao_importacao() -> dict[str, dict[str, Any]]:
+    """Relatório de validação da importação, calculado inteiramente a partir
+    do banco (não depende do arquivo de origem estar disponível em produção).
+
+    A numeração de Item é preservada tal como veio da planilha (nunca
+    renumerada); quando há números de Item ausentes na sequência, isso
+    reflete linhas que já não existem fisicamente na planilha de origem
+    (excluídas na origem antes da importação) — não uma falha da importação,
+    que sempre grava todas as linhas com nome e data de solicitação
+    preenchidos, sem aplicar nenhum filtro de status, duplicidade ou PEP.
+    """
+    with _conectar() as conn:
+        prest = _diagnostico_item(conn, "prestadores")
+        cess = _diagnostico_item(conn, "cessionarios")
+    return {"prestadores": prest, "cessionarios": cess}
 
 
 # ---------------------------------------------------------------------------

@@ -55,14 +55,24 @@ def _escrever_dataframe(ws: Worksheet, df: pd.DataFrame, titulo: str) -> None:
         ws.auto_filter.ref = f"A{linha_cabecalho}:{ultima_coluna}{linha_cabecalho}"
 
 
-def gerar_relatorio_excel() -> bytes:
+def gerar_relatorio_excel(modulos_permitidos: set[str] | None = None) -> bytes:
     """
     Gera o relatório consolidado em Excel com as abas: PRESTADORES,
-    CESSIONARIOS, ALERTAS CRÍTICOS e PAINEL CONSOLIDADO, prontas para
-    download pelo usuário.
+    CESSIONARIOS, AVALIACOES, ALERTAS CRÍTICOS e PAINEL CONSOLIDADO, prontas
+    para download pelo usuário.
+
+    `modulos_permitidos` restringe as abas geradas aos módulos liberados
+    para o usuário que solicitou a exportação (None = sem restrição, usado
+    internamente/pelo administrador). Um módulo bloqueado nunca aparece no
+    arquivo gerado — nem seus dados, nem os indicadores derivados dele nas
+    abas consolidadas (Alertas Críticos e Painel Consolidado).
     """
-    df_prest = enriquecer_prestadores(listar_prestadores())
-    df_cess = enriquecer_cessionarios(listar_cessionarios())
+    permitir_prest = modulos_permitidos is None or "prestadores" in modulos_permitidos
+    permitir_cess = modulos_permitidos is None or "cessionarios" in modulos_permitidos
+    permitir_consolidado = modulos_permitidos is None or "consolidado" in modulos_permitidos
+
+    df_prest = enriquecer_prestadores(listar_prestadores()) if permitir_prest else pd.DataFrame()
+    df_cess = enriquecer_cessionarios(listar_cessionarios()) if permitir_cess else pd.DataFrame()
 
     df_prest_ativos = filtrar_ativos(df_prest)
     df_cess_ativos = filtrar_ativos(df_cess)
@@ -70,51 +80,61 @@ def gerar_relatorio_excel() -> bytes:
     wb = Workbook()
     wb.remove(wb.active)
 
-    # --- Aba PRESTADORES (dados completos, incl. cancelados, para fidelidade histórica) ---
-    ws_prest = wb.create_sheet("PRESTADORES")
-    colunas_prest = list(COLUNAS_EXIBICAO_PRESTADORES.keys())
-    df_prest_export = df_prest[colunas_prest].rename(columns=COLUNAS_EXIBICAO_PRESTADORES) if not df_prest.empty else pd.DataFrame(columns=list(COLUNAS_EXIBICAO_PRESTADORES.values()))
-    _escrever_dataframe(ws_prest, df_prest_export, "ANÁLISE DE PROJETOS - PRESTADORES DE SERVIÇO")
+    if permitir_prest:
+        # --- Aba PRESTADORES (dados completos, incl. cancelados, para fidelidade histórica) ---
+        ws_prest = wb.create_sheet("PRESTADORES")
+        colunas_prest = list(COLUNAS_EXIBICAO_PRESTADORES.keys())
+        df_prest_export = df_prest[colunas_prest].rename(columns=COLUNAS_EXIBICAO_PRESTADORES) if not df_prest.empty else pd.DataFrame(columns=list(COLUNAS_EXIBICAO_PRESTADORES.values()))
+        _escrever_dataframe(ws_prest, df_prest_export, "ANÁLISE DE PROJETOS - PRESTADORES DE SERVIÇO")
 
-    # --- Aba CESSIONARIOS ---
-    ws_cess = wb.create_sheet("CESSIONARIOS")
-    colunas_cess = list(COLUNAS_EXIBICAO_CESSIONARIOS.keys())
-    df_cess_export = df_cess[colunas_cess].rename(columns=COLUNAS_EXIBICAO_CESSIONARIOS) if not df_cess.empty else pd.DataFrame(columns=list(COLUNAS_EXIBICAO_CESSIONARIOS.values()))
-    _escrever_dataframe(ws_cess, df_cess_export, "ANÁLISE DE PROJETOS - CESSIONÁRIOS")
+        # --- Aba AVALIACOES (dados de avaliação de prestadores) ---
+        ws_aval = wb.create_sheet("AVALIACOES")
+        df_aval = listar_avaliacoes()
+        if not df_aval.empty:
+            df_aval["classificacao"] = df_aval["nota"].apply(lambda n: classificar_nota(n)[0])
+        colunas_aval = list(COLUNAS_EXIBICAO_AVALIACOES.keys())
+        df_aval_export = df_aval[colunas_aval].rename(columns=COLUNAS_EXIBICAO_AVALIACOES) if not df_aval.empty else pd.DataFrame(columns=list(COLUNAS_EXIBICAO_AVALIACOES.values()))
+        _escrever_dataframe(ws_aval, df_aval_export, "AVALIAÇÃO DE PRESTADORES — GAT")
 
-    # --- Aba AVALIACOES ---
-    ws_aval = wb.create_sheet("AVALIACOES")
-    df_aval = listar_avaliacoes()
-    if not df_aval.empty:
-        df_aval["classificacao"] = df_aval["nota"].apply(lambda n: classificar_nota(n)[0])
-    colunas_aval = list(COLUNAS_EXIBICAO_AVALIACOES.keys())
-    df_aval_export = df_aval[colunas_aval].rename(columns=COLUNAS_EXIBICAO_AVALIACOES) if not df_aval.empty else pd.DataFrame(columns=list(COLUNAS_EXIBICAO_AVALIACOES.values()))
-    _escrever_dataframe(ws_aval, df_aval_export, "AVALIAÇÃO DE PRESTADORES — GAT")
+    if permitir_cess:
+        # --- Aba CESSIONARIOS ---
+        ws_cess = wb.create_sheet("CESSIONARIOS")
+        colunas_cess = list(COLUNAS_EXIBICAO_CESSIONARIOS.keys())
+        df_cess_export = df_cess[colunas_cess].rename(columns=COLUNAS_EXIBICAO_CESSIONARIOS) if not df_cess.empty else pd.DataFrame(columns=list(COLUNAS_EXIBICAO_CESSIONARIOS.values()))
+        _escrever_dataframe(ws_cess, df_cess_export, "ANÁLISE DE PROJETOS - CESSIONÁRIOS")
 
-    # --- Aba ALERTAS CRÍTICOS (Pendente de Reunião, apenas projetos ativos) ---
-    ws_alertas = wb.create_sheet("ALERTAS CRITICOS")
-    pendentes_prest = df_prest_ativos[df_prest_ativos["pendente_reuniao"]] if not df_prest_ativos.empty else df_prest_ativos
-    pendentes_cess = df_cess_ativos[df_cess_ativos["pendente_reuniao"]] if not df_cess_ativos.empty else df_cess_ativos
+    if permitir_consolidado and (permitir_prest or permitir_cess):
+        # --- Aba ALERTAS CRÍTICOS (Pendente de Reunião, apenas projetos ativos) ---
+        ws_alertas = wb.create_sheet("ALERTAS CRITICOS")
+        pendentes_prest = df_prest_ativos[df_prest_ativos["pendente_reuniao"]] if not df_prest_ativos.empty else df_prest_ativos
+        pendentes_cess = df_cess_ativos[df_cess_ativos["pendente_reuniao"]] if not df_cess_ativos.empty else df_cess_ativos
 
-    linhas_alerta = []
-    for _, linha in pendentes_prest.iterrows():
-        linhas_alerta.append({
-            "Origem": "Prestador", "Item": linha.get("item"), "Nome": linha.get("prestador"),
-            "Disciplina": linha.get("disciplina"), "Revisão": linha.get("revisao"),
-            "Responsável": linha.get("responsavel"), "Status Análise": linha.get("status_analise"),
-            "Observações": linha.get("observacoes"),
-        })
-    for _, linha in pendentes_cess.iterrows():
-        linhas_alerta.append({
-            "Origem": "Cessionário", "Item": linha.get("item"), "Nome": linha.get("cessionario"),
-            "Disciplina": linha.get("disciplina"), "Revisão": linha.get("revisao"),
-            "Responsável": linha.get("responsavel"), "Status Análise": linha.get("status_analise"),
-            "Observações": linha.get("observacoes"),
-        })
-    df_alertas = pd.DataFrame(linhas_alerta) if linhas_alerta else pd.DataFrame(
-        columns=["Origem", "Item", "Nome", "Disciplina", "Revisão", "Responsável", "Status Análise", "Observações"]
-    )
-    _escrever_dataframe(ws_alertas, df_alertas, "ALERTAS CRÍTICOS — PENDENTE DE REUNIÃO (REV2+)")
+        linhas_alerta = []
+        for _, linha in pendentes_prest.iterrows():
+            linhas_alerta.append({
+                "Origem": "Prestador", "Item": linha.get("item"), "Nome": linha.get("prestador"),
+                "Disciplina": linha.get("disciplina"), "Revisão": linha.get("revisao"),
+                "Responsável": linha.get("responsavel"), "Status Análise": linha.get("status_analise"),
+                "Observações": linha.get("observacoes"),
+            })
+        for _, linha in pendentes_cess.iterrows():
+            linhas_alerta.append({
+                "Origem": "Cessionário", "Item": linha.get("item"), "Nome": linha.get("cessionario"),
+                "Disciplina": linha.get("disciplina"), "Revisão": linha.get("revisao"),
+                "Responsável": linha.get("responsavel"), "Status Análise": linha.get("status_analise"),
+                "Observações": linha.get("observacoes"),
+            })
+        df_alertas = pd.DataFrame(linhas_alerta) if linhas_alerta else pd.DataFrame(
+            columns=["Origem", "Item", "Nome", "Disciplina", "Revisão", "Responsável", "Status Análise", "Observações"]
+        )
+        _escrever_dataframe(ws_alertas, df_alertas, "ALERTAS CRÍTICOS — PENDENTE DE REUNIÃO (REV2+)")
+
+    if not permitir_consolidado or not (permitir_prest or permitir_cess):
+        buffer = io.BytesIO()
+        if len(wb.sheetnames) == 0:
+            wb.create_sheet("SEM DADOS")["A1"] = "Nenhum módulo liberado para exportação neste perfil de acesso."
+        wb.save(buffer)
+        return buffer.getvalue()
 
     # --- Aba PAINEL CONSOLIDADO ---
     ws_painel = wb.create_sheet("PAINEL CONSOLIDADO")

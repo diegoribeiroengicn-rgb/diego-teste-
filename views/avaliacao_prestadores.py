@@ -8,6 +8,7 @@ import streamlit as st
 from gat.business_rules import classificar_nota
 from gat.config import COLUNAS_EXIBICAO_AVALIACOES, CORES_CLASSIFICACAO_AVALIACAO, RESPONSAVEIS
 from gat.database import listar_avaliacoes, obter_avaliacao
+from gat.permissions import exigir_area, exigir_modulo, pode_area
 from gat.ui.charts import grafico_status_donut
 from gat.ui.kpi_cards import renderizar_kpis
 from gat.ui.modals import dialog_avaliacao
@@ -15,13 +16,17 @@ from gat.ui.tables import tabela_com_edicao
 
 
 def render(usuario: dict) -> None:
+    exigir_modulo(usuario, "prestadores")
+    exigir_area(usuario, "avaliacoes.visualizar")
+
     st.subheader(":material/grade: Avaliação de Prestadores")
     st.caption("Escala 1–15 · Crítico ≤3 · Baixo 4–6 · Regular 7–9 · Bom 10–12 · Excelente 13–15")
 
-    col_novo, _ = st.columns([1, 4])
-    with col_novo:
-        if st.button("Nova Avaliação", icon=":material/add:", type="primary", key="nova_avaliacao", use_container_width=True):
-            dialog_avaliacao(usuario["username"])
+    if pode_area(usuario, "avaliacoes.cadastrar"):
+        col_novo, _ = st.columns([1, 4])
+        with col_novo:
+            if st.button("Nova Avaliação", icon=":material/add:", type="primary", key="nova_avaliacao", use_container_width=True):
+                dialog_avaliacao(usuario["username"])
 
     df = listar_avaliacoes()
     if df.empty:
@@ -80,10 +85,14 @@ def render(usuario: dict) -> None:
     colunas = list(COLUNAS_EXIBICAO_AVALIACOES.keys())
     df_exibicao = df_filtrado[colunas].rename(columns=COLUNAS_EXIBICAO_AVALIACOES)
 
+    def _abrir_edicao(registro: dict) -> None:
+        exigir_area(usuario, "avaliacoes.cadastrar")
+        dialog_avaliacao(usuario["username"], registro)
+
     tabela_com_edicao(
         df_exibicao,
         df_filtrado["id"],
         chave="avaliacoes",
-        abrir_dialog_edicao=lambda registro: dialog_avaliacao(usuario["username"], registro),
+        abrir_dialog_edicao=_abrir_edicao,
         obter_registro=obter_avaliacao,
     )

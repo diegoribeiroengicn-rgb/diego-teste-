@@ -7,6 +7,7 @@ import streamlit as st
 from gat.business_rules import enriquecer_prestadores
 from gat.config import COLUNAS_EXIBICAO_PRESTADORES, RESPONSAVEIS, STATUS_ANALISE_OPCOES
 from gat.database import listar_prestadores, obter_prestador
+from gat.permissions import exigir_area, exigir_modulo, pode_area
 from gat.ui.modals import dialog_prestador
 from gat.ui.tables import tabela_com_edicao
 
@@ -19,15 +20,20 @@ _CHAVES_FILTRO = [
 
 
 def render(usuario: dict) -> None:
+    exigir_modulo(usuario, "prestadores")
+
     st.subheader("Projetos de Prestadores de Serviço")
     st.caption("Cadastro, edição e consulta. Para indicadores e gráficos, veja Prestadores → Dashboard.")
 
-    col_novo, _ = st.columns([1, 4])
-    with col_novo:
-        if st.button("Novo Cadastro", icon=":material/add:", type="primary", key="novo_prestador", use_container_width=True):
-            dialog_prestador(usuario["username"])
+    pode_cadastrar = pode_area(usuario, "prestadores.cadastrar")
+    if pode_cadastrar:
+        col_novo, _ = st.columns([1, 4])
+        with col_novo:
+            if st.button("Novo Cadastro", icon=":material/add:", type="primary", key="novo_prestador", use_container_width=True):
+                dialog_prestador(usuario["username"])
 
     if st.session_state.pop("abrir_novo_prestador", False):
+        exigir_area(usuario, "prestadores.cadastrar")
         dialog_prestador(usuario["username"])
 
     df = listar_prestadores()
@@ -73,10 +79,14 @@ def render(usuario: dict) -> None:
     colunas = list(COLUNAS_EXIBICAO_PRESTADORES.keys())
     df_exibicao = df_filtrado[colunas].rename(columns=COLUNAS_EXIBICAO_PRESTADORES)
 
+    def _abrir_edicao(registro: dict) -> None:
+        exigir_area(usuario, "prestadores.editar")
+        dialog_prestador(usuario["username"], registro)
+
     tabela_com_edicao(
         df_exibicao,
         df_filtrado["id"],
         chave="prestadores",
-        abrir_dialog_edicao=lambda registro: dialog_prestador(usuario["username"], registro),
+        abrir_dialog_edicao=_abrir_edicao,
         obter_registro=obter_prestador,
     )

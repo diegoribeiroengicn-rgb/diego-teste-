@@ -16,10 +16,13 @@ from gat.ui.charts import (
     grafico_status_donut,
     grafico_top_responsaveis,
 )
+from gat.permissions import exigir_modulo
 from gat.ui.kpi_cards import renderizar_kpis
 
 
 def render(usuario: dict) -> None:
+    exigir_modulo(usuario, "consolidado")
+
     st.subheader(":material/insights: Painel Geral Consolidado")
     st.caption("União (consolidação) das abas de Prestadores e Cessionários. Projetos CANCELADOS são rigorosamente excluídos.")
 

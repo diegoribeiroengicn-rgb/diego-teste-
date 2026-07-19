@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import streamlit as st
 
+import pandas as pd
+
 from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos
 from gat.config import CORES
 from gat.database import listar_cessionarios, listar_prestadores
+from gat.permissions import pode_area, pode_modulo
 
 _CARTOES = [
     {
@@ -51,8 +54,13 @@ def render(usuario: dict) -> None:
     st.subheader(f"Bem-vindo(a), {usuario['nome_completo'] or usuario['username']}")
     st.caption("Portal do Sistema GAT 2026 · Controle de Análises Técnicas · Tecnoplano")
 
-    df_prest = enriquecer_prestadores(filtrar_ativos(listar_prestadores()))
-    df_cess = enriquecer_cessionarios(filtrar_ativos(listar_cessionarios()))
+    pode_prest = pode_modulo(usuario, "prestadores")
+    pode_cess = pode_modulo(usuario, "cessionarios")
+
+    # Módulos sem permissão não fornecem dados nem para os indicadores
+    # agregados desta página — nenhuma consulta é feita para eles.
+    df_prest = enriquecer_prestadores(filtrar_ativos(listar_prestadores())) if pode_prest else pd.DataFrame()
+    df_cess = enriquecer_cessionarios(filtrar_ativos(listar_cessionarios())) if pode_cess else pd.DataFrame()
 
     total_ativos_prest = len(df_prest)
     total_ativos_cess = len(df_cess)
@@ -70,59 +78,93 @@ def render(usuario: dict) -> None:
     col3.metric("Pendente de Reunião", total_pendente_reuniao)
     col4.metric("Sem PEP", total_sem_pep)
 
-    st.markdown("##### Projetos ativos por módulo")
-    a1, a2, a3 = st.columns(3)
-    a1.metric("Total", total_ativos_prest + total_ativos_cess)
-    with a2:
-        st.metric("Prestadores", total_ativos_prest)
-        if st.button("Ver lista", icon=":material/arrow_forward:", type="tertiary", key="ver_ativos_prest"):
-            _navegar_para("prestadores_projetos")
-    with a3:
-        st.metric("Cessionários", total_ativos_cess)
-        if st.button("Ver lista", icon=":material/arrow_forward:", type="tertiary", key="ver_ativos_cess"):
-            _navegar_para("cessionarios_projetos")
+    if pode_prest or pode_cess:
+        st.markdown("##### Projetos ativos por módulo")
+        colunas_a = st.columns(1 + pode_prest + pode_cess)
+        colunas_a[0].metric("Total", total_ativos_prest + total_ativos_cess)
+        idx = 1
+        if pode_prest:
+            with colunas_a[idx]:
+                st.metric("Prestadores", total_ativos_prest)
+                if st.button("Ver lista", icon=":material/arrow_forward:", type="tertiary", key="ver_ativos_prest"):
+                    _navegar_para("prestadores_projetos")
+            idx += 1
+        if pode_cess:
+            with colunas_a[idx]:
+                st.metric("Cessionários", total_ativos_cess)
+                if st.button("Ver lista", icon=":material/arrow_forward:", type="tertiary", key="ver_ativos_cess"):
+                    _navegar_para("cessionarios_projetos")
 
     em_analise_prest = int((df_prest["status_analise"] == "EM ANÁLISE").sum()) if not df_prest.empty else 0
     em_analise_cess = int((df_cess["status_analise"] == "EM ANÁLISE").sum()) if not df_cess.empty else 0
 
-    st.markdown("##### Projetos em análise por módulo")
-    b1, b2, b3 = st.columns(3)
-    b1.metric("Total", em_analise_prest + em_analise_cess)
-    with b2:
-        st.metric("Prestadores", em_analise_prest)
-        if st.button("Ver lista", icon=":material/arrow_forward:", type="tertiary", key="ver_analise_prest"):
-            st.session_state["filtro_prest_status_default"] = ["EM ANÁLISE"]
-            _navegar_para("prestadores_projetos")
-    with b3:
-        st.metric("Cessionários", em_analise_cess)
-        if st.button("Ver lista", icon=":material/arrow_forward:", type="tertiary", key="ver_analise_cess"):
-            st.session_state["filtro_cess_status_default"] = ["EM ANÁLISE"]
-            _navegar_para("cessionarios_projetos")
+    if pode_prest or pode_cess:
+        st.markdown("##### Projetos em análise por módulo")
+        colunas_b = st.columns(1 + pode_prest + pode_cess)
+        colunas_b[0].metric("Total", em_analise_prest + em_analise_cess)
+        idx = 1
+        if pode_prest:
+            with colunas_b[idx]:
+                st.metric("Prestadores", em_analise_prest)
+                if st.button("Ver lista", icon=":material/arrow_forward:", type="tertiary", key="ver_analise_prest"):
+                    st.session_state["filtro_prest_status_default"] = ["EM ANÁLISE"]
+                    _navegar_para("prestadores_projetos")
+            idx += 1
+        if pode_cess:
+            with colunas_b[idx]:
+                st.metric("Cessionários", em_analise_cess)
+                if st.button("Ver lista", icon=":material/arrow_forward:", type="tertiary", key="ver_analise_cess"):
+                    st.session_state["filtro_cess_status_default"] = ["EM ANÁLISE"]
+                    _navegar_para("cessionarios_projetos")
 
-    st.markdown("#####")
-    st.markdown("##### Módulos")
+    pagina_gestao = next(
+        (pagina for area, pagina in (
+            ("alertas", "gestao_alertas"), ("lembretes", "gestao_lembretes"), ("reunioes", "gestao_reunioes"),
+        ) if pode_area(usuario, area)),
+        None,
+    )
+    cartoes_visiveis = [
+        {**cartao, "pagina": pagina_gestao} if cartao["titulo"] == "Gestão" and pagina_gestao else cartao
+        for cartao in _CARTOES
+        if (cartao["titulo"] != "Prestadores" or pode_prest)
+        and (cartao["titulo"] != "Cessionários" or pode_cess)
+        and (cartao["titulo"] != "Consolidado" or pode_modulo(usuario, "consolidado"))
+        and (cartao["titulo"] != "Gestão" or pagina_gestao is not None)
+    ]
 
-    colunas = st.columns(4)
-    for coluna, cartao in zip(colunas, _CARTOES):
-        with coluna:
-            with st.container(border=True):
-                st.markdown(cartao["icone"])
-                st.markdown(f"**{cartao['titulo']}**")
-                st.caption(cartao["descricao"])
-                if st.button("Acessar", key=f"acessar_{cartao['pagina']}", type="primary", use_container_width=True):
-                    _navegar_para(cartao["pagina"])
+    if cartoes_visiveis:
+        st.markdown("#####")
+        st.markdown("##### Módulos")
 
-    st.markdown("#####")
-    st.markdown("##### Acesso rápido")
-    col_a, col_b, col_c = st.columns(3)
-    with col_a:
-        if st.button("Novo Prestador", icon=":material/add:", use_container_width=True):
-            st.session_state["abrir_novo_prestador"] = True
-            _navegar_para("prestadores_projetos")
-    with col_b:
-        if st.button("Novo Cessionário", icon=":material/add:", use_container_width=True):
-            st.session_state["abrir_novo_cessionario"] = True
-            _navegar_para("cessionarios_projetos")
-    with col_c:
-        if st.button("Ver Lembretes (Sem PEP)", icon=":material/pending_actions:", use_container_width=True):
-            _navegar_para("gestao_lembretes")
+        colunas = st.columns(len(cartoes_visiveis))
+        for coluna, cartao in zip(colunas, cartoes_visiveis):
+            with coluna:
+                with st.container(border=True):
+                    st.markdown(cartao["icone"])
+                    st.markdown(f"**{cartao['titulo']}**")
+                    st.caption(cartao["descricao"])
+                    if st.button("Acessar", key=f"acessar_{cartao['pagina']}", type="primary", use_container_width=True):
+                        _navegar_para(cartao["pagina"])
+
+    acoes_rapidas = []
+    if pode_prest and pode_area(usuario, "prestadores.cadastrar"):
+        acoes_rapidas.append("prestador")
+    if pode_cess and pode_area(usuario, "cessionarios.cadastrar"):
+        acoes_rapidas.append("cessionario")
+    if pode_area(usuario, "lembretes"):
+        acoes_rapidas.append("lembretes")
+
+    if acoes_rapidas:
+        st.markdown("#####")
+        st.markdown("##### Acesso rápido")
+        colunas_rapidas = st.columns(len(acoes_rapidas))
+        for coluna, acao in zip(colunas_rapidas, acoes_rapidas):
+            with coluna:
+                if acao == "prestador" and st.button("Novo Prestador", icon=":material/add:", use_container_width=True):
+                    st.session_state["abrir_novo_prestador"] = True
+                    _navegar_para("prestadores_projetos")
+                if acao == "cessionario" and st.button("Novo Cessionário", icon=":material/add:", use_container_width=True):
+                    st.session_state["abrir_novo_cessionario"] = True
+                    _navegar_para("cessionarios_projetos")
+                if acao == "lembretes" and st.button("Ver Lembretes (Sem PEP)", icon=":material/pending_actions:", use_container_width=True):
+                    _navegar_para("gestao_lembretes")

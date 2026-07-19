@@ -16,10 +16,14 @@ from gat.ui.charts import (
     grafico_status_donut,
     grafico_top_responsaveis,
 )
+from gat.permissions import exigir_area, exigir_modulo
 from gat.ui.kpi_cards import renderizar_kpis
 
 
 def render(usuario: dict) -> None:
+    exigir_modulo(usuario, "cessionarios")
+    exigir_area(usuario, "dashboard")
+
     st.subheader(":material/dashboard: Dashboard — Cessionários")
     st.caption("Indicadores exclusivos do módulo de Cessionários. Projetos CANCELADOS são excluídos.")
 

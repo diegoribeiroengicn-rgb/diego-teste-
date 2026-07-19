@@ -7,6 +7,7 @@ import streamlit as st
 from gat.business_rules import enriquecer_cessionarios
 from gat.config import COLUNAS_EXIBICAO_CESSIONARIOS, RESPONSAVEIS, STATUS_ANALISE_OPCOES, TIPO_CESSIONARIO_OPCOES
 from gat.database import listar_cessionarios, obter_cessionario
+from gat.permissions import exigir_area, exigir_modulo, pode_area
 from gat.ui.modals import dialog_cessionario
 from gat.ui.tables import tabela_com_edicao
 
@@ -19,15 +20,19 @@ _CHAVES_FILTRO = [
 
 
 def render(usuario: dict) -> None:
+    exigir_modulo(usuario, "cessionarios")
+
     st.subheader("Projetos de Cessionários")
     st.caption("Cadastro, edição e consulta. Para indicadores e gráficos, veja Cessionários → Dashboard.")
 
-    col_novo, _ = st.columns([1, 4])
-    with col_novo:
-        if st.button("Novo Cadastro", icon=":material/add:", type="primary", key="novo_cessionario", use_container_width=True):
-            dialog_cessionario(usuario["username"])
+    if pode_area(usuario, "cessionarios.cadastrar"):
+        col_novo, _ = st.columns([1, 4])
+        with col_novo:
+            if st.button("Novo Cadastro", icon=":material/add:", type="primary", key="novo_cessionario", use_container_width=True):
+                dialog_cessionario(usuario["username"])
 
     if st.session_state.pop("abrir_novo_cessionario", False):
+        exigir_area(usuario, "cessionarios.cadastrar")
         dialog_cessionario(usuario["username"])
 
     df = listar_cessionarios()
@@ -76,10 +81,14 @@ def render(usuario: dict) -> None:
     colunas = list(COLUNAS_EXIBICAO_CESSIONARIOS.keys())
     df_exibicao = df_filtrado[colunas].rename(columns=COLUNAS_EXIBICAO_CESSIONARIOS)
 
+    def _abrir_edicao(registro: dict) -> None:
+        exigir_area(usuario, "cessionarios.editar")
+        dialog_cessionario(usuario["username"], registro)
+
     tabela_com_edicao(
         df_exibicao,
         df_filtrado["id"],
         chave="cessionarios",
-        abrir_dialog_edicao=lambda registro: dialog_cessionario(usuario["username"], registro),
+        abrir_dialog_edicao=_abrir_edicao,
         obter_registro=obter_cessionario,
     )

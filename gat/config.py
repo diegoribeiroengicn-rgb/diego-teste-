@@ -243,8 +243,107 @@ COLUNAS_EXIBICAO_AVALIACOES = {
 }
 
 # ---------------------------------------------------------------------------
-# Perfis de usuário
+# Perfis de usuário e controle de acesso (módulos e áreas)
 # ---------------------------------------------------------------------------
 PERFIL_ADMIN = "ADMIN"
+PERFIL_GESTOR = "GESTOR"
 PERFIL_ANALISTA = "ANALISTA"
-PERFIS_OPCOES = [PERFIL_ADMIN, PERFIL_ANALISTA]
+PERFIL_CONSULTA = "CONSULTA"
+PERFIS_OPCOES = [PERFIL_ADMIN, PERFIL_GESTOR, PERFIL_ANALISTA, PERFIL_CONSULTA]
+
+# Módulos de acesso independente (item 3 do ajuste de governança): quando
+# bloqueado, o módulo não aparece no menu, não abre por navegação direta e
+# não fornece dados por nenhuma chamada interna do sistema.
+MODULOS_CONTROLADOS = ["prestadores", "cessionarios", "consolidado"]
+MODULOS_LABELS = {
+    "prestadores": "Prestadores de Serviço",
+    "cessionarios": "Cessionários",
+    "consolidado": "Consolidado",
+}
+
+# Áreas/funcionalidades específicas (item 4): permissões binárias adicionais,
+# independentes do módulo, cobrindo ações e telas sensíveis do sistema.
+AREAS_PERMISSAO = {
+    "dashboard": "Visualizar dashboards",
+    "prestadores.cadastrar": "Prestadores — Cadastrar projeto",
+    "prestadores.editar": "Prestadores — Editar/cancelar projeto",
+    "prestadores.exportar": "Prestadores — Exportar dados",
+    "cessionarios.cadastrar": "Cessionários — Cadastrar projeto",
+    "cessionarios.editar": "Cessionários — Editar/cancelar projeto",
+    "cessionarios.exportar": "Cessionários — Exportar dados",
+    "consolidado.exportar": "Consolidado — Exportar dados",
+    "documentos": "Visualizar documentos",
+    "relatorios": "Gerar/exportar relatório Excel geral",
+    "avaliacoes.visualizar": "Visualizar avaliações de prestadores",
+    "avaliacoes.cadastrar": "Cadastrar avaliações de prestadores",
+    "alertas": "Acessar Central de Alertas",
+    "lembretes": "Acessar Lembretes (Sem PEP)",
+    "reunioes": "Acessar Reuniões e Planos de Ação",
+    "analistas": "Acessar dados dos analistas (desempenho/avaliação)",
+    "configuracoes": "Acessar Configurações",
+    "auditoria": "Acessar Auditoria",
+    "administrar_usuarios": "Administrar usuários",
+}
+
+# Templates padrão de permissão por perfil — usados apenas como ponto de
+# partida ao criar um usuário; a partir daí, as permissões viram
+# individuais e podem ser livremente editadas pelo administrador (as
+# personalizações do usuário sempre prevalecem sobre o perfil de origem).
+PERFIS_PADRAO: dict[str, dict[str, dict[str, bool]]] = {
+    PERFIL_ADMIN: {
+        "modulos": {m: True for m in MODULOS_CONTROLADOS},
+        "areas": {a: True for a in AREAS_PERMISSAO},
+    },
+    PERFIL_GESTOR: {
+        "modulos": {m: True for m in MODULOS_CONTROLADOS},
+        "areas": {a: True for a in AREAS_PERMISSAO if a != "administrar_usuarios"},
+    },
+    PERFIL_ANALISTA: {
+        "modulos": {m: True for m in MODULOS_CONTROLADOS},
+        "areas": {
+            "dashboard": True,
+            "prestadores.cadastrar": True,
+            "prestadores.editar": True,
+            "prestadores.exportar": False,
+            "cessionarios.cadastrar": True,
+            "cessionarios.editar": True,
+            "cessionarios.exportar": False,
+            "consolidado.exportar": False,
+            "documentos": True,
+            "relatorios": False,
+            "avaliacoes.visualizar": True,
+            "avaliacoes.cadastrar": True,
+            "alertas": True,
+            "lembretes": True,
+            "reunioes": True,
+            "analistas": True,
+            "configuracoes": False,
+            "auditoria": False,
+            "administrar_usuarios": False,
+        },
+    },
+    PERFIL_CONSULTA: {
+        "modulos": {m: True for m in MODULOS_CONTROLADOS},
+        "areas": {
+            "dashboard": True,
+            "prestadores.cadastrar": False,
+            "prestadores.editar": False,
+            "prestadores.exportar": False,
+            "cessionarios.cadastrar": False,
+            "cessionarios.editar": False,
+            "cessionarios.exportar": False,
+            "consolidado.exportar": False,
+            "documentos": True,
+            "relatorios": False,
+            "avaliacoes.visualizar": True,
+            "avaliacoes.cadastrar": False,
+            "alertas": True,
+            "lembretes": True,
+            "reunioes": True,
+            "analistas": True,
+            "configuracoes": False,
+            "auditoria": False,
+            "administrar_usuarios": False,
+        },
+    },
+}

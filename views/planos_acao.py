@@ -8,6 +8,7 @@ import streamlit as st
 
 from gat.config import CORES, RESPONSAVEIS, STATUS_PLANO_ACAO_OPCOES
 from gat.database import listar_planos_acao, obter_plano_acao
+from gat.permissions import exigir_area
 from gat.ui.kpi_cards import renderizar_kpis
 from gat.ui.modals_gestao import dialog_plano_acao
 from gat.ui.tables import tabela_com_edicao
@@ -24,6 +25,8 @@ _CHAVES_FILTRO = ["filtro_plano_status", "filtro_plano_resp"]
 
 
 def render(usuario: dict) -> None:
+    exigir_area(usuario, "reunioes")
+
     st.subheader(":material/task_alt: Planos de Ação")
     st.caption("Ações definidas em reuniões ou registradas diretamente, com responsável, prazo e acompanhamento de conclusão.")
 

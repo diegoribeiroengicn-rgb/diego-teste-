@@ -6,9 +6,12 @@ import pandas as pd
 import streamlit as st
 
 from gat.database import listar_historico
+from gat.permissions import exigir_area
 
 
 def render(usuario: dict) -> None:
+    exigir_area(usuario, "reunioes")
+
     st.subheader(":material/history: Histórico da Gestão")
     st.caption("Auditoria de todas as movimentações de Reuniões e Planos de Ação: criação, edição e conclusão.")
 

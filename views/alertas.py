@@ -7,9 +7,12 @@ import streamlit as st
 from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos
 from gat.config import COLUNAS_EXIBICAO_CESSIONARIOS, COLUNAS_EXIBICAO_PRESTADORES, META_REVISAO_APROVACAO
 from gat.database import listar_cessionarios, listar_prestadores
+from gat.permissions import exigir_area
 
 
 def render(usuario: dict) -> None:
+    exigir_area(usuario, "alertas")
+
     st.subheader(":material/notifications_active: Alertas Críticos — Pendente de Reunião")
     st.caption(
         f"Projetos com status **NÃO LIBERADO** e revisão igual ou superior à meta corporativa "

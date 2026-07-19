@@ -15,6 +15,7 @@ from gat.business_rules import (
 )
 from gat.config import CORES, RESPONSAVEIS
 from gat.database import listar_cessionarios, listar_prestadores, obter_cessionario, obter_prestador
+from gat.permissions import exigir_area
 from gat.ui.kpi_cards import renderizar_kpis
 from gat.ui.modals import dialog_cessionario, dialog_prestador
 
@@ -41,6 +42,8 @@ def _badge_criticidade(valor: str) -> str:
 
 
 def render(usuario: dict) -> None:
+    exigir_area(usuario, "lembretes")
+
     st.subheader(":material/pending_actions: Lembretes — Projetos sem PEP")
     st.caption(
         "Reúne, dos módulos de Prestadores e Cessionários, todo projeto ativo cadastrado sem PEP. "
@@ -144,7 +147,9 @@ def render(usuario: dict) -> None:
         with col_acao:
             if st.button("Abrir projeto", icon=":material/open_in_new:", key=f"abrir_lembrete_{linha['modulo']}_{linha['id']}", use_container_width=True):
                 if linha["modulo"] == "Prestadores":
+                    exigir_area(usuario, "prestadores.editar")
                     dialog_prestador(usuario["username"], obter_prestador(int(linha["id"])))
                 else:
+                    exigir_area(usuario, "cessionarios.editar")
                     dialog_cessionario(usuario["username"], obter_cessionario(int(linha["id"])))
         st.divider()

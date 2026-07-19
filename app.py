@@ -17,10 +17,18 @@ from datetime import datetime
 
 import streamlit as st
 
-from gat.auth import logout, tela_login, usuario_atual, usuario_autenticado
-from gat.config import PERFIL_ADMIN
+from gat.auth import (
+    logout,
+    precisa_trocar_senha,
+    tela_login,
+    tela_troca_senha_obrigatoria,
+    usuario_atual,
+    usuario_autenticado,
+)
+from gat.config import MODULOS_CONTROLADOS
 from gat.database import init_db
 from gat.export_excel import gerar_relatorio_excel
+from gat.permissions import pode_area, pode_modulo
 from gat.styles import cabecalho_institucional, injetar_css_global, logo_base64
 from views import (
     administracao,
@@ -32,6 +40,7 @@ from views import (
     gestao_historico,
     inicio,
     lembretes_pep,
+    meu_perfil,
     planos_acao,
     prestadores,
     prestadores_dashboard,
@@ -49,7 +58,10 @@ init_db()
 injetar_css_global()
 
 if not usuario_autenticado():
-    tela_login()
+    if precisa_trocar_senha():
+        tela_troca_senha_obrigatoria()
+    else:
+        tela_login()
     st.stop()
 
 usuario = usuario_atual()
@@ -88,28 +100,44 @@ def _pagina(render_fn, title: str, icon: str, url_path: str, default: bool = Fal
 paginas: dict[str, list[st.Page]] = {
     "": [
         _pagina(lambda: inicio.render(usuario), "Início", ":material/home:", "inicio", default=True),
-    ],
-    "Prestadores": [
-        _pagina(lambda: prestadores_dashboard.render(usuario), "Dashboard", ":material/dashboard:", "prestadores_dashboard"),
-        _pagina(lambda: prestadores.render(usuario), "Projetos", ":material/folder_open:", "prestadores_projetos"),
-        _pagina(lambda: avaliacao_prestadores.render(usuario), "Avaliação", ":material/grade:", "prestadores_avaliacao"),
-    ],
-    "Cessionários": [
-        _pagina(lambda: cessionarios_dashboard.render(usuario), "Dashboard", ":material/dashboard:", "cessionarios_dashboard"),
-        _pagina(lambda: cessionarios.render(usuario), "Projetos", ":material/store:", "cessionarios_projetos"),
-    ],
-    "Consolidado": [
-        _pagina(lambda: consolidado.render(usuario), "Visão Geral", ":material/insights:", "consolidado_visao"),
-    ],
-    "Gestão": [
-        _pagina(lambda: alertas.render(usuario), "Central de Alertas", ":material/notifications_active:", "gestao_alertas"),
-        _pagina(lambda: lembretes_pep.render(usuario), "Lembretes (Sem PEP)", ":material/pending_actions:", "gestao_lembretes"),
-        _pagina(lambda: reunioes.render(usuario), "Reuniões", ":material/groups:", "gestao_reunioes"),
-        _pagina(lambda: planos_acao.render(usuario), "Planos de Ação", ":material/task_alt:", "gestao_planos_acao"),
-        _pagina(lambda: gestao_historico.render(usuario), "Histórico", ":material/history:", "gestao_historico"),
+        _pagina(lambda: meu_perfil.render(usuario), "Meu Perfil", ":material/account_circle:", "meu_perfil"),
     ],
 }
-if usuario["perfil"] == PERFIL_ADMIN:
+
+if pode_modulo(usuario, "prestadores"):
+    grupo_prestadores = []
+    if pode_area(usuario, "dashboard"):
+        grupo_prestadores.append(_pagina(lambda: prestadores_dashboard.render(usuario), "Dashboard", ":material/dashboard:", "prestadores_dashboard"))
+    grupo_prestadores.append(_pagina(lambda: prestadores.render(usuario), "Projetos", ":material/folder_open:", "prestadores_projetos"))
+    if pode_area(usuario, "avaliacoes.visualizar"):
+        grupo_prestadores.append(_pagina(lambda: avaliacao_prestadores.render(usuario), "Avaliação", ":material/grade:", "prestadores_avaliacao"))
+    paginas["Prestadores"] = grupo_prestadores
+
+if pode_modulo(usuario, "cessionarios"):
+    grupo_cessionarios = []
+    if pode_area(usuario, "dashboard"):
+        grupo_cessionarios.append(_pagina(lambda: cessionarios_dashboard.render(usuario), "Dashboard", ":material/dashboard:", "cessionarios_dashboard"))
+    grupo_cessionarios.append(_pagina(lambda: cessionarios.render(usuario), "Projetos", ":material/store:", "cessionarios_projetos"))
+    paginas["Cessionários"] = grupo_cessionarios
+
+if pode_modulo(usuario, "consolidado"):
+    paginas["Consolidado"] = [
+        _pagina(lambda: consolidado.render(usuario), "Visão Geral", ":material/insights:", "consolidado_visao"),
+    ]
+
+grupo_gestao = []
+if pode_area(usuario, "alertas"):
+    grupo_gestao.append(_pagina(lambda: alertas.render(usuario), "Central de Alertas", ":material/notifications_active:", "gestao_alertas"))
+if pode_area(usuario, "lembretes"):
+    grupo_gestao.append(_pagina(lambda: lembretes_pep.render(usuario), "Lembretes (Sem PEP)", ":material/pending_actions:", "gestao_lembretes"))
+if pode_area(usuario, "reunioes"):
+    grupo_gestao.append(_pagina(lambda: reunioes.render(usuario), "Reuniões", ":material/groups:", "gestao_reunioes"))
+    grupo_gestao.append(_pagina(lambda: planos_acao.render(usuario), "Planos de Ação", ":material/task_alt:", "gestao_planos_acao"))
+    grupo_gestao.append(_pagina(lambda: gestao_historico.render(usuario), "Histórico", ":material/history:", "gestao_historico"))
+if grupo_gestao:
+    paginas["Gestão"] = grupo_gestao
+
+if pode_area(usuario, "administrar_usuarios") or pode_area(usuario, "configuracoes") or pode_area(usuario, "auditoria"):
     paginas["Sistema"] = [
         _pagina(lambda: administracao.render(usuario), "Administração", ":material/settings:", "administracao"),
     ]
@@ -120,15 +148,17 @@ pagina_atual = st.navigation(paginas, position="sidebar")
 
 with st.sidebar:
     st.divider()
-    st.download_button(
-        "Exportar Relatório Excel",
-        data=gerar_relatorio_excel(),
-        file_name=f"GAT_2026_Relatorio_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        icon=":material/download:",
-        type="primary",
-        use_container_width=True,
-    )
+    if pode_area(usuario, "relatorios"):
+        modulos_permitidos = {m for m in MODULOS_CONTROLADOS if pode_modulo(usuario, m)}
+        st.download_button(
+            "Exportar Relatório Excel",
+            data=gerar_relatorio_excel(modulos_permitidos),
+            file_name=f"GAT_2026_Relatorio_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            icon=":material/download:",
+            type="primary",
+            use_container_width=True,
+        )
     if st.button("Sair", icon=":material/logout:", use_container_width=True):
         logout()
 
