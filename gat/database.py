@@ -1397,3 +1397,13 @@ def listar_atividades(
             params.append(modulo)
         query += " ORDER BY data_hora DESC"
         return pd.read_sql_query(query, conn, params=params)
+
+
+def listar_reunioes_do_projeto(modulo: str, projeto_id: int) -> pd.DataFrame:
+    """Reuniões vinculadas a um projeto específico — usado na Linha do Tempo."""
+    with _conectar() as conn:
+        return pd.read_sql_query(
+            "SELECT r.* FROM reunioes r JOIN reuniao_projetos rp ON rp.reuniao_id = r.id "
+            "WHERE rp.modulo = ? AND rp.projeto_id = ? ORDER BY COALESCE(r.data_realizada, r.data_prevista)",
+            conn, params=(modulo, projeto_id),
+        )

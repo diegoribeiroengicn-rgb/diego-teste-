@@ -42,6 +42,7 @@ from views import (
     historico_atividades,
     inicio,
     lembretes_pep,
+    linha_tempo,
     meu_perfil,
     painel_analistas,
     planos_acao,
@@ -130,9 +131,12 @@ if pode_modulo(usuario, "cessionarios"):
     paginas["Cessionários"] = grupo_cessionarios
 
 if pode_modulo(usuario, "consolidado"):
-    paginas["Consolidado"] = [
+    grupo_consolidado = [
         _pagina(lambda: consolidado.render(usuario), "Visão Geral", ":material/insights:", "consolidado_visao"),
     ]
+    if pode_area(usuario, "linha_tempo"):
+        grupo_consolidado.append(_pagina(lambda: linha_tempo.render(usuario), "Linha do Tempo", ":material/timeline:", "linha_tempo"))
+    paginas["Consolidado"] = grupo_consolidado
 
 grupo_gestao = []
 if pode_area(usuario, "alertas"):
