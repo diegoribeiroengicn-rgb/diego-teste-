@@ -33,6 +33,7 @@ from gat.styles import cabecalho_institucional, injetar_css_global, logo_base64
 from views import (
     administracao,
     alertas,
+    avaliacao_analistas,
     avaliacao_prestadores,
     cessionarios,
     cessionarios_dashboard,
@@ -147,6 +148,8 @@ if grupo_gestao:
 grupo_relatorios = []
 if pode_area(usuario, "analistas"):
     grupo_relatorios.append(_pagina(lambda: painel_analistas.render(usuario), "Painel de Analistas", ":material/groups_2:", "painel_analistas"))
+if pode_area(usuario, "analistas.notas"):
+    grupo_relatorios.append(_pagina(lambda: avaliacao_analistas.render(usuario), "Avaliação de Analistas", ":material/military_tech:", "avaliacao_analistas"))
 if pode_area(usuario, "relatorios"):
     grupo_relatorios.append(_pagina(lambda: relatorios_mensais.render(usuario), "Relatórios Mensais", ":material/summarize:", "relatorios_mensais"))
 if grupo_relatorios:

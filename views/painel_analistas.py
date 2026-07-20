@@ -6,11 +6,12 @@ import pandas as pd
 import streamlit as st
 
 from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos
-from gat.config import CORES, DISCIPLINAS, RESPONSAVEIS
+from gat.config import CORES, DISCIPLINAS, RESPONSAVEIS, STATUS_ANALISE_OPCOES
 from gat.database import listar_cessionarios, listar_prestadores
-from gat.permissions import exigir_area, pode_modulo
-from gat.relatorios_mensais import produtividade_analistas
-from gat.ui.filtros import rotulo_competencia, seletor_competencia
+from gat.export_excel import gerar_relatorio_mensal_excel
+from gat.permissions import exigir_area, pode_area, pode_modulo
+from gat.relatorios_mensais import indicadores_mensais_modulo, produtividade_analistas
+from gat.ui.filtros import chave_competencia, rotulo_competencia, seletor_competencia
 from gat.ui.kpi_cards import renderizar_kpis
 
 _MODULOS_VISIVEIS = {
@@ -40,7 +41,14 @@ def render(usuario: dict) -> None:
         f_disciplina = col2.selectbox("Disciplina", ["Todas"] + DISCIPLINAS, key="painel_analistas_disciplina")
         col3, col4 = st.columns(2)
         f_analista = col3.multiselect("Analista", RESPONSAVEIS, key="painel_analistas_analista")
+        f_status = col4.multiselect("Status", STATUS_ANALISE_OPCOES, key="painel_analistas_status")
+        col5, col6 = st.columns(2)
+        f_at = col5.text_input("N° AT", key="painel_analistas_at", placeholder="Busca exata ou parcial")
+        f_revisao = col6.text_input("Revisão", key="painel_analistas_revisao")
         mes, ano = seletor_competencia("painel_analistas")
+        col7, col8 = st.columns(2)
+        f_data_ini = col7.date_input("Período — Data inicial", value=None, format="DD/MM/YYYY", key="painel_analistas_data_ini")
+        f_data_fim = col8.date_input("Período — Data final", value=None, format="DD/MM/YYYY", key="painel_analistas_data_fim")
 
     disciplina = None if f_disciplina == "Todas" else f_disciplina
     st.caption(f"Competência: **{rotulo_competencia(mes, ano)}**")
@@ -59,6 +67,17 @@ def render(usuario: dict) -> None:
     if df_base.empty:
         st.info("Nenhum registro disponível para os filtros selecionados.")
         return
+
+    if f_status:
+        df_base = df_base[df_base["status_analise"].isin(f_status)]
+    if f_at.strip():
+        df_base = df_base[df_base["num_at"].fillna("").astype(str).str.contains(f_at.strip(), case=False, na=False, regex=False)]
+    if f_revisao.strip():
+        df_base = df_base[df_base["revisao"].astype(str) == f_revisao.strip()]
+    if f_data_ini:
+        df_base = df_base[pd.to_datetime(df_base["data_solicitacao"], errors="coerce") >= pd.Timestamp(f_data_ini)]
+    if f_data_fim:
+        df_base = df_base[pd.to_datetime(df_base["data_solicitacao"], errors="coerce") <= pd.Timestamp(f_data_fim)]
 
     tabela = produtividade_analistas(df_base, mes, ano, analista=None, disciplina=disciplina)
     if f_analista:
@@ -102,3 +121,24 @@ def render(usuario: dict) -> None:
     }).sort_values("Projetos Analisados", ascending=False).reset_index(drop=True)
 
     st.dataframe(tabela_exibicao, use_container_width=True, hide_index=True)
+
+    st.markdown("##### Ver registros de um analista")
+    st.caption("Abre os projetos que originaram os indicadores acima, respeitando os filtros aplicados.")
+    analista_drill = st.selectbox("Analista", ["Selecione..."] + sorted(tabela["responsavel"].unique().tolist()), key="painel_analistas_drill")
+    if analista_drill != "Selecione...":
+        df_drill = df_base[df_base["responsavel"] == analista_drill]
+        colunas_drill = [c for c in ["item", "codigo", "prestador", "cessionario", "disciplina", "num_at", "revisao", "status_analise", "data_solicitacao", "data_analise"] if c in df_drill.columns]
+        st.dataframe(df_drill[colunas_drill].reset_index(drop=True), use_container_width=True, hide_index=True)
+
+    if pode_area(usuario, "analistas.relatorios") and mes is not None and ano is not None:
+        st.markdown("##### Exportação")
+        indicadores_export = {"Projetos Analisados": total_analisados, "Documentos": total_documentos, "ATs Emitidas": total_ats, "% SLA Médio": f"{sla_medio}%", "Backlog": total_backlog}
+        excel_bytes = gerar_relatorio_mensal_excel(
+            f"Analistas — {modulo_label}", rotulo_competencia(mes, ano), indicadores_export, produtividade_df=tabela,
+        )
+        st.download_button(
+            "Exportar Excel", data=excel_bytes,
+            file_name=f"GAT_2026_Analistas_{modulo_label}_{chave_competencia(mes, ano)}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            icon=":material/download:", type="primary",
+        )
