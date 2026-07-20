@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import streamlit as st
 
-from gat.business_rules import enriquecer_prestadores
+from gat.business_rules import enriquecer_prestadores, filtrar_por_competencia
 from gat.config import COLUNAS_EXIBICAO_PRESTADORES, RESPONSAVEIS, STATUS_ANALISE_OPCOES
 from gat.database import listar_prestadores, obter_prestador
 from gat.permissions import exigir_area, exigir_modulo, pode_area
+from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.modals import dialog_prestador
 from gat.ui.tables import tabela_com_edicao
 
@@ -54,9 +55,12 @@ def render(usuario: dict) -> None:
         f_pep = col3.selectbox("Situação do PEP", SITUACAO_PEP_OPCOES, key="filtro_prest_pep")
         f_pendentes = col4.checkbox("Somente Pendente de Reunião", key="filtro_prest_pendentes")
         f_cancelados = col5.checkbox("Incluir cancelados", value=False, key="filtro_prest_cancelados")
+        mes, ano = seletor_competencia("filtro_prest_comp")
         if st.button("Limpar filtros", icon=":material/filter_alt_off:", key="limpar_filtros_prest"):
             for chave in _CHAVES_FILTRO:
                 st.session_state.pop(chave, None)
+            st.session_state.pop("filtro_prest_comp_mes", None)
+            st.session_state.pop("filtro_prest_comp_ano", None)
             st.rerun()
 
     df_filtrado = df.copy()
@@ -72,6 +76,9 @@ def render(usuario: dict) -> None:
         df_filtrado = df_filtrado[~df_filtrado["tem_pep"]]
     if f_pendentes:
         df_filtrado = df_filtrado[df_filtrado["pendente_reuniao"]]
+    if mes or ano:
+        df_filtrado = filtrar_por_competencia(df_filtrado, "data_solicitacao", mes, ano)
+        st.caption(f"Competência: **{rotulo_competencia(mes, ano)}** (baseado na Data de Solicitação)")
 
     df_filtrado = df_filtrado.reset_index(drop=True)
     st.caption(f"{len(df_filtrado)} registro(s) encontrados. Ordenação padrão: Item (ordem de chegada).")

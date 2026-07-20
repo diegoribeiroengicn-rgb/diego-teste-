@@ -122,6 +122,11 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
     with col3:
         data_solicitacao = st.date_input("Data de Solicitação *", value=_parse_data(registro.get("data_solicitacao")) if registro else date.today(), format="DD/MM/YYYY", key=f"pr_dsol_{sufixo}")
     sugestao_limite = calcular_data_limite(data_solicitacao, SLA_PRESTADORES_DIAS_UTEIS)
+    if not editando:
+        chave_gatilho = f"pr_dlim_gatilho_{sufixo}"
+        if st.session_state.get(chave_gatilho) != data_solicitacao:
+            st.session_state[f"pr_dlim_{sufixo}"] = sugestao_limite
+            st.session_state[chave_gatilho] = data_solicitacao
     with col4:
         data_limite = st.date_input(
             "Data de Entrega Acordada/Prevista *",
@@ -243,6 +248,12 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
     with col3:
         data_solicitacao = st.date_input("Data de Solicitação *", value=_parse_data(registro.get("data_solicitacao")) if registro else date.today(), format="DD/MM/YYYY", key=f"ce_dsol_{sufixo}")
     sugestao_limite = calcular_data_limite(data_solicitacao, sla_dias)
+    if not editando:
+        chave_gatilho = f"ce_dlim_gatilho_{sufixo}"
+        gatilho_atual = (data_solicitacao, tipo, int(revisao))
+        if st.session_state.get(chave_gatilho) != gatilho_atual:
+            st.session_state[f"ce_dlim_{sufixo}"] = sugestao_limite
+            st.session_state[chave_gatilho] = gatilho_atual
     with col4:
         data_limite = st.date_input(
             "Data de Entrega Acordada/Prevista *",
