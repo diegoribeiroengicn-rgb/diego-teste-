@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import streamlit as st
 
-from gat.business_rules import classificar_nota, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia
+from gat.business_rules import classificar_nota, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia, indicadores_meta_rev2
 from gat.config import CORES, META_REVISAO_APROVACAO
-from gat.database import listar_avaliacoes, listar_prestadores
+from gat.database import listar_avaliacoes, listar_prestadores, obter_configuracao
 from gat.relatorios_mensais import comparativo_mensal, indicadores_mensais_modulo, mes_anterior
 from gat.ui.charts import (
     gauge_sla,
@@ -107,6 +107,18 @@ def render(usuario: dict) -> None:
         ("Revisões Acima da Meta", str(acima_meta), CORES["vermelho"]),
         ("Pendentes de Retorno (Hold)", str(pendentes_retorno), CORES["dourado"]),
         ("Tempo Médio de Análise (dias)", str(tempo_medio), CORES["navy"]),
+    ])
+
+    meta_rev2 = float(obter_configuracao("meta_aprovacao_rev2", "80"))
+    ind_meta = indicadores_meta_rev2(df, meta_rev2)
+    cor_distancia = CORES["verde"] if ind_meta["distancia_da_meta"] >= 0 else CORES["vermelho"]
+    st.caption(f"Meta de aprovação até REV{META_REVISAO_APROVACAO} (configurável em Administração → Configurações)")
+    renderizar_kpis([
+        ("Aprovados na REV0", str(ind_meta["aprovados_rev0"]), CORES["verde"]),
+        ("Aprovados na REV1", str(ind_meta["aprovados_rev1"]), CORES["verde"]),
+        (f"Aprovados na REV{META_REVISAO_APROVACAO}", str(ind_meta["aprovados_rev2"]), CORES["verde"]),
+        (f"% Aprovado até REV{META_REVISAO_APROVACAO}", f"{ind_meta['percentual_atual']}%", CORES["navy"]),
+        ("Meta / Distância", f"{ind_meta['meta']}% ({ind_meta['distancia_da_meta']:+.1f} p.p.)", cor_distancia),
     ])
 
     st.markdown("##### Qualidade e Governança")

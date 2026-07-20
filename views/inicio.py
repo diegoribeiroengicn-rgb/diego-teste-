@@ -80,11 +80,15 @@ def render(usuario: dict) -> None:
         int((~df_cess["tem_pep"]).sum() if not df_cess.empty else 0)
 
     st.markdown("##### Indicadores gerais")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     col1.metric("Projetos Ativos", total_ativos_prest + total_ativos_cess)
     col2.metric("Atrasados", total_atrasados)
     col3.metric("Pendente de Reunião", total_pendente_reuniao)
-    col4.metric("Sem PEP", total_sem_pep)
+    # PEP ausente é um alerta discreto, não um indicador principal — não tem
+    # card próprio aqui; aparece na linha/detalhe do projeto e na área de
+    # Alertas/Lembretes.
+    if total_sem_pep:
+        st.caption(f":material/info: {total_sem_pep} projeto(s) aguardando PEP — veja em Lembretes (Sem PEP).")
 
     if pode_prest or pode_cess:
         st.markdown("##### Projetos ativos por módulo")

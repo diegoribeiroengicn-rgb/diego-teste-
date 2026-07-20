@@ -188,3 +188,18 @@ def _renderizar_configuracoes() -> None:
             definir_configuracao("pep_dias_critico", str(int(dias_critico)))
             st.success("Limiares atualizados com sucesso.")
             st.rerun()
+
+    st.markdown("##### Meta de aprovação até a REV2")
+    st.caption(
+        "Percentual de projetos aprovados (LIBERADO/LIBERADO C/ REST.) que devem estar aprovados até a "
+        "Revisão 2, entre o total de projetos aprovados. Usado nos Dashboards, OPRs e relatórios."
+    )
+    meta_atual = float(obter_configuracao("meta_aprovacao_rev2", "80"))
+    with st.form("form_config_meta_rev2"):
+        meta_rev2 = st.number_input("Meta de aprovação até REV2 (%)", min_value=0.0, max_value=100.0, step=1.0, value=meta_atual)
+        salvar_meta = st.form_submit_button("Salvar meta", icon=":material/save:", type="primary")
+
+    if salvar_meta:
+        definir_configuracao("meta_aprovacao_rev2", str(meta_rev2))
+        st.success("Meta atualizada com sucesso.")
+        st.rerun()

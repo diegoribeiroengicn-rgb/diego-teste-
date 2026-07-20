@@ -177,6 +177,48 @@ def acima_da_meta_revisao(revisao: int | None) -> bool:
         return False
 
 
+STATUS_APROVADOS = ["LIBERADO", "LIBERADO C/ REST."]
+
+
+def indicadores_meta_rev2(df: pd.DataFrame, meta_percentual: float | None = None) -> dict:
+    """
+    Acompanhamento da meta de aprovação até a REV2: quantos projetos
+    aprovados (LIBERADO/LIBERADO C/ REST.) o foram na REV0, REV1, REV2 e
+    acima da REV2, o percentual aprovado até a REV2 sobre o total de
+    aprovados, e a distância (em pontos percentuais) para a meta
+    configurada. `meta_percentual` pode ser passada explicitamente (ex.:
+    vinda de `configuracoes`); se omitida, usa `META_REVISAO_APROVACAO`
+    apenas como referência de revisão (a meta percentual default é 80%).
+    """
+    if df.empty:
+        aprovados = df
+    else:
+        aprovados = df[df["status_analise"].isin(STATUS_APROVADOS)]
+
+    total_aprovados = len(aprovados)
+    aprovados_rev0 = int((aprovados["revisao"] == 0).sum()) if total_aprovados else 0
+    aprovados_rev1 = int((aprovados["revisao"] == 1).sum()) if total_aprovados else 0
+    aprovados_rev2 = int((aprovados["revisao"] == META_REVISAO_APROVACAO).sum()) if total_aprovados else 0
+    aprovados_ate_rev2 = int((aprovados["revisao"] <= META_REVISAO_APROVACAO).sum()) if total_aprovados else 0
+    acima_rev2 = int((df["revisao"] > META_REVISAO_APROVACAO).sum()) if not df.empty else 0
+
+    percentual_atual = round((aprovados_ate_rev2 / total_aprovados) * 100, 1) if total_aprovados else 0.0
+    meta = float(meta_percentual) if meta_percentual is not None else 80.0
+    distancia = round(percentual_atual - meta, 1)
+
+    return {
+        "aprovados_rev0": aprovados_rev0,
+        "aprovados_rev1": aprovados_rev1,
+        "aprovados_rev2": aprovados_rev2,
+        "aprovados_ate_rev2": aprovados_ate_rev2,
+        "acima_rev2": acima_rev2,
+        "total_aprovados": total_aprovados,
+        "percentual_atual": percentual_atual,
+        "meta": meta,
+        "distancia_da_meta": distancia,
+    }
+
+
 def is_cancelado(status_analise: str) -> bool:
     """Verifica se um projeto está com status CANCELADO."""
     return (status_analise or "").strip().upper() == STATUS_CANCELADO
