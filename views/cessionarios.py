@@ -17,6 +17,7 @@ SITUACAO_PEP_OPCOES = ["Todos", "Com PEP", "Sem PEP"]
 _CHAVES_FILTRO = [
     "filtro_cess_resp", "filtro_cess_status", "filtro_cess_tipo",
     "filtro_cess_pep", "filtro_cess_pendentes", "filtro_cess_cancelados",
+    "filtro_cess_at", "filtro_cess_nome",
 ]
 
 
@@ -55,8 +56,16 @@ def render(usuario: dict) -> None:
         f_pep = col4.selectbox("Situação do PEP", SITUACAO_PEP_OPCOES, key="filtro_cess_pep")
         f_pendentes = col5.checkbox("Somente Pendente de Reunião", key="filtro_cess_pendentes")
         f_cancelados = col6.checkbox("Incluir cancelados", value=False, key="filtro_cess_cancelados")
+
+        col7, col8 = st.columns(2)
+        f_at = col7.text_input("N° AT", key="filtro_cess_at", placeholder="Ex.: 1524 (busca exata ou parcial)")
+        f_nome = col8.text_input("Cessionário (nome)", key="filtro_cess_nome", placeholder="Ex.: Empresa ABC")
+
         mes, ano = seletor_competencia("filtro_cess_comp")
-        if st.button("Limpar filtros", icon=":material/filter_alt_off:", key="limpar_filtros_cess"):
+
+        col_pesquisar, col_limpar = st.columns([1, 1])
+        col_pesquisar.button("Pesquisar", icon=":material/search:", type="primary", key="pesquisar_cess", use_container_width=True)
+        if col_limpar.button("Limpar filtros", icon=":material/filter_alt_off:", key="limpar_filtros_cess", use_container_width=True):
             for chave in _CHAVES_FILTRO:
                 st.session_state.pop(chave, None)
             st.session_state.pop("filtro_cess_comp_mes", None)
@@ -78,11 +87,20 @@ def render(usuario: dict) -> None:
         df_filtrado = df_filtrado[~df_filtrado["tem_pep"]]
     if f_pendentes:
         df_filtrado = df_filtrado[df_filtrado["pendente_reuniao"]]
+    if f_at.strip():
+        df_filtrado = df_filtrado[df_filtrado["num_at"].fillna("").astype(str).str.contains(f_at.strip(), case=False, na=False, regex=False)]
+    if f_nome.strip():
+        df_filtrado = df_filtrado[df_filtrado["cessionario"].fillna("").astype(str).str.contains(f_nome.strip(), case=False, na=False, regex=False)]
     if mes or ano:
         df_filtrado = filtrar_por_competencia(df_filtrado, "data_solicitacao", mes, ano)
         st.caption(f"Competência: **{rotulo_competencia(mes, ano)}** (baseado na Data de Solicitação)")
 
     df_filtrado = df_filtrado.reset_index(drop=True)
+
+    if df_filtrado.empty:
+        st.warning("Nenhum registro encontrado com os filtros aplicados.", icon=":material/search_off:")
+        return
+
     st.caption(f"{len(df_filtrado)} registro(s) encontrados. Ordenação padrão: Item (ordem de chegada).")
 
     colunas = list(COLUNAS_EXIBICAO_CESSIONARIOS.keys())

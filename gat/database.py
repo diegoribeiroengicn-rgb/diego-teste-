@@ -14,14 +14,18 @@ import shutil
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Iterator
+from pathlib import Path
+from typing import Any, Callable, Iterator
 
 import bcrypt
 import pandas as pd
 
 from gat.config import (
+    APP_VERSION,
     AREAS_PERMISSAO,
+    BACKUP_DIR,
     DB_PATH,
+    MAX_BACKUPS,
     MODULOS_CONTROLADOS,
     PERFIL_ADMIN,
     PERFIS_PADRAO,
@@ -125,6 +129,131 @@ def _restaurar_semente_se_necessario() -> None:
     """
     if not DB_PATH.exists() and SEED_DB_PATH.exists():
         shutil.copy(SEED_DB_PATH, DB_PATH)
+
+
+# ---------------------------------------------------------------------------
+# Backup automático (antes de qualquer migração estrutural)
+# ---------------------------------------------------------------------------
+
+
+def criar_backup() -> Path | None:
+    """
+    Cria uma cópia de segurança do banco de produção, com data/hora e versão
+    da aplicação no nome do arquivo
+    (ex.: `backup_gat_2026_2026-07-20_143000_v1.5.db`). Mantém apenas as
+    `MAX_BACKUPS` cópias mais recentes (nunca apaga o backup mais recente
+    válido). Retorna o caminho do backup criado, ou `None` se o banco de
+    origem ainda não existir (nada a copiar) ou se a cópia falhar.
+    """
+    if not DB_PATH.exists():
+        return None
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    destino = BACKUP_DIR / f"backup_gat_2026_{timestamp}_v{APP_VERSION}.db"
+    try:
+        shutil.copy2(DB_PATH, destino)
+    except OSError:
+        return None
+    if not destino.exists() or destino.stat().st_size == 0:
+        return None
+    _limpar_backups_antigos()
+    return destino
+
+
+def _limpar_backups_antigos() -> None:
+    backups = sorted(BACKUP_DIR.glob("backup_gat_2026_*.db"), key=lambda p: p.stat().st_mtime)
+    excedente = len(backups) - MAX_BACKUPS
+    for antigo in backups[: max(0, excedente)]:
+        antigo.unlink(missing_ok=True)
+
+
+def listar_backups() -> list[dict[str, Any]]:
+    """Lista os backups existentes (mais recente primeiro) — usado em Administração."""
+    backups = sorted(BACKUP_DIR.glob("backup_gat_2026_*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return [
+        {"arquivo": p.name, "tamanho_bytes": p.stat().st_size, "criado_em": datetime.fromtimestamp(p.stat().st_mtime).isoformat(timespec="seconds")}
+        for p in backups
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Migrações incrementais do schema
+# ---------------------------------------------------------------------------
+#
+# Cada migração é (versão, descrição, função). A função recebe a conexão
+# aberta e só pode fazer alterações ADITIVAS e IDEMPOTENTES (CREATE TABLE/
+# INDEX IF NOT EXISTS, ADD COLUMN via `_garantir_coluna`) — nunca DROP TABLE,
+# DELETE sem condição, nem qualquer operação que apague ou substitua dados
+# já existentes. As migrações já publicadas NUNCA são removidas ou
+# reordenadas: novas alterações de schema entram como uma nova entrada, com
+# a próxima versão, ao final da lista.
+
+
+def _migracao_0001_indices_busca(conn: sqlite3.Connection) -> None:
+    """Índices para acelerar a busca por N° AT e por nome em Prestadores/Cessionários."""
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_prestadores_num_at ON prestadores(num_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_prestadores_nome ON prestadores(prestador)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cessionarios_num_at ON cessionarios(num_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cessionarios_nome ON cessionarios(cessionario)")
+
+
+_MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
+    (1, "Índices de busca por N° AT e nome em Prestadores e Cessionários", _migracao_0001_indices_busca),
+]
+
+
+def _versao_schema_atual(conn: sqlite3.Connection) -> int:
+    linha = conn.execute("SELECT MAX(versao) AS v FROM schema_version WHERE status = 'sucesso'").fetchone()
+    return int(linha["v"]) if linha and linha["v"] is not None else 0
+
+
+def _aplicar_migracoes() -> None:
+    """
+    Aplica apenas as migrações pendentes (versão > última aplicada com
+    sucesso), criando backup automático antes de qualquer alteração
+    estrutural e registrando cada tentativa em `schema_version`. Se uma
+    migração falhar, a própria transação é revertida pelo SQLite (a conexão
+    fecha sem commit), a falha fica registrada para diagnóstico e a
+    inicialização é interrompida — o sistema nunca sobe com um schema
+    parcialmente migrado, e a mesma migração não é considerada "aplicada"
+    (será tentada novamente na próxima inicialização).
+    """
+    with _conectar() as conn:
+        versao_atual = _versao_schema_atual(conn)
+    pendentes = [m for m in _MIGRACOES if m[0] > versao_atual]
+    if not pendentes:
+        return
+
+    if DB_PATH.exists():
+        caminho_backup = criar_backup()
+        if caminho_backup is None:
+            raise RuntimeError(
+                "Não foi possível criar o backup de segurança antes da migração do banco de dados. "
+                "A atualização foi interrompida para evitar risco de perda de dados."
+            )
+
+    for versao, descricao, migrar in pendentes:
+        agora = datetime.now().isoformat(timespec="seconds")
+        try:
+            with _conectar() as conn:
+                migrar(conn)
+                conn.execute(
+                    "INSERT INTO schema_version (versao, aplicado_em, descricao, status) VALUES (?, ?, ?, 'sucesso')",
+                    (versao, agora, descricao),
+                )
+        except Exception as exc:
+            with _conectar() as conn_erro:
+                conn_erro.execute(
+                    "INSERT INTO schema_version (versao, aplicado_em, descricao, status) VALUES (?, ?, ?, ?)",
+                    (versao, agora, descricao, f"erro: {exc}"),
+                )
+            raise RuntimeError(f"Falha ao aplicar a migração {versao} ({descricao}): {exc}") from exc
+
+
+def listar_versoes_schema() -> pd.DataFrame:
+    """Histórico de migrações aplicadas — usado em Administração."""
+    with _conectar() as conn:
+        return pd.read_sql_query("SELECT versao, aplicado_em, descricao, status FROM schema_version ORDER BY id", conn)
 
 
 def init_db() -> None:
@@ -296,6 +425,14 @@ def init_db() -> None:
                 atualizado_em TEXT NOT NULL,
                 atualizado_por TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS schema_version (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                versao INTEGER NOT NULL,
+                aplicado_em TEXT NOT NULL,
+                descricao TEXT NOT NULL,
+                status TEXT NOT NULL
+            );
             """
         )
 
@@ -334,6 +471,8 @@ def init_db() -> None:
                 _semear_permissoes_perfil(conn, linha["id"], PERFIL_ADMIN)
 
         _semear_configuracoes_padrao(conn)
+
+    _aplicar_migracoes()
 
 
 # ---------------------------------------------------------------------------

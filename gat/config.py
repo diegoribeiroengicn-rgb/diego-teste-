@@ -8,6 +8,7 @@ paleta de cores institucional (extraída do dashboard HTML de referência
 utilize uma única fonte de verdade.
 """
 
+import os
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -17,9 +18,28 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
 
-DB_PATH = DATA_DIR / "gat_tecnoplano.db"
+# Caminho do banco de produção: separado do código-fonte por padrão (pasta
+# `data/`, fora do que é substituído a cada deploy), mas configurável via a
+# variável de ambiente DATABASE_PATH para apontar a um volume/disco
+# persistente do ambiente de produção. O banco JAMAIS é recriado do zero se
+# já existir nesse caminho — ver `gat/database.py::init_db`.
+_database_path_env = os.environ.get("DATABASE_PATH", "").strip()
+DB_PATH = Path(_database_path_env) if _database_path_env else DATA_DIR / "gat_tecnoplano.db"
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
 SEED_DB_PATH = DATA_DIR / "seed_gat_tecnoplano.db"
 LOGO_PATH = BASE_DIR / "assets" / "tecnoplano_logo.png"
+
+# Backups automáticos de segurança, criados antes de qualquer migração
+# estrutural do banco (ver `gat/database.py::_aplicar_migracoes`).
+BACKUP_DIR = Path(os.environ.get("GAT_BACKUP_DIR", "").strip() or (DB_PATH.parent / "backups"))
+BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+MAX_BACKUPS = int(os.environ.get("GAT_MAX_BACKUPS", "15"))
+
+# Versão da aplicação — usada apenas para identificar o release de origem
+# nos nomes dos arquivos de backup (não confundir com a versão do schema,
+# controlada pela tabela `schema_version`).
+APP_VERSION = "1.5"
 
 # ---------------------------------------------------------------------------
 # Identidade visual Tecnoplano (paleta extraída do dashboard oficial)

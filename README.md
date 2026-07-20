@@ -119,6 +119,33 @@ Prestadores e 496 de Cessionários). Ou seja: **a aplicação já nasce
 povoada com os dados reais** — só é necessário cadastrar manualmente os
 projetos novos a partir daqui em diante.
 
+## Preservação de dados, backups e migrações
+
+O código-fonte e o banco de dados de produção são mantidos separados. Por
+padrão o banco fica em `data/gat_tecnoplano.db` (fora do que é substituído a
+cada deploy do código), mas o caminho é configurável pela variável de
+ambiente `DATABASE_PATH` — útil para apontar a um volume/disco persistente
+do ambiente de produção. Se o arquivo indicado já existir, a aplicação
+**apenas o utiliza e aplica migrações pendentes**; ele só é criado (e
+semeado a partir de `seed_gat_tecnoplano.db`) na primeira execução, quando
+ainda não existe. Nenhuma rotina do sistema apaga tabelas, faz `DELETE`
+sem condição ou recria o banco do zero durante a inicialização.
+
+Alterações de schema (novas tabelas, colunas ou índices) são aplicadas por
+**migrações incrementais e idempotentes**, controladas pela tabela
+`schema_version` (versão, data, descrição e status de cada migração
+aplicada). A cada inicialização, o sistema roda apenas as migrações com
+versão maior que a última aplicada com sucesso — uma migração nunca é
+reexecutada, e uma falha interrompe a inicialização sem deixar o schema
+parcialmente migrado (a migração falha fica registrada e é tentada
+novamente na próxima subida, após a causa ser corrigida).
+
+Antes de aplicar qualquer migração pendente, o sistema cria automaticamente
+um **backup** do banco (`data/backups/backup_gat_2026_<data>_<hora>_v<versão>.db`).
+A migração só prossegue se o backup for criado com sucesso. São mantidos os
+`GAT_MAX_BACKUPS` backups mais recentes (padrão: 15, configurável por
+variável de ambiente), sem nunca apagar o mais recente válido.
+
 ### Reimportar ou atualizar a base de sementes
 
 Caso a planilha oficial seja atualizada e você queira regerar a base de
@@ -260,7 +287,21 @@ os KPIs, gráficos e tabelas da tela — sem alterar o comportamento padrão
 ("Todos os períodos") quando nenhum mês/ano é selecionado. Os dashboards de
 Prestadores e Cessionários exibem ainda um mini comparativo (mês atual ×
 mês anterior) para Recebidos, Concluídos e % SLA sempre que uma competência
-específica está selecionada.
+específica está selecionada. Também está disponível nas telas de **Projetos**
+de Prestadores e Cessionários (não só nos Dashboards).
+
+### Pesquisa por N° AT e por nome (Prestadores e Cessionários)
+
+As telas **Prestadores › Projetos** e **Cessionários › Projetos** também
+possuem, no painel de Filtros, pesquisa por **N° AT** (correspondência
+exata ou parcial) e por **nome do Prestador/Cessionário** (parcial, sem
+diferenciar maiúsculas/minúsculas nem exigir acentuação exata). Os dois
+campos funcionam em conjunto com todos os demais filtros já existentes
+(Responsável, Status, PEP, Pendente de Reunião, Tipo e Competência). O
+painel tem botões **Pesquisar** e **Limpar filtros**, mostra a quantidade
+de registros encontrados e exibe uma mensagem clara quando nenhum registro
+corresponde aos filtros aplicados. A pesquisa é somente leitura — nunca
+altera, exclui ou duplica registros.
 
 ## Painel de Analistas (produtividade mensal)
 
