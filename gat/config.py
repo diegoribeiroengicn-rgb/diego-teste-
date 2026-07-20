@@ -377,6 +377,7 @@ AREAS_PERMISSAO = {
     "opr.exportar": "OPR — Exportar (PDF/Word)",
     "linha_tempo": "Linha do Tempo — Visualizar/exportar",
     "historico_atividades": "Histórico de Atividades por Login",
+    "alertas.consolidado": "Central de Alertas — Visão consolidada (Prestadores + Cessionários)",
     "configuracoes": "Acessar Configurações",
     "auditoria": "Acessar Auditoria",
     "administrar_usuarios": "Administrar usuários",
@@ -389,7 +390,7 @@ AREAS_PERMISSAO = {
 AREAS_RESTRITAS_PADRAO_BLOQUEADO = [
     "analistas.notas", "analistas.avaliar", "analistas.relatorios",
     "avaliacoes.editar", "avaliacoes.relatorios",
-    "opr.exportar", "historico_atividades",
+    "opr.exportar", "historico_atividades", "alertas.consolidado",
 ]
 
 # Templates padrão de permissão por perfil — usados apenas como ponto de
@@ -435,6 +436,7 @@ PERFIS_PADRAO: dict[str, dict[str, dict[str, bool]]] = {
             "opr.exportar": False,
             "linha_tempo": True,
             "historico_atividades": False,
+            "alertas.consolidado": False,
             "configuracoes": False,
             "auditoria": False,
             "administrar_usuarios": False,
@@ -470,6 +472,7 @@ PERFIS_PADRAO: dict[str, dict[str, dict[str, bool]]] = {
             "opr.exportar": False,
             "linha_tempo": True,
             "historico_atividades": False,
+            "alertas.consolidado": False,
             "configuracoes": False,
             "auditoria": False,
             "administrar_usuarios": False,

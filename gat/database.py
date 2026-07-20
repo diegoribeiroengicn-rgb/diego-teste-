@@ -209,9 +209,25 @@ def _migracao_0002_indices_avaliacoes_alertas(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_atividades_usuario_periodo ON atividades_usuario(usuario, data_hora)")
 
 
+def _migracao_0003_ciclo_vida_alertas(conn: sqlite3.Connection) -> None:
+    """Amplia alertas_radar com o ciclo de vida completo (Pendente/Em
+    tratamento/Tratado/Adiado/Retirado do radar/Reaberto) — colunas novas,
+    aditivas, sem apagar nenhum dado. Registros antigos com status 'ATIVO'
+    passam a 'PENDENTE' (mesmo significado, nomenclatura nova); 'RETIRADO'
+    é preservado como está."""
+    _garantir_coluna(conn, "alertas_radar", "providencia", "TEXT")
+    _garantir_coluna(conn, "alertas_radar", "responsavel_tratamento", "TEXT")
+    _garantir_coluna(conn, "alertas_radar", "data_tratamento", "TEXT")
+    _garantir_coluna(conn, "alertas_radar", "observacao", "TEXT")
+    _garantir_coluna(conn, "alertas_radar", "adiado_para", "TEXT")
+    conn.execute("UPDATE alertas_radar SET status = 'PENDENTE' WHERE status = 'ATIVO'")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_alertas_radar_status ON alertas_radar(status)")
+
+
 _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (1, "Índices de busca por N° AT e nome em Prestadores e Cessionários", _migracao_0001_indices_busca),
     (2, "Índices para avaliações (checklist/analistas), alertas com radar e histórico de atividades", _migracao_0002_indices_avaliacoes_alertas),
+    (3, "Ciclo de vida completo dos alertas (Pendente/Em tratamento/Tratado/Adiado/Retirado/Reaberto)", _migracao_0003_ciclo_vida_alertas),
 ]
 
 
@@ -1327,39 +1343,68 @@ def listar_avaliacoes_analistas(analista: str | None = None) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
+STATUS_ALERTA_OPCOES = ["PENDENTE", "EM_TRATAMENTO", "TRATADO", "ADIADO", "RETIRADO", "REABERTO"]
+
+
 def status_radar(modulo: str, projeto_id: int, tipo_alerta: str) -> str:
     with _conectar() as conn:
         linha = conn.execute(
             "SELECT status FROM alertas_radar WHERE modulo = ? AND projeto_id = ? AND tipo_alerta = ?",
             (modulo, projeto_id, tipo_alerta),
         ).fetchone()
-        return linha["status"] if linha else "ATIVO"
+        return linha["status"] if linha else "PENDENTE"
+
+
+def _upsert_alerta(modulo: str, projeto_id: int, tipo_alerta: str, campos: dict[str, Any], usuario: str, status_anterior: str | None = None) -> None:
+    agora = datetime.now().isoformat()
+    campos = {**campos, "atualizado_em": agora, "atualizado_por": usuario}
+    colunas = list(campos.keys())
+    with _conectar() as conn:
+        conn.execute(
+            f"INSERT INTO alertas_radar (modulo, projeto_id, tipo_alerta, {', '.join(colunas)}) "
+            f"VALUES (?, ?, ?, {', '.join(['?'] * len(colunas))}) "
+            f"ON CONFLICT(modulo, projeto_id, tipo_alerta) DO UPDATE SET "
+            + ", ".join(f"{c} = excluded.{c}" for c in colunas),
+            (modulo, projeto_id, tipo_alerta, *campos.values()),
+        )
+        _registrar_historico(conn, "alertas_radar", projeto_id, {"status": status_anterior}, {"status": campos.get("status")}, usuario)
 
 
 def retirar_do_radar(modulo: str, projeto_id: int, tipo_alerta: str, justificativa: str, usuario: str) -> None:
-    agora = datetime.now().isoformat()
-    with _conectar() as conn:
-        conn.execute(
-            "INSERT INTO alertas_radar (modulo, projeto_id, tipo_alerta, status, justificativa, atualizado_em, atualizado_por) "
-            "VALUES (?, ?, ?, 'RETIRADO', ?, ?, ?) "
-            "ON CONFLICT(modulo, projeto_id, tipo_alerta) DO UPDATE SET status = 'RETIRADO', justificativa = excluded.justificativa, "
-            "atualizado_em = excluded.atualizado_em, atualizado_por = excluded.atualizado_por",
-            (modulo, projeto_id, tipo_alerta, justificativa, agora, usuario),
-        )
-        _registrar_historico(conn, "alertas_radar", projeto_id, {"status": "ATIVO"}, {"status": "RETIRADO", "justificativa": justificativa}, usuario)
+    status_anterior = status_radar(modulo, projeto_id, tipo_alerta)
+    _upsert_alerta(modulo, projeto_id, tipo_alerta, {"status": "RETIRADO", "justificativa": justificativa}, usuario, status_anterior)
 
 
 def reativar_no_radar(modulo: str, projeto_id: int, tipo_alerta: str, usuario: str) -> None:
-    agora = datetime.now().isoformat()
-    with _conectar() as conn:
-        conn.execute(
-            "INSERT INTO alertas_radar (modulo, projeto_id, tipo_alerta, status, atualizado_em, atualizado_por) "
-            "VALUES (?, ?, ?, 'ATIVO', ?, ?) "
-            "ON CONFLICT(modulo, projeto_id, tipo_alerta) DO UPDATE SET status = 'ATIVO', "
-            "atualizado_em = excluded.atualizado_em, atualizado_por = excluded.atualizado_por",
-            (modulo, projeto_id, tipo_alerta, agora, usuario),
-        )
-        _registrar_historico(conn, "alertas_radar", projeto_id, {"status": "RETIRADO"}, {"status": "ATIVO"}, usuario)
+    status_anterior = status_radar(modulo, projeto_id, tipo_alerta)
+    _upsert_alerta(modulo, projeto_id, tipo_alerta, {"status": "REABERTO"}, usuario, status_anterior)
+
+
+def iniciar_tratamento_alerta(modulo: str, projeto_id: int, tipo_alerta: str, usuario: str) -> None:
+    status_anterior = status_radar(modulo, projeto_id, tipo_alerta)
+    _upsert_alerta(modulo, projeto_id, tipo_alerta, {"status": "EM_TRATAMENTO"}, usuario, status_anterior)
+
+
+def marcar_tratado_alerta(modulo: str, projeto_id: int, tipo_alerta: str, providencia: str, responsavel: str, observacao: str | None, usuario: str) -> None:
+    status_anterior = status_radar(modulo, projeto_id, tipo_alerta)
+    _upsert_alerta(
+        modulo, projeto_id, tipo_alerta,
+        {
+            "status": "TRATADO", "providencia": providencia, "responsavel_tratamento": responsavel,
+            "data_tratamento": datetime.now().isoformat(), "observacao": observacao,
+        },
+        usuario, status_anterior,
+    )
+
+
+def adiar_alerta(modulo: str, projeto_id: int, tipo_alerta: str, adiado_para: str | None, observacao: str | None, usuario: str) -> None:
+    status_anterior = status_radar(modulo, projeto_id, tipo_alerta)
+    _upsert_alerta(modulo, projeto_id, tipo_alerta, {"status": "ADIADO", "adiado_para": adiado_para, "observacao": observacao}, usuario, status_anterior)
+
+
+def reabrir_alerta(modulo: str, projeto_id: int, tipo_alerta: str, usuario: str) -> None:
+    status_anterior = status_radar(modulo, projeto_id, tipo_alerta)
+    _upsert_alerta(modulo, projeto_id, tipo_alerta, {"status": "REABERTO"}, usuario, status_anterior)
 
 
 def listar_radar() -> pd.DataFrame:

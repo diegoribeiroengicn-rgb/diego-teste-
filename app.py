@@ -33,6 +33,8 @@ from gat.styles import cabecalho_institucional, injetar_css_global, logo_base64
 from views import (
     administracao,
     alertas,
+    alertas_cessionarios,
+    alertas_prestadores,
     avaliacao_analistas,
     avaliacao_prestadores,
     cessionarios,
@@ -140,7 +142,12 @@ if pode_modulo(usuario, "consolidado"):
 
 grupo_gestao = []
 if pode_area(usuario, "alertas"):
-    grupo_gestao.append(_pagina(lambda: alertas.render(usuario), "Central de Alertas", ":material/notifications_active:", "gestao_alertas"))
+    if pode_modulo(usuario, "prestadores"):
+        grupo_gestao.append(_pagina(lambda: alertas_prestadores.render(usuario), "Alertas — Prestadores", ":material/notifications_active:", "gestao_alertas_prestadores"))
+    if pode_modulo(usuario, "cessionarios"):
+        grupo_gestao.append(_pagina(lambda: alertas_cessionarios.render(usuario), "Alertas — Cessionários", ":material/notifications_active:", "gestao_alertas_cessionarios"))
+    if pode_area(usuario, "alertas.consolidado"):
+        grupo_gestao.append(_pagina(lambda: alertas.render(usuario, modulo=None), "Alertas — Consolidado", ":material/notifications_active:", "gestao_alertas_consolidado"))
 if pode_area(usuario, "lembretes"):
     grupo_gestao.append(_pagina(lambda: lembretes_pep.render(usuario), "Lembretes (Sem PEP)", ":material/pending_actions:", "gestao_lembretes"))
 if pode_area(usuario, "reunioes"):
