@@ -266,3 +266,21 @@ def enriquecer_cessionarios(df: pd.DataFrame) -> pd.DataFrame:
     df = enriquecer_situacao_pep(df, "pep")
     df["situacao_pep"] = df["tem_pep"].map({True: "OK", False: "SEM PEP"})
     return adicionar_flags_governanca(df)
+
+
+def filtrar_por_competencia(df: pd.DataFrame, coluna: str, mes: int | None, ano: int | None) -> pd.DataFrame:
+    """
+    Filtra `df` pelo mês/ano de referência (competência) de `coluna` (tipicamente
+    `data_solicitacao` para "recebidos" ou `data_analise` para "concluídos").
+    `mes`/`ano` iguais a None não filtram por aquela dimensão ("Todos").
+    """
+    if df.empty or coluna not in df.columns or (mes is None and ano is None):
+        return df
+    datas = pd.to_datetime(df[coluna], errors="coerce")
+    mascara = pd.Series(True, index=df.index)
+    if mes is not None:
+        mascara &= datas.dt.month == mes
+    if ano is not None:
+        mascara &= datas.dt.year == ano
+    mascara &= datas.notna()
+    return df.loc[mascara].copy()

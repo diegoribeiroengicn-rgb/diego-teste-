@@ -289,6 +289,13 @@ def init_db() -> None:
                 concluido_em TEXT,
                 concluido_por TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS observacoes_mensais (
+                competencia TEXT PRIMARY KEY,
+                texto TEXT NOT NULL,
+                atualizado_em TEXT NOT NULL,
+                atualizado_por TEXT
+            );
             """
         )
 
@@ -916,6 +923,43 @@ def atualizar_plano_acao(plano_id: int, dados: dict[str, Any], usuario: str) -> 
             (*campos.values(), *conclusao.values(), plano_id),
         )
         _registrar_historico(conn, "planos_acao", plano_id, antigo_dict, {**campos, **conclusao}, usuario)
+
+
+# ---------------------------------------------------------------------------
+# Relatórios mensais (competência, comparativos e observações gerenciais)
+# ---------------------------------------------------------------------------
+
+
+def listar_anos_disponiveis() -> list[int]:
+    """Anos com pelo menos uma Data de Solicitação registrada, para popular o
+    seletor de competência (Mês/Ano) dos dashboards e relatórios."""
+    with _conectar() as conn:
+        anos: set[int] = set()
+        for tabela in ("prestadores", "cessionarios"):
+            for linha in conn.execute(
+                f"SELECT DISTINCT substr(data_solicitacao, 1, 4) AS ano FROM {tabela} WHERE data_solicitacao IS NOT NULL"
+            ).fetchall():
+                if linha["ano"] and linha["ano"].isdigit():
+                    anos.add(int(linha["ano"]))
+    return sorted(anos, reverse=True)
+
+
+def obter_observacao_mensal(competencia: str) -> str:
+    with _conectar() as conn:
+        linha = conn.execute(
+            "SELECT texto FROM observacoes_mensais WHERE competencia = ?", (competencia,)
+        ).fetchone()
+        return linha["texto"] if linha else ""
+
+
+def salvar_observacao_mensal(competencia: str, texto: str, usuario: str) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO observacoes_mensais (competencia, texto, atualizado_em, atualizado_por) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(competencia) DO UPDATE SET texto = excluded.texto, atualizado_em = excluded.atualizado_em, "
+            "atualizado_por = excluded.atualizado_por",
+            (competencia, texto, datetime.now().isoformat(), usuario),
+        )
 
 
 def listar_planos_acao() -> pd.DataFrame:

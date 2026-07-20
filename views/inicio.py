@@ -6,10 +6,11 @@ import streamlit as st
 
 import pandas as pd
 
-from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos
+from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia
 from gat.config import CORES
 from gat.database import listar_cessionarios, listar_prestadores
 from gat.permissions import pode_area, pode_modulo
+from gat.ui.filtros import rotulo_competencia, seletor_competencia
 
 _CARTOES = [
     {
@@ -61,6 +62,13 @@ def render(usuario: dict) -> None:
     # agregados desta página — nenhuma consulta é feita para eles.
     df_prest = enriquecer_prestadores(filtrar_ativos(listar_prestadores())) if pode_prest else pd.DataFrame()
     df_cess = enriquecer_cessionarios(filtrar_ativos(listar_cessionarios())) if pode_cess else pd.DataFrame()
+
+    with st.expander("Filtro de competência", icon=":material/calendar_month:", expanded=False):
+        mes, ano = seletor_competencia("inicio")
+    if mes or ano:
+        st.caption(f"Competência: **{rotulo_competencia(mes, ano)}** (baseado na Data de Solicitação)")
+        df_prest = filtrar_por_competencia(df_prest, "data_solicitacao", mes, ano)
+        df_cess = filtrar_por_competencia(df_cess, "data_solicitacao", mes, ano)
 
     total_ativos_prest = len(df_prest)
     total_ativos_cess = len(df_cess)

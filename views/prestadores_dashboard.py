@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import streamlit as st
 
-from gat.business_rules import classificar_nota, enriquecer_prestadores, filtrar_ativos
+from gat.business_rules import classificar_nota, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia
 from gat.config import CORES, META_REVISAO_APROVACAO
 from gat.database import listar_avaliacoes, listar_prestadores
+from gat.relatorios_mensais import comparativo_mensal, indicadores_mensais_modulo, mes_anterior
 from gat.ui.charts import (
     gauge_sla,
     grafico_aging,
@@ -16,6 +17,7 @@ from gat.ui.charts import (
     grafico_top_responsaveis,
 )
 from gat.permissions import exigir_area, exigir_modulo
+from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.kpi_cards import renderizar_kpis
 
 
@@ -26,10 +28,28 @@ def render(usuario: dict) -> None:
     st.subheader(":material/dashboard: Dashboard — Prestadores de Serviço")
     st.caption("Indicadores exclusivos do módulo de Prestadores. Projetos CANCELADOS são excluídos.")
 
-    df = enriquecer_prestadores(filtrar_ativos(listar_prestadores()))
+    df_completo = enriquecer_prestadores(filtrar_ativos(listar_prestadores()))
+
+    with st.expander("Filtro de competência", icon=":material/calendar_month:", expanded=False):
+        mes, ano = seletor_competencia("prest_dash")
+    st.caption(f"Competência: **{rotulo_competencia(mes, ano)}** (baseado na Data de Solicitação)")
+
+    df = filtrar_por_competencia(df_completo, "data_solicitacao", mes, ano) if (mes or ano) else df_completo
+
+    if mes is not None and ano is not None:
+        mes_ant, ano_ant = mes_anterior(mes, ano)
+        ind_atual = indicadores_mensais_modulo(df_completo, mes, ano)
+        ind_anterior = indicadores_mensais_modulo(df_completo, mes_ant, ano_ant)
+        col_a, col_b, col_c = st.columns(3)
+        v, d = comparativo_mensal(ind_atual, ind_anterior, "recebidos")
+        col_a.metric("Recebidos no mês", v, delta=d)
+        v, d = comparativo_mensal(ind_atual, ind_anterior, "concluidos")
+        col_b.metric("Concluídos no mês", v, delta=d)
+        v, d = comparativo_mensal(ind_atual, ind_anterior, "sla_percentual")
+        col_c.metric("% SLA no mês", f"{v}%", delta=d)
 
     if df.empty:
-        st.info("Nenhum registro ativo de prestador para exibir indicadores.")
+        st.info("Nenhum registro ativo de prestador para exibir indicadores nesta competência.")
         return
 
     total_projetos = len(df)

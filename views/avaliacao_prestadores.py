@@ -5,11 +5,12 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from gat.business_rules import classificar_nota
+from gat.business_rules import classificar_nota, filtrar_por_competencia
 from gat.config import COLUNAS_EXIBICAO_AVALIACOES, CORES_CLASSIFICACAO_AVALIACAO, RESPONSAVEIS
 from gat.database import listar_avaliacoes, obter_avaliacao
 from gat.permissions import exigir_area, exigir_modulo, pode_area
 from gat.ui.charts import grafico_status_donut
+from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.kpi_cards import renderizar_kpis
 from gat.ui.modals import dialog_avaliacao
 from gat.ui.tables import tabela_com_edicao
@@ -42,15 +43,19 @@ def render(usuario: dict) -> None:
         with col3:
             st.write("")
             if st.button("Limpar filtros", icon=":material/filter_alt_off:", key="limpar_filtros_aval"):
-                for chave in ("filtro_aval_prestador", "filtro_aval_analista"):
+                for chave in ("filtro_aval_prestador", "filtro_aval_analista", "aval_competencia_mes", "aval_competencia_ano"):
                     st.session_state.pop(chave, None)
                 st.rerun()
+        mes, ano = seletor_competencia("aval_competencia", rotulo="Competência da avaliação")
 
     df_filtrado = df.copy()
     if f_prestador:
         df_filtrado = df_filtrado[df_filtrado["nome_prestador"].isin(f_prestador)]
     if f_analista:
         df_filtrado = df_filtrado[df_filtrado["analista_responsavel"].isin(f_analista)]
+    if mes or ano:
+        df_filtrado = filtrar_por_competencia(df_filtrado, "data_avaliacao", mes, ano)
+        st.caption(f"Competência: **{rotulo_competencia(mes, ano)}**")
 
     df_filtrado = df_filtrado.reset_index(drop=True)
 

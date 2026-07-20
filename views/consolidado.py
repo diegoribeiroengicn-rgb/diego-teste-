@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos
+from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia
 from gat.config import CORES
 from gat.database import listar_cessionarios, listar_prestadores
 from gat.ui.charts import (
@@ -17,6 +17,7 @@ from gat.ui.charts import (
     grafico_top_responsaveis,
 )
 from gat.permissions import exigir_modulo
+from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.kpi_cards import renderizar_kpis
 
 
@@ -29,8 +30,19 @@ def render(usuario: dict) -> None:
     df_prest_bruto = listar_prestadores()
     df_cess_bruto = listar_cessionarios()
 
-    df_prest = enriquecer_prestadores(filtrar_ativos(df_prest_bruto))
-    df_cess = enriquecer_cessionarios(filtrar_ativos(df_cess_bruto))
+    df_prest_completo = enriquecer_prestadores(filtrar_ativos(df_prest_bruto))
+    df_cess_completo = enriquecer_cessionarios(filtrar_ativos(df_cess_bruto))
+
+    with st.expander("Filtro de competência", icon=":material/calendar_month:", expanded=False):
+        mes, ano = seletor_competencia("consolidado")
+    st.caption(f"Competência: **{rotulo_competencia(mes, ano)}** (baseado na Data de Solicitação)")
+
+    if mes or ano:
+        df_prest = filtrar_por_competencia(df_prest_completo, "data_solicitacao", mes, ano)
+        df_cess = filtrar_por_competencia(df_cess_completo, "data_solicitacao", mes, ano)
+    else:
+        df_prest = df_prest_completo
+        df_cess = df_cess_completo
 
     total_prest = len(df_prest)
     total_cess = len(df_cess)

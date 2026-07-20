@@ -167,3 +167,40 @@ def gerar_relatorio_excel(modulos_permitidos: set[str] | None = None) -> bytes:
     buffer = io.BytesIO()
     wb.save(buffer)
     return buffer.getvalue()
+
+
+def gerar_relatorio_mensal_excel(
+    titulo_modulo: str,
+    competencia_label: str,
+    indicadores: dict,
+    df_projetos: pd.DataFrame | None = None,
+    colunas_projetos: dict[str, str] | None = None,
+    produtividade_df: pd.DataFrame | None = None,
+) -> bytes:
+    """
+    Relatório mensal em Excel de um módulo (Prestadores/Cessionários/
+    Consolidado) ou dos Analistas para uma competência específica —
+    respeita os filtros já aplicados na tela de origem.
+    """
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    ws_ind = wb.create_sheet("INDICADORES")
+    df_ind = pd.DataFrame([{"Indicador": k, "Valor": v} for k, v in indicadores.items()])
+    _escrever_dataframe(ws_ind, df_ind, f"RELATÓRIO MENSAL — {titulo_modulo.upper()} — {competencia_label}")
+
+    if df_projetos is not None and not df_projetos.empty:
+        ws_proj = wb.create_sheet("PROJETOS")
+        colunas = list(colunas_projetos.keys()) if colunas_projetos else list(df_projetos.columns)
+        df_export = df_projetos[colunas]
+        if colunas_projetos:
+            df_export = df_export.rename(columns=colunas_projetos)
+        _escrever_dataframe(ws_proj, df_export, f"PROJETOS DA COMPETÊNCIA — {competencia_label}")
+
+    if produtividade_df is not None and not produtividade_df.empty:
+        ws_prod = wb.create_sheet("PRODUTIVIDADE")
+        _escrever_dataframe(ws_prod, produtividade_df, f"PRODUTIVIDADE DOS ANALISTAS — {competencia_label}")
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()

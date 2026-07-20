@@ -41,6 +41,9 @@ GAT 2026
 │   ├── Reuniões                  (vínculo N:N a projetos de Prestadores/Cessionários)
 │   ├── Planos de Ação             (responsável, prazo e conclusão)
 │   └── Histórico                   (auditoria de Reuniões e Planos de Ação)
+├── Relatórios
+│   ├── Painel de Analistas       (produtividade mensal por analista)
+│   └── Relatórios Mensais         (indicadores, comparativos, Excel/PDF, One Page Report)
 └── Sistema
     └── Administração            (somente perfil ADMIN)
 ```
@@ -57,7 +60,9 @@ gat/
   auth.py                  # Login seguro, sessão e troca obrigatória de senha
   permissions.py            # Enforcement de controle de acesso (módulos/áreas)
   business_rules.py        # Regras de governança (REV2, cancelados, etc.)
-  export_excel.py           # Exportação fiel ao layout original (respeita permissões)
+  export_excel.py           # Exportação fiel ao layout original (respeita permissões) + relatórios mensais
+  export_pdf.py              # Relatórios mensais e One Page Report em PDF (reportlab)
+  relatorios_mensais.py       # Indicadores por competência, produtividade de analistas e comparativos
   ui/
     modals.py                # Pop-ups de cadastro/edição
     modals_gestao.py          # Pop-ups de Reuniões e Planos de Ação
@@ -65,6 +70,7 @@ gat/
     tables.py                 # Tabela dinâmica com seleção para edição
     charts.py                  # Gráficos Plotly
     kpi_cards.py                # Cartões de KPI
+    filtros.py                   # Seletor reutilizável de competência (Mês/Ano)
 views/
   inicio.py                 # Portal inicial (cards de acesso aos módulos)
   meu_perfil.py               # Meu Perfil > Alterar Senha
@@ -79,6 +85,8 @@ views/
   reunioes.py                                  # Gestão > Reuniões
   planos_acao.py                                 # Gestão > Planos de Ação
   gestao_historico.py                              # Gestão > Histórico
+  painel_analistas.py                                # Relatórios > Painel de Analistas (produtividade mensal)
+  relatorios_mensais.py                                # Relatórios > Relatórios Mensais (indicadores, Excel/PDF, One Page Report)
   administracao.py                                   # Sistema > Usuários, Validação de Dados, Auditoria, Configurações
 assets/
   tecnoplano_logo.png       # Logomarca institucional
@@ -240,3 +248,51 @@ O botão **"Exportar Relatório Excel"** (barra lateral) gera um arquivo
 `.xlsx` com as abas **PRESTADORES**, **CESSIONARIOS**, **ALERTAS CRITICOS**
 e **PAINEL CONSOLIDADO**, respeitando a estrutura de colunas da planilha
 original da Tecnoplano.
+
+## Filtro de competência (Mês/Ano)
+
+Um filtro de **competência** (Mês/Ano, com opção "Todos os períodos") está
+disponível em **Início, Prestadores › Dashboard, Cessionários › Dashboard,
+Consolidado, Prestadores › Avaliação, Painel de Analistas e Relatórios
+Mensais**. O filtro usa a **Data de Solicitação** como referência (Data da
+Avaliação, no caso da tela de Avaliação) e recalcula automaticamente todos
+os KPIs, gráficos e tabelas da tela — sem alterar o comportamento padrão
+("Todos os períodos") quando nenhum mês/ano é selecionado. Os dashboards de
+Prestadores e Cessionários exibem ainda um mini comparativo (mês atual ×
+mês anterior) para Recebidos, Concluídos e % SLA sempre que uma competência
+específica está selecionada.
+
+## Painel de Analistas (produtividade mensal)
+
+Disponível no grupo **Relatórios** (área `analistas`), apresenta a
+produtividade de cada analista por competência: projetos analisados,
+documentos analisados, ATs emitidas, tempo médio de análise, % de SLA
+atendido, backlog do período, projetos concluídos e projetos em andamento.
+Pode ser filtrado por módulo (Prestadores, Cessionários ou Consolidado),
+disciplina, analista e competência (Mês/Ano).
+
+> ⚠️ O **backlog de um mês passado** é uma aproximação: como o sistema não
+> mantém um histórico de mudanças de status, ele é calculado como a
+> quantidade de projetos **atualmente** em "EM ANÁLISE" cuja Data de
+> Solicitação é anterior ao fim do mês consultado — não uma reconstrução
+> histórica exata do status naquele momento.
+
+## Relatórios Mensais e One Page Report
+
+Disponível no grupo **Relatórios** (área `relatorios`), permite emitir
+relatórios mensais para **Prestadores, Cessionários, Consolidado e
+Analistas**, sempre para uma competência específica (Mês/Ano obrigatórios):
+
+- KPIs do período (recebidos, concluídos, em análise, documentos, % SLA,
+  backlog) ou, no caso de Analistas, a tabela completa de produtividade;
+- **Comparativos**: mês atual × mês anterior, mês atual × mesmo mês do ano
+  anterior, e acumulado do ano — nos dashboards e no próprio relatório;
+- **Exportação em Excel** (abas INDICADORES, PROJETOS e PRODUTIVIDADE) e em
+  **PDF**, respeitando os filtros de módulo e competência aplicados;
+- **One Page Report** — resumo executivo em uma única página (PDF),
+  consolidando Prestadores + Cessionários da competência selecionada:
+  total de projetos, concluídos, em análise, documentos, produtividade
+  média dos analistas, % de SLA, backlog, projetos sem PEP, comparativo com
+  o mês anterior e observações gerenciais. As observações de cada
+  competência podem ser cadastradas e editadas na própria tela e ficam
+  salvas para reaproveitamento em relatórios futuros daquele mês.

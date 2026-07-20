@@ -41,9 +41,11 @@ from views import (
     inicio,
     lembretes_pep,
     meu_perfil,
+    painel_analistas,
     planos_acao,
     prestadores,
     prestadores_dashboard,
+    relatorios_mensais,
     reunioes,
 )
 
@@ -136,6 +138,14 @@ if pode_area(usuario, "reunioes"):
     grupo_gestao.append(_pagina(lambda: gestao_historico.render(usuario), "Histórico", ":material/history:", "gestao_historico"))
 if grupo_gestao:
     paginas["Gestão"] = grupo_gestao
+
+grupo_relatorios = []
+if pode_area(usuario, "analistas"):
+    grupo_relatorios.append(_pagina(lambda: painel_analistas.render(usuario), "Painel de Analistas", ":material/groups_2:", "painel_analistas"))
+if pode_area(usuario, "relatorios"):
+    grupo_relatorios.append(_pagina(lambda: relatorios_mensais.render(usuario), "Relatórios Mensais", ":material/summarize:", "relatorios_mensais"))
+if grupo_relatorios:
+    paginas["Relatórios"] = grupo_relatorios
 
 if pode_area(usuario, "administrar_usuarios") or pode_area(usuario, "configuracoes") or pode_area(usuario, "auditoria"):
     paginas["Sistema"] = [
