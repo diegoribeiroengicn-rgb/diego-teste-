@@ -32,8 +32,10 @@ def render(usuario: dict) -> None:
         f_tipo = col2.multiselect("Tipo de atividade", _TIPOS_EVENTO, key="filtro_hist_ativ_tipo")
         f_modulo = col3.text_input("Módulo/página", key="filtro_hist_ativ_modulo")
         col4, col5 = st.columns(2)
-        f_data_ini = col4.date_input("Data inicial", value=None, format="DD/MM/YYYY", key="filtro_hist_ativ_data_ini")
-        f_data_fim = col5.date_input("Data final", value=None, format="DD/MM/YYYY", key="filtro_hist_ativ_data_fim")
+        st.session_state.setdefault("filtro_hist_ativ_data_ini", None)
+        st.session_state.setdefault("filtro_hist_ativ_data_fim", None)
+        f_data_ini = col4.date_input("Data inicial", format="DD/MM/YYYY", key="filtro_hist_ativ_data_ini")
+        f_data_fim = col5.date_input("Data final", format="DD/MM/YYYY", key="filtro_hist_ativ_data_fim")
 
     df = listar_atividades(
         usuario=f_usuario[0] if len(f_usuario) == 1 else None,

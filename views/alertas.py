@@ -81,7 +81,8 @@ def _cartao_alerta(usuario: dict, alerta: pd.Series, sufixo_chave: str) -> None:
                 st.rerun()
 
         if st.session_state.get(f"_form_adiar_{chave_acao}"):
-            adiado_para = st.date_input("Adiar para", value=None, format="DD/MM/YYYY", key=f"data_adiar_{chave_acao}")
+            st.session_state.setdefault(f"data_adiar_{chave_acao}", None)
+            adiado_para = st.date_input("Adiar para", format="DD/MM/YYYY", key=f"data_adiar_{chave_acao}")
             observacao = st.text_input("Observação (opcional)", key=f"obs_adiar_{chave_acao}")
             col_c, col_x = st.columns(2)
             if col_c.button("Confirmar adiamento", key=f"confirma_adiar_{chave_acao}", type="primary"):

@@ -47,8 +47,10 @@ def render(usuario: dict) -> None:
         f_revisao = col6.text_input("Revisão", key="painel_analistas_revisao")
         mes, ano = seletor_competencia("painel_analistas")
         col7, col8 = st.columns(2)
-        f_data_ini = col7.date_input("Período — Data inicial", value=None, format="DD/MM/YYYY", key="painel_analistas_data_ini")
-        f_data_fim = col8.date_input("Período — Data final", value=None, format="DD/MM/YYYY", key="painel_analistas_data_fim")
+        st.session_state.setdefault("painel_analistas_data_ini", None)
+        st.session_state.setdefault("painel_analistas_data_fim", None)
+        f_data_ini = col7.date_input("Período — Data inicial", format="DD/MM/YYYY", key="painel_analistas_data_ini")
+        f_data_fim = col8.date_input("Período — Data final", format="DD/MM/YYYY", key="painel_analistas_data_fim")
 
     disciplina = None if f_disciplina == "Todas" else f_disciplina
     st.caption(f"Competência: **{rotulo_competencia(mes, ano)}**")

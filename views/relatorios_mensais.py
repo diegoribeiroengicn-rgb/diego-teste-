@@ -6,17 +6,39 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia
-from gat.config import COLUNAS_EXIBICAO_CESSIONARIOS, COLUNAS_EXIBICAO_PRESTADORES, CORES
+from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia, indicadores_meta_rev2
+from gat.config import (
+    COLUNAS_EXIBICAO_CESSIONARIOS,
+    COLUNAS_EXIBICAO_PRESTADORES,
+    CORES,
+    DISCIPLINAS,
+    MESES_PT,
+    RESPONSAVEIS,
+    STATUS_ANALISE_OPCOES,
+)
 from gat.database import (
+    listar_anos_disponiveis,
     listar_cessionarios,
     listar_prestadores,
+    obter_configuracao,
     obter_observacao_mensal,
     registrar_atividade,
     salvar_observacao_mensal,
 )
 from gat.export_excel import gerar_relatorio_mensal_excel
 from gat.export_pdf import gerar_one_page_report_pdf, gerar_relatorio_mensal_pdf
+from gat.export_word import (
+    cabecalho_institucional as cabecalho_institucional_word,
+    documento_para_bytes,
+    graficos_em_grade,
+    nome_arquivo,
+    novo_documento,
+    observacoes as observacoes_word,
+    rodape_institucional,
+    secao,
+    tabela_indicadores_compacta,
+)
+from gat.opr import combinar_executivos, indicadores_completos, indicadores_executivos, indicadores_resumidos
 from gat.permissions import exigir_area, pode_area, pode_modulo
 from gat.relatorios_mensais import (
     acumulado_ano,
@@ -24,6 +46,15 @@ from gat.relatorios_mensais import (
     indicadores_mensais_modulo,
     mes_anterior,
     produtividade_analistas,
+)
+from gat.revisoes import SITUACAO_SLA_EXTERNO_OPCOES, calcular_intervalos_revisao, consolidado_por_entidade
+from gat.ui.charts import (
+    grafico_aprovacao_rev2,
+    grafico_interno_vs_externo,
+    grafico_por_revisao,
+    grafico_situacao_sla_externo,
+    grafico_status_donut,
+    grafico_top_atraso_entidades,
 )
 from gat.ui.filtros import chave_competencia, rotulo_competencia, seletor_competencia
 from gat.ui.kpi_cards import renderizar_kpis
@@ -216,3 +247,193 @@ def render(usuario: dict) -> None:
             mime="application/pdf", icon=":material/picture_as_pdf:", type="primary", use_container_width=True,
         ):
             registrar_atividade(usuario["username"], usuario.get("perfil"), "OPR_GERADO", modulo="consolidado", detalhe=competencia_label)
+
+    st.markdown("#####")
+    st.markdown("##### OPR — Relatório Institucional (Word)")
+    st.caption(
+        "Gerado sempre em Microsoft Word (.docx) totalmente editável — nunca apenas em PDF ou imagem. "
+        "Disponível para Prestadores, Cessionários ou Consolidado, nos níveis Resumido e Executivo, "
+        "com período mensal, anual ou personalizado."
+    )
+
+    if not pode_area(usuario, "relatorios"):
+        return
+
+    with st.expander("Configurar e gerar OPR", icon=":material/description:", expanded=True):
+        col_o1, col_o2, col_o3 = st.columns(3)
+        tipo_opr_label = col_o1.selectbox("Tipo de OPR", ["Prestadores", "Cessionários", "Consolidado"], key="opr_tipo")
+        nivel_opr = col_o2.selectbox("Nível do OPR", ["Resumido", "Executivo"], key="opr_nivel")
+        periodo_opr = col_o3.selectbox("Período do OPR", ["Mensal (competência acima)", "Anual", "Personalizado"], key="opr_periodo_tipo")
+
+        data_inicio_opr = data_fim_opr = None
+        ano_opr = ano
+        if periodo_opr == "Personalizado":
+            col_p1, col_p2 = st.columns(2)
+            st.session_state.setdefault("opr_data_inicio", None)
+            st.session_state.setdefault("opr_data_fim", None)
+            data_inicio_opr = col_p1.date_input("Data início", format="DD/MM/YYYY", key="opr_data_inicio")
+            data_fim_opr = col_p2.date_input("Data fim", format="DD/MM/YYYY", key="opr_data_fim")
+        elif periodo_opr == "Anual":
+            anos_disponiveis_opr = listar_anos_disponiveis() or [ano]
+            ano_opr = st.selectbox(
+                "Ano", anos_disponiveis_opr,
+                index=anos_disponiveis_opr.index(ano) if ano in anos_disponiveis_opr else 0,
+                key="opr_ano",
+            )
+
+        st.markdown("**Filtros avançados do OPR**")
+        col_f1, col_f2, col_f3 = st.columns(3)
+        f_codigo_opr = col_f1.text_input("Código", key="opr_f_codigo")
+        f_nome_opr = col_f2.text_input("Nome (busca parcial)", key="opr_f_nome")
+        f_at_opr = col_f3.text_input("N° AT", key="opr_f_at")
+        col_f4, col_f5, col_f6 = st.columns(3)
+        f_disciplina_opr = col_f4.selectbox("Disciplina", ["Todas"] + DISCIPLINAS, key="opr_f_disc")
+        f_analista_opr = col_f5.selectbox("Analista", ["Todos"] + RESPONSAVEIS, key="opr_f_analista")
+        f_revisao_opr = col_f6.text_input("Revisão", key="opr_f_rev")
+        col_f7, col_f8 = st.columns(2)
+        f_status_opr = col_f7.selectbox("Status da análise", ["Todos"] + STATUS_ANALISE_OPCOES, key="opr_f_status")
+        f_sla_opr = col_f8.selectbox("Situação SLA (retorno externo)", ["Todas"] + SITUACAO_SLA_EXTERNO_OPCOES, key="opr_f_sla")
+
+        observacoes_opr_texto = st.text_area(
+            "Observações gerenciais deste OPR",
+            value=observacao_atual if periodo_opr == "Mensal (competência acima)" else "",
+            key="opr_observacoes",
+        )
+
+        gerar_opr = st.button("Gerar OPR (Word)", type="primary", icon=":material/description:", use_container_width=True, key="opr_gerar_botao")
+
+    if not gerar_opr:
+        return
+
+    def _filtrar_opr(df_base: pd.DataFrame) -> pd.DataFrame:
+        if df_base.empty:
+            return df_base
+        resultado = df_base
+        if periodo_opr == "Mensal (competência acima)":
+            resultado = filtrar_por_competencia(resultado, "data_solicitacao", mes, ano)
+        elif periodo_opr == "Anual":
+            resultado = filtrar_por_competencia(resultado, "data_solicitacao", None, ano_opr)
+        elif periodo_opr == "Personalizado" and data_inicio_opr and data_fim_opr:
+            datas = pd.to_datetime(resultado["data_solicitacao"], errors="coerce")
+            resultado = resultado[(datas.dt.date >= data_inicio_opr) & (datas.dt.date <= data_fim_opr)]
+        if f_codigo_opr.strip():
+            resultado = resultado[resultado["codigo"].fillna("").astype(str).str.contains(f_codigo_opr.strip(), case=False, na=False, regex=False)]
+        if f_nome_opr.strip():
+            coluna_nome_busca = "prestador" if "prestador" in resultado.columns else "cessionario"
+            resultado = resultado[resultado[coluna_nome_busca].fillna("").astype(str).str.contains(f_nome_opr.strip(), case=False, na=False, regex=False)]
+        if f_at_opr.strip():
+            resultado = resultado[resultado["num_at"].fillna("").astype(str).str.contains(f_at_opr.strip(), case=False, na=False, regex=False)]
+        if f_disciplina_opr != "Todas":
+            resultado = resultado[resultado["disciplina"] == f_disciplina_opr]
+        if f_analista_opr != "Todos":
+            resultado = resultado[resultado["responsavel"] == f_analista_opr]
+        if f_revisao_opr.strip():
+            resultado = resultado[resultado["revisao"].astype(str) == f_revisao_opr.strip()]
+        if f_status_opr != "Todos":
+            resultado = resultado[resultado["status_analise"] == f_status_opr]
+        return resultado
+
+    def _aplicar_filtro_sla(df_modulo: pd.DataFrame, coluna_nome: str) -> pd.DataFrame:
+        if f_sla_opr == "Todas" or df_modulo.empty:
+            return df_modulo
+        intervalos_temp = calcular_intervalos_revisao(df_modulo, coluna_nome)
+        ids_com_situacao = set(intervalos_temp[intervalos_temp["situacao_sla"] == f_sla_opr]["id"])
+        return df_modulo[df_modulo["id"].isin(ids_com_situacao)]
+
+    df_prest_opr = _aplicar_filtro_sla(_filtrar_opr(df_prest), "prestador")
+    df_cess_opr = _aplicar_filtro_sla(_filtrar_opr(df_cess), "cessionario")
+
+    if periodo_opr == "Mensal (competência acima)":
+        periodo_label_opr = competencia_label
+        partes_arquivo_periodo = [MESES_PT[mes - 1].title(), str(ano)]
+    elif periodo_opr == "Anual":
+        periodo_label_opr = f"Ano {ano_opr}"
+        partes_arquivo_periodo = [str(ano_opr)]
+    elif data_inicio_opr and data_fim_opr:
+        periodo_label_opr = f"{data_inicio_opr.strftime('%d/%m/%Y')} a {data_fim_opr.strftime('%d/%m/%Y')}"
+        partes_arquivo_periodo = [data_inicio_opr.strftime("%d-%m-%Y"), "a", data_fim_opr.strftime("%d-%m-%Y")]
+    else:
+        st.error("Selecione a Data início e a Data fim para gerar um OPR de período personalizado.")
+        return
+
+    filtros_dict_opr = {
+        "Código": f_codigo_opr, "Nome": f_nome_opr, "N° AT": f_at_opr,
+        "Disciplina": f_disciplina_opr if f_disciplina_opr != "Todas" else "",
+        "Analista": f_analista_opr if f_analista_opr != "Todos" else "",
+        "Revisão": f_revisao_opr, "Status": f_status_opr if f_status_opr != "Todos" else "",
+        "Situação SLA": f_sla_opr if f_sla_opr != "Todas" else "",
+    }
+
+    meta_rev2_config = float(obter_configuracao("meta_aprovacao_rev2", "80"))
+    tipo_arquivo_map = {"Prestadores": "Prestador", "Cessionários": "Cessionario", "Consolidado": "Consolidado"}
+
+    if tipo_opr_label == "Prestadores":
+        exec_ind = indicadores_executivos(df_prest_opr, "prestador", meta_rev2_config)
+        base_grafico, coluna_nome_g = df_prest_opr, "prestador"
+    elif tipo_opr_label == "Cessionários":
+        exec_ind = indicadores_executivos(df_cess_opr, "cessionario", meta_rev2_config)
+        base_grafico, coluna_nome_g = df_cess_opr, "cessionario"
+    else:
+        exec_prest_ind = indicadores_executivos(df_prest_opr, "prestador", meta_rev2_config)
+        exec_cess_ind = indicadores_executivos(df_cess_opr, "cessionario", meta_rev2_config)
+        exec_ind = combinar_executivos(exec_prest_ind, exec_cess_ind)
+        base_grafico = pd.concat(
+            [df_prest_opr.assign(_nome_opr=df_prest_opr.get("prestador")), df_cess_opr.assign(_nome_opr=df_cess_opr.get("cessionario"))],
+            ignore_index=True,
+        ) if not (df_prest_opr.empty and df_cess_opr.empty) else pd.DataFrame()
+        coluna_nome_g = "_nome_opr"
+
+    doc = novo_documento()
+    cabecalho_institucional_word(
+        doc, f"OPR — {tipo_opr_label} ({nivel_opr})",
+        "GAT 2026 · Controle de Análises Técnicas · Tecnoplano",
+        periodo_label_opr, filtros_dict_opr,
+        usuario.get("nome_completo") or usuario["username"],
+        compacto=True,
+    )
+
+    secao(doc, "Indicadores do período", nivel=2)
+    pares_indicadores = indicadores_resumidos(exec_ind) if nivel_opr == "Resumido" else indicadores_completos(exec_ind)
+    tabela_indicadores_compacta(doc, pares_indicadores, colunas=2 if nivel_opr == "Resumido" else 3)
+
+    if nivel_opr == "Executivo" and not base_grafico.empty:
+        intervalos_g = calcular_intervalos_revisao(base_grafico, coluna_nome_g)
+        meta_rev2_dict = indicadores_meta_rev2(base_grafico, meta_rev2_config)
+        intervalos_validos_g = intervalos_g[intervalos_g["situacao_sla"] != "DATA INCONSISTENTE"] if not intervalos_g.empty else intervalos_g
+        media_interno = pd.to_numeric(base_grafico.get("dias_uteis_decorridos", base_grafico.get("saldo_dias_uteis")), errors="coerce").mean()
+        media_externo = intervalos_validos_g["dias_uteis_retorno"].mean() if not intervalos_validos_g.empty else 0
+
+        figuras_grade = [
+            {"fig": grafico_status_donut(base_grafico, "status_analise", "Distribuição por Status"), "titulo": "Distribuição por Status"},
+            {"fig": grafico_por_revisao(base_grafico), "titulo": "Projetos por Revisão"},
+            {"fig": grafico_aprovacao_rev2(meta_rev2_dict), "titulo": "Aprovação até a REV2"},
+            {"fig": grafico_situacao_sla_externo(intervalos_g), "titulo": "Situação do Retorno Externo (SLA)"},
+            {"fig": grafico_interno_vs_externo(round(media_interno or 0, 1), round(media_externo or 0, 1)), "titulo": "Tempo Médio — Interno x Externo"},
+        ]
+        if not intervalos_g.empty:
+            consolidado_g = consolidado_por_entidade(base_grafico, coluna_nome_g)
+            figuras_grade.append({
+                "fig": grafico_top_atraso_entidades(consolidado_g.assign(media_dias=consolidado_g["media_dias"].fillna(0))),
+                "titulo": "Maiores Gargalos — Retorno Externo",
+            })
+
+        secao(doc, "Gráficos", nivel=2)
+        st.markdown("##### Pré-visualização dos gráficos incluídos no OPR")
+        colunas_preview = st.columns(3)
+        for idx, item in enumerate(figuras_grade):
+            colunas_preview[idx % 3].plotly_chart(item["fig"], use_container_width=True)
+        graficos_em_grade(doc, figuras_grade, colunas=3)
+
+    observacoes_word(doc, "Observações gerenciais", observacoes_opr_texto)
+    rodape_institucional(doc)
+
+    conteudo_word = documento_para_bytes(doc)
+    nome_arquivo_opr = nome_arquivo("OPR", tipo_arquivo_map[tipo_opr_label], *partes_arquivo_periodo)
+
+    st.markdown("##### Documento gerado")
+    if st.download_button(
+        "Baixar OPR (Word)", data=conteudo_word, file_name=nome_arquivo_opr,
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        icon=":material/download:", type="primary", use_container_width=True, key="opr_download_botao",
+    ):
+        registrar_atividade(usuario["username"], usuario.get("perfil"), "OPR_WORD_GERADO", modulo=tipo_opr_label, detalhe=f"{nivel_opr} · {periodo_label_opr}")

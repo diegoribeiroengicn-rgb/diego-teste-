@@ -229,6 +229,36 @@ def grafico_interno_vs_externo(media_interno: float, media_externo: float) -> go
     return _aplicar_layout(fig, "Tempo Médio — Interno x Externo (dias úteis)")
 
 
+def grafico_por_revisao(df: pd.DataFrame, coluna_revisao: str = "revisao") -> go.Figure:
+    """Quantidade de projetos por número de revisão atual — usado no OPR
+    executivo para evidenciar em qual revisão os projetos se concentram."""
+    titulo = "Projetos por Revisão"
+    if df.empty or coluna_revisao not in df.columns:
+        return _aplicar_layout(go.Figure(), titulo)
+    contagem = df[coluna_revisao].dropna().astype(int).value_counts().sort_index()
+    fig = go.Figure(go.Bar(x=[f"REV{r:02d}" for r in contagem.index], y=contagem.values, marker_color=CORES["navy"]))
+    return _aplicar_layout(fig, titulo)
+
+
+def grafico_aprovacao_rev2(meta_rev2: dict) -> go.Figure:
+    """Distribuição dos projetos aprovados por revisão (REV0/REV1/REV2/
+    acima da REV2) frente à meta corporativa de aprovação até a REV2."""
+    titulo = "Aprovação até a REV2"
+    categorias = ["REV0", "REV1", "REV2", "Acima da REV2"]
+    valores = [
+        meta_rev2.get("aprovados_rev0", 0), meta_rev2.get("aprovados_rev1", 0),
+        meta_rev2.get("aprovados_rev2", 0), meta_rev2.get("acima_rev2", 0),
+    ]
+    cores = [CORES["verde"], CORES["lima"], CORES["dourado"], CORES["vermelho"]]
+    fig = go.Figure(go.Bar(x=categorias, y=valores, marker_color=cores))
+    fig.add_annotation(
+        text=f"{meta_rev2.get('percentual_atual', 0)}% até a REV2 (meta: {meta_rev2.get('meta', 80)}%)",
+        xref="paper", yref="paper", x=0.5, y=1.12, showarrow=False,
+        font=dict(size=11, color=CORES["texto_fraco"]),
+    )
+    return _aplicar_layout(fig, titulo)
+
+
 def grafico_disciplina(df: pd.DataFrame, coluna_disciplina: str = "disciplina") -> go.Figure:
     """Distribuição de projetos por disciplina técnica."""
     if df.empty or coluna_disciplina not in df.columns:

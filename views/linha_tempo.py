@@ -143,8 +143,10 @@ def render(usuario: dict) -> None:
         usar_periodo = st.checkbox("Usar período personalizado (em vez de mês/ano)", key="lt_usar_periodo")
         if usar_periodo:
             col9, col10 = st.columns(2)
-            data_inicio = col9.date_input("Data início", value=None, format="DD/MM/YYYY", key="lt_data_inicio")
-            data_fim = col10.date_input("Data fim", value=None, format="DD/MM/YYYY", key="lt_data_fim")
+            st.session_state.setdefault("lt_data_inicio", None)
+            st.session_state.setdefault("lt_data_fim", None)
+            data_inicio = col9.date_input("Data início", format="DD/MM/YYYY", key="lt_data_inicio")
+            data_fim = col10.date_input("Data fim", format="DD/MM/YYYY", key="lt_data_fim")
         else:
             data_inicio = data_fim = None
 

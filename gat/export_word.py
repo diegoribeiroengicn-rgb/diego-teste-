@@ -56,12 +56,17 @@ def novo_documento() -> Document:
     doc = Document()
     estilo_normal = doc.styles["Normal"]
     estilo_normal.font.name = "Calibri"
-    estilo_normal.font.size = Pt(10.5)
+    estilo_normal.font.size = Pt(10)
+    estilo_normal.paragraph_format.space_after = Pt(3)
+    for nivel_titulo in (1, 2, 3):
+        estilo_titulo = doc.styles[f"Heading {nivel_titulo}"]
+        estilo_titulo.paragraph_format.space_before = Pt(6)
+        estilo_titulo.paragraph_format.space_after = Pt(3)
     for secao_doc in doc.sections:
-        secao_doc.left_margin = Cm(2)
-        secao_doc.right_margin = Cm(2)
-        secao_doc.top_margin = Cm(1.8)
-        secao_doc.bottom_margin = Cm(1.8)
+        secao_doc.left_margin = Cm(1.8)
+        secao_doc.right_margin = Cm(1.8)
+        secao_doc.top_margin = Cm(1.3)
+        secao_doc.bottom_margin = Cm(1.3)
     return doc
 
 
@@ -83,32 +88,44 @@ def cabecalho_institucional(
     periodo_label: str,
     filtros_aplicados: dict[str, str] | None,
     usuario_responsavel: str,
+    compacto: bool = False,
 ) -> None:
     """Cabeçalho institucional do relatório: logo, título, subtítulo,
     período selecionado, filtros aplicados, data/hora de geração e usuário
-    responsável — cada um como parágrafo próprio, editável individualmente."""
+    responsável — cada um como parágrafo próprio, editável individualmente.
+    `compacto=True` reduz logo/fontes/espaçamento para relatórios de uma
+    única página (ex.: OPR)."""
     if LOGO_PATH.exists():
-        doc.add_picture(str(LOGO_PATH), width=Cm(4.2))
+        doc.add_picture(str(LOGO_PATH), width=Cm(3.2 if compacto else 4.2))
 
-    _paragrafo(doc, titulo, cor=_NAVY, tamanho=18, negrito=True)
-    _paragrafo(doc, subtitulo, cor=_TEXTO_FRACO, tamanho=10.5)
+    _paragrafo(doc, titulo, cor=_NAVY, tamanho=14 if compacto else 18, negrito=True)
+    _paragrafo(doc, subtitulo, cor=_TEXTO_FRACO, tamanho=9 if compacto else 10.5)
+
+    tamanho_meta = Pt(8.5) if compacto else Pt(10)
 
     p_periodo = doc.add_paragraph()
     p_periodo.add_run("Período selecionado: ").bold = True
     p_periodo.add_run(periodo_label or "Todos os períodos")
+    for run in p_periodo.runs:
+        run.font.size = tamanho_meta
 
     texto_filtros = "; ".join(f"{k}: {v}" for k, v in (filtros_aplicados or {}).items() if v)
     p_filtros = doc.add_paragraph()
     p_filtros.add_run("Filtros aplicados: ").bold = True
     p_filtros.add_run(texto_filtros or "Nenhum filtro adicional aplicado.")
+    for run in p_filtros.runs:
+        run.font.size = tamanho_meta
 
     p_geracao = doc.add_paragraph()
     p_geracao.add_run("Gerado em: ").bold = True
     p_geracao.add_run(datetime.now().strftime("%d/%m/%Y às %H:%M"))
     p_geracao.add_run("    ·    Responsável: ").bold = True
     p_geracao.add_run(usuario_responsavel or "—")
+    for run in p_geracao.runs:
+        run.font.size = tamanho_meta
 
-    doc.add_paragraph()
+    if not compacto:
+        doc.add_paragraph()
 
 
 def secao(doc: Document, titulo: str, nivel: int = 1) -> None:
@@ -137,6 +154,69 @@ def tabela_indicadores(doc: Document, pares: list[tuple[str, object]], titulo: s
         linha.cells[0].text = str(rotulo)
         linha.cells[0].paragraphs[0].runs[0].font.bold = True
         linha.cells[1].text = "—" if valor is None else str(valor)
+    doc.add_paragraph()
+
+
+def tabela_indicadores_compacta(doc: Document, pares: list[tuple[str, object]], titulo: str | None = None, colunas: int = 2) -> None:
+    """Variante compacta da tabela de indicadores: distribui os pares
+    rótulo/valor lado a lado em `colunas` blocos por linha, para caber uma
+    lista mais longa de indicadores em menos espaço vertical (necessário
+    para manter o OPR em uma única página)."""
+    if titulo:
+        secao(doc, titulo, nivel=2)
+    if not pares:
+        paragrafo(doc, "Nenhum indicador disponível para os filtros aplicados.", italico=True)
+        return
+    linhas_necessarias = -(-len(pares) // colunas)
+    tabela = doc.add_table(rows=linhas_necessarias, cols=colunas * 2)
+    tabela.style = _ESTILO_TABELA
+    tabela.autofit = True
+    for idx, (rotulo, valor) in enumerate(pares):
+        linha_idx, bloco_idx = divmod(idx, colunas)
+        celula_rotulo = tabela.rows[linha_idx].cells[bloco_idx * 2]
+        celula_valor = tabela.rows[linha_idx].cells[bloco_idx * 2 + 1]
+        celula_rotulo.text = str(rotulo)
+        run_rotulo = celula_rotulo.paragraphs[0].runs[0]
+        run_rotulo.font.bold = True
+        run_rotulo.font.size = Pt(8.5)
+        celula_valor.text = "—" if valor is None else str(valor)
+        celula_valor.paragraphs[0].runs[0].font.size = Pt(8.5)
+    doc.add_paragraph()
+
+
+def graficos_em_grade(doc: Document, itens: list[dict], colunas: int = 2, largura_cm: float = 7.8) -> None:
+    """Insere vários gráficos lado a lado em uma grade compacta (tabela do
+    Word), em vez de um embaixo do outro — necessário para que o OPR
+    executivo, com vários gráficos, ainda caiba em uma única página. Cada
+    item é `{"fig": go.Figure, "titulo": str, "legenda": str | None}`; cada
+    imagem continua individual (pode ser removida/movida/substituída)."""
+    if not itens:
+        return
+    linhas_necessarias = -(-len(itens) // colunas)
+    tabela = doc.add_table(rows=linhas_necessarias, cols=colunas)
+    tabela.autofit = True
+    for idx, item in enumerate(itens):
+        linha_idx, coluna_idx = divmod(idx, colunas)
+        celula = tabela.rows[linha_idx].cells[coluna_idx]
+        p_titulo = celula.paragraphs[0]
+        run_titulo = p_titulo.add_run(item["titulo"])
+        run_titulo.font.bold = True
+        run_titulo.font.size = Pt(8.5)
+        run_titulo.font.color.rgb = _NAVY
+        p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        imagem_bytes = figura_para_imagem(item["fig"])
+        p_imagem = celula.add_paragraph()
+        p_imagem.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_imagem.add_run().add_picture(io.BytesIO(imagem_bytes), width=Cm(largura_cm))
+
+        if item.get("legenda"):
+            p_legenda = celula.add_paragraph()
+            p_legenda.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run_legenda = p_legenda.add_run(item["legenda"])
+            run_legenda.italic = True
+            run_legenda.font.size = Pt(7)
+            run_legenda.font.color.rgb = _TEXTO_FRACO
     doc.add_paragraph()
 
 
