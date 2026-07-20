@@ -43,6 +43,61 @@ def classificar_nota(nota: int) -> tuple[str, str]:
     return "FORA DA ESCALA", "Nota fora da escala oficial (1 a 15)."
 
 
+def classificar_checklist(pontuacao: int) -> tuple[str, str]:
+    """
+    Classifica a pontuação do checklist de avaliação (soma de respostas
+    "SIM" entre as 15 perguntas, 0 a 15) usando as mesmas faixas de
+    `classificar_nota`. Uma pontuação 0 (nenhum "SIM") é tratada como
+    CRÍTICO — a escala oficial começa em 1, mas 0 é ainda mais grave.
+    """
+    if pontuacao == 0:
+        return classificar_nota(1)
+    return classificar_nota(pontuacao)
+
+
+def pontuar_checklist(respostas: dict[str, dict[str, str]]) -> int:
+    """Soma quantas perguntas do checklist foram respondidas "SIM"
+    (N/A e "NÃO" não pontuam)."""
+    return sum(1 for r in respostas.values() if r.get("resposta") == "SIM")
+
+
+def marcar_avaliacao_obrigatoria(
+    df: pd.DataFrame, tipo_entidade: str, coluna_nome: str, coluna_codigo: str
+) -> pd.Series:
+    """
+    Indica, por linha, se a avaliação (checklist) daquele projeto é
+    obrigatória e ainda está pendente: a regra de negócio é que a avaliação
+    deve acontecer exatamente na Revisão 1 (não antes, não depois — a
+    partir da REV2 o sinalizador não é mais exibido, mesmo que a avaliação
+    continue ausente) e é específica por disciplina (um mesmo prestador/
+    cessionário pode ter disciplinas diferentes, cada uma com sua própria
+    necessidade de avaliação).
+    """
+    from gat.database import listar_avaliacoes_checklist
+
+    if df.empty:
+        return pd.Series(dtype=bool)
+    avaliadas = listar_avaliacoes_checklist(tipo_entidade)
+    if avaliadas.empty:
+        chaves_avaliadas: set[tuple[str, str]] = set()
+    else:
+        chave_entidade = avaliadas["codigo_entidade"].fillna(avaliadas["nome_entidade"])
+        chaves_avaliadas = set(zip(chave_entidade, avaliadas["disciplina"].fillna("")))
+
+    def _pendente(row: pd.Series) -> bool:
+        try:
+            if int(row.get("revisao") or 0) != 1:
+                return False
+        except (TypeError, ValueError):
+            return False
+        codigo = row.get(coluna_codigo)
+        nome = row.get(coluna_nome)
+        chave = (codigo if codigo else nome, row.get("disciplina") or "")
+        return chave not in chaves_avaliadas
+
+    return df.apply(_pendente, axis=1)
+
+
 def calcular_sla_cessionario(tipo: str, revisao: int) -> int:
     """
     Determina o SLA (em dias úteis) de uma análise de cessionário, com base
@@ -83,6 +138,43 @@ def status_entrega_cessionario(data_solicitacao, data_analise, hold_dias: int, s
     else:
         status = "ATRASADO"
     return status, saldo
+
+
+SITUACAO_PRAZO_CORES = {
+    "DENTRO DO PRAZO": "verde",
+    "VENCE EM BREVE": "dourado",
+    "VENCE HOJE": "laranja",
+    "ATRASADO": "vermelho",
+}
+_LIMIAR_VENCE_EM_BREVE_DIAS_UTEIS = 2
+
+
+def situacao_prazo(dias_restantes: int | None) -> str:
+    """
+    Classifica a situação do prazo em 4 níveis (para o badge visual):
+    DENTRO DO PRAZO (verde) / VENCE EM BREVE (amarelo, últimos 2 dias úteis)
+    / VENCE HOJE (laranja) / ATRASADO (vermelho). `dias_restantes` é
+    SLA - dias decorridos (Prestadores) ou o saldo de dias úteis
+    (Cessionários) — positivo significa que ainda há prazo.
+    """
+    if dias_restantes is None:
+        return "DENTRO DO PRAZO"
+    if dias_restantes < 0:
+        return "ATRASADO"
+    if dias_restantes == 0:
+        return "VENCE HOJE"
+    if dias_restantes <= _LIMIAR_VENCE_EM_BREVE_DIAS_UTEIS:
+        return "VENCE EM BREVE"
+    return "DENTRO DO PRAZO"
+
+
+def acima_da_meta_revisao(revisao: int | None) -> bool:
+    """True quando a revisão do projeto já ultrapassou a meta corporativa
+    (acima da REV2) — usado para o destaque visual específico."""
+    try:
+        return int(revisao or 0) > META_REVISAO_APROVACAO
+    except (TypeError, ValueError):
+        return False
 
 
 def is_cancelado(status_analise: str) -> bool:

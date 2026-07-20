@@ -23,6 +23,7 @@ import pandas as pd
 from gat.config import (
     APP_VERSION,
     AREAS_PERMISSAO,
+    AREAS_RESTRITAS_PADRAO_BLOQUEADO,
     BACKUP_DIR,
     DB_PATH,
     MAX_BACKUPS,
@@ -86,6 +87,7 @@ COLUNAS_AVALIACOES = [
 CONFIGURACOES_PADRAO = {
     "pep_dias_atencao": "3",
     "pep_dias_critico": "6",
+    "meta_aprovacao_rev2": "80",
 }
 
 
@@ -197,8 +199,19 @@ def _migracao_0001_indices_busca(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cessionarios_nome ON cessionarios(cessionario)")
 
 
+def _migracao_0002_indices_avaliacoes_alertas(conn: sqlite3.Connection) -> None:
+    """Índices para o ajuste consolidado: avaliações (checklist e analistas),
+    alertas com radar e histórico de atividades por login."""
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_avaliacoes_checklist_entidade ON avaliacoes_checklist(tipo_entidade, codigo_entidade, disciplina)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_avaliacoes_checklist_projeto ON avaliacoes_checklist(projeto_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_avaliacoes_analistas_periodo ON avaliacoes_analistas(analista, ano, mes)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_alertas_radar_projeto ON alertas_radar(modulo, projeto_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_atividades_usuario_periodo ON atividades_usuario(usuario, data_hora)")
+
+
 _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (1, "Índices de busca por N° AT e nome em Prestadores e Cessionários", _migracao_0001_indices_busca),
+    (2, "Índices para avaliações (checklist/analistas), alertas com radar e histórico de atividades", _migracao_0002_indices_avaliacoes_alertas),
 ]
 
 
@@ -433,6 +446,64 @@ def init_db() -> None:
                 descricao TEXT NOT NULL,
                 status TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS avaliacoes_checklist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tipo_entidade TEXT NOT NULL,
+                codigo_entidade TEXT,
+                nome_entidade TEXT NOT NULL,
+                disciplina TEXT,
+                projeto_id INTEGER,
+                at_referencia TEXT,
+                revisao INTEGER,
+                data_avaliacao TEXT NOT NULL,
+                analista_responsavel TEXT,
+                respostas_json TEXT NOT NULL,
+                pontuacao INTEGER NOT NULL,
+                classificacao TEXT NOT NULL,
+                acompanhamento TEXT NOT NULL,
+                observacoes_gerais TEXT,
+                criado_em TEXT NOT NULL,
+                criado_por TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS avaliacoes_analistas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                analista TEXT NOT NULL,
+                avaliador TEXT,
+                mes INTEGER NOT NULL,
+                ano INTEGER NOT NULL,
+                etg INTEGER, horario INTEGER, reunioes INTEGER, disponibilidade INTEGER,
+                conhecimento_tecnico INTEGER, produtividade INTEGER, qualidade INTEGER,
+                qtd_documentos INTEGER, qtd_ats INTEGER, prazos INTEGER,
+                organizacao INTEGER, colaboracao INTEGER, comunicacao INTEGER,
+                justificativa TEXT,
+                observacoes TEXT,
+                criado_em TEXT NOT NULL,
+                criado_por TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS alertas_radar (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                modulo TEXT NOT NULL,
+                projeto_id INTEGER NOT NULL,
+                tipo_alerta TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'ATIVO',
+                justificativa TEXT,
+                atualizado_em TEXT NOT NULL,
+                atualizado_por TEXT,
+                UNIQUE(modulo, projeto_id, tipo_alerta)
+            );
+
+            CREATE TABLE IF NOT EXISTS atividades_usuario (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                usuario TEXT NOT NULL,
+                perfil TEXT,
+                tipo_evento TEXT NOT NULL,
+                modulo TEXT,
+                detalhe TEXT,
+                data_hora TEXT NOT NULL
+            );
             """
         )
 
@@ -469,6 +540,22 @@ def init_db() -> None:
             ).fetchone()
             if not tem_permissoes:
                 _semear_permissoes_perfil(conn, linha["id"], PERFIL_ADMIN)
+
+        # Áreas sensíveis introduzidas neste ajuste (notas de analistas, edição
+        # de avaliações, exportação de OPR, histórico de atividades) começam
+        # BLOQUEADAS por padrão para usuários já existentes — ao contrário do
+        # fallback geral (`.get(area, True)`), que abriria acesso por omissão.
+        # O administrador concede manualmente quem pode acessá-las.
+        for linha in conn.execute("SELECT id FROM usuarios WHERE perfil != ?", (PERFIL_ADMIN,)).fetchall():
+            for area in AREAS_RESTRITAS_PADRAO_BLOQUEADO:
+                ja_definida = conn.execute(
+                    "SELECT 1 FROM permissoes_area WHERE usuario_id = ? AND area = ?", (linha["id"], area)
+                ).fetchone()
+                if not ja_definida:
+                    conn.execute(
+                        "INSERT INTO permissoes_area (usuario_id, area, permitido) VALUES (?, ?, 0)",
+                        (linha["id"], area),
+                    )
 
         _semear_configuracoes_padrao(conn)
 
@@ -1110,3 +1197,203 @@ def obter_plano_acao(plano_id: int) -> dict[str, Any] | None:
     with _conectar() as conn:
         linha = conn.execute("SELECT * FROM planos_acao WHERE id = ?", (plano_id,)).fetchone()
         return dict(linha) if linha else None
+
+
+# ---------------------------------------------------------------------------
+# Avaliação de Prestadores/Cessionários (checklist)
+# ---------------------------------------------------------------------------
+
+COLUNAS_AVALIACAO_CHECKLIST = [
+    "tipo_entidade", "codigo_entidade", "nome_entidade", "disciplina", "projeto_id",
+    "at_referencia", "revisao", "data_avaliacao", "analista_responsavel",
+    "respostas_json", "pontuacao", "classificacao", "acompanhamento", "observacoes_gerais",
+]
+
+
+def inserir_avaliacao_checklist(dados: dict[str, Any], usuario: str) -> int:
+    agora = datetime.now().isoformat()
+    with _conectar() as conn:
+        cursor = conn.execute(
+            "INSERT INTO avaliacoes_checklist ("
+            + ", ".join(COLUNAS_AVALIACAO_CHECKLIST)
+            + ", criado_em, criado_por) VALUES ("
+            + ", ".join(["?"] * len(COLUNAS_AVALIACAO_CHECKLIST))
+            + ", ?, ?)",
+            (*[dados.get(c) for c in COLUNAS_AVALIACAO_CHECKLIST], agora, usuario),
+        )
+        _registrar_historico(conn, "avaliacoes_checklist", cursor.lastrowid, {}, dados, usuario)
+        return cursor.lastrowid
+
+
+def atualizar_avaliacao_checklist(avaliacao_id: int, dados: dict[str, Any], usuario: str) -> None:
+    with _conectar() as conn:
+        antigo = conn.execute("SELECT * FROM avaliacoes_checklist WHERE id = ?", (avaliacao_id,)).fetchone()
+        antigo_dict = dict(antigo) if antigo else {}
+        campos = {c: dados.get(c) for c in COLUNAS_AVALIACAO_CHECKLIST}
+        set_clause = ", ".join(f"{c} = ?" for c in campos)
+        conn.execute(
+            f"UPDATE avaliacoes_checklist SET {set_clause} WHERE id = ?",
+            (*campos.values(), avaliacao_id),
+        )
+        _registrar_historico(conn, "avaliacoes_checklist", avaliacao_id, antigo_dict, campos, usuario)
+
+
+def listar_avaliacoes_checklist(tipo_entidade: str | None = None) -> pd.DataFrame:
+    with _conectar() as conn:
+        if tipo_entidade:
+            return pd.read_sql_query(
+                "SELECT * FROM avaliacoes_checklist WHERE tipo_entidade = ? ORDER BY data_avaliacao DESC",
+                conn, params=(tipo_entidade,),
+            )
+        return pd.read_sql_query("SELECT * FROM avaliacoes_checklist ORDER BY data_avaliacao DESC", conn)
+
+
+def obter_avaliacao_checklist(avaliacao_id: int) -> dict[str, Any] | None:
+    with _conectar() as conn:
+        linha = conn.execute("SELECT * FROM avaliacoes_checklist WHERE id = ?", (avaliacao_id,)).fetchone()
+        return dict(linha) if linha else None
+
+
+def existe_avaliacao_checklist(tipo_entidade: str, codigo_entidade: str | None, nome_entidade: str, disciplina: str | None) -> bool:
+    """Usado para o indicador de avaliação obrigatória na REV1: True se já existe
+    ao menos uma avaliação para esta combinação entidade + disciplina."""
+    with _conectar() as conn:
+        if codigo_entidade:
+            linha = conn.execute(
+                "SELECT 1 FROM avaliacoes_checklist WHERE tipo_entidade = ? AND codigo_entidade = ? "
+                "AND COALESCE(disciplina, '') = COALESCE(?, '') LIMIT 1",
+                (tipo_entidade, codigo_entidade, disciplina),
+            ).fetchone()
+        else:
+            linha = conn.execute(
+                "SELECT 1 FROM avaliacoes_checklist WHERE tipo_entidade = ? AND nome_entidade = ? "
+                "AND COALESCE(disciplina, '') = COALESCE(?, '') LIMIT 1",
+                (tipo_entidade, nome_entidade, disciplina),
+            ).fetchone()
+        return linha is not None
+
+
+# ---------------------------------------------------------------------------
+# Avaliação (nota) dos Analistas — restrita
+# ---------------------------------------------------------------------------
+
+COLUNAS_AVALIACAO_ANALISTA = [
+    "analista", "avaliador", "mes", "ano", "etg", "horario", "reunioes", "disponibilidade",
+    "conhecimento_tecnico", "produtividade", "qualidade", "qtd_documentos", "qtd_ats",
+    "prazos", "organizacao", "colaboracao", "comunicacao", "justificativa", "observacoes",
+]
+
+
+def inserir_avaliacao_analista(dados: dict[str, Any], usuario: str) -> int:
+    agora = datetime.now().isoformat()
+    with _conectar() as conn:
+        cursor = conn.execute(
+            "INSERT INTO avaliacoes_analistas ("
+            + ", ".join(COLUNAS_AVALIACAO_ANALISTA)
+            + ", criado_em, criado_por) VALUES ("
+            + ", ".join(["?"] * len(COLUNAS_AVALIACAO_ANALISTA))
+            + ", ?, ?)",
+            (*[dados.get(c) for c in COLUNAS_AVALIACAO_ANALISTA], agora, usuario),
+        )
+        _registrar_historico(conn, "avaliacoes_analistas", cursor.lastrowid, {}, dados, usuario)
+        return cursor.lastrowid
+
+
+def atualizar_avaliacao_analista(avaliacao_id: int, dados: dict[str, Any], usuario: str) -> None:
+    with _conectar() as conn:
+        antigo = conn.execute("SELECT * FROM avaliacoes_analistas WHERE id = ?", (avaliacao_id,)).fetchone()
+        antigo_dict = dict(antigo) if antigo else {}
+        campos = {c: dados.get(c) for c in COLUNAS_AVALIACAO_ANALISTA}
+        set_clause = ", ".join(f"{c} = ?" for c in campos)
+        conn.execute(
+            f"UPDATE avaliacoes_analistas SET {set_clause} WHERE id = ?",
+            (*campos.values(), avaliacao_id),
+        )
+        _registrar_historico(conn, "avaliacoes_analistas", avaliacao_id, antigo_dict, campos, usuario)
+
+
+def listar_avaliacoes_analistas(analista: str | None = None) -> pd.DataFrame:
+    with _conectar() as conn:
+        if analista:
+            return pd.read_sql_query(
+                "SELECT * FROM avaliacoes_analistas WHERE analista = ? ORDER BY ano DESC, mes DESC",
+                conn, params=(analista,),
+            )
+        return pd.read_sql_query("SELECT * FROM avaliacoes_analistas ORDER BY ano DESC, mes DESC", conn)
+
+
+# ---------------------------------------------------------------------------
+# Alertas — radar (retirar/reativar)
+# ---------------------------------------------------------------------------
+
+
+def status_radar(modulo: str, projeto_id: int, tipo_alerta: str) -> str:
+    with _conectar() as conn:
+        linha = conn.execute(
+            "SELECT status FROM alertas_radar WHERE modulo = ? AND projeto_id = ? AND tipo_alerta = ?",
+            (modulo, projeto_id, tipo_alerta),
+        ).fetchone()
+        return linha["status"] if linha else "ATIVO"
+
+
+def retirar_do_radar(modulo: str, projeto_id: int, tipo_alerta: str, justificativa: str, usuario: str) -> None:
+    agora = datetime.now().isoformat()
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO alertas_radar (modulo, projeto_id, tipo_alerta, status, justificativa, atualizado_em, atualizado_por) "
+            "VALUES (?, ?, ?, 'RETIRADO', ?, ?, ?) "
+            "ON CONFLICT(modulo, projeto_id, tipo_alerta) DO UPDATE SET status = 'RETIRADO', justificativa = excluded.justificativa, "
+            "atualizado_em = excluded.atualizado_em, atualizado_por = excluded.atualizado_por",
+            (modulo, projeto_id, tipo_alerta, justificativa, agora, usuario),
+        )
+        _registrar_historico(conn, "alertas_radar", projeto_id, {"status": "ATIVO"}, {"status": "RETIRADO", "justificativa": justificativa}, usuario)
+
+
+def reativar_no_radar(modulo: str, projeto_id: int, tipo_alerta: str, usuario: str) -> None:
+    agora = datetime.now().isoformat()
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO alertas_radar (modulo, projeto_id, tipo_alerta, status, atualizado_em, atualizado_por) "
+            "VALUES (?, ?, ?, 'ATIVO', ?, ?) "
+            "ON CONFLICT(modulo, projeto_id, tipo_alerta) DO UPDATE SET status = 'ATIVO', "
+            "atualizado_em = excluded.atualizado_em, atualizado_por = excluded.atualizado_por",
+            (modulo, projeto_id, tipo_alerta, agora, usuario),
+        )
+        _registrar_historico(conn, "alertas_radar", projeto_id, {"status": "RETIRADO"}, {"status": "ATIVO"}, usuario)
+
+
+def listar_radar() -> pd.DataFrame:
+    with _conectar() as conn:
+        return pd.read_sql_query("SELECT * FROM alertas_radar ORDER BY atualizado_em DESC", conn)
+
+
+# ---------------------------------------------------------------------------
+# Histórico de atividades por login
+# ---------------------------------------------------------------------------
+
+
+def registrar_atividade(usuario: str, perfil: str | None, tipo_evento: str, modulo: str | None = None, detalhe: str | None = None) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO atividades_usuario (usuario, perfil, tipo_evento, modulo, detalhe, data_hora) VALUES (?, ?, ?, ?, ?, ?)",
+            (usuario, perfil, tipo_evento, modulo, detalhe, datetime.now().isoformat()),
+        )
+
+
+def listar_atividades(
+    usuario: str | None = None, tipo_evento: str | None = None, modulo: str | None = None,
+) -> pd.DataFrame:
+    with _conectar() as conn:
+        query = "SELECT * FROM atividades_usuario WHERE 1=1"
+        params: list[Any] = []
+        if usuario:
+            query += " AND usuario = ?"
+            params.append(usuario)
+        if tipo_evento:
+            query += " AND tipo_evento = ?"
+            params.append(tipo_evento)
+        if modulo:
+            query += " AND modulo = ?"
+            params.append(modulo)
+        query += " ORDER BY data_hora DESC"
+        return pd.read_sql_query(query, conn, params=params)

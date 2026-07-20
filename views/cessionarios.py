@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
-from gat.business_rules import enriquecer_cessionarios, filtrar_por_competencia
+from gat.business_rules import (
+    acima_da_meta_revisao,
+    enriquecer_cessionarios,
+    filtrar_por_competencia,
+    marcar_avaliacao_obrigatoria,
+    situacao_prazo,
+)
 from gat.config import COLUNAS_EXIBICAO_CESSIONARIOS, RESPONSAVEIS, STATUS_ANALISE_OPCOES, TIPO_CESSIONARIO_OPCOES
 from gat.database import listar_cessionarios, obter_cessionario
 from gat.permissions import exigir_area, exigir_modulo, pode_area
@@ -13,6 +20,28 @@ from gat.ui.modals import dialog_cessionario
 from gat.ui.tables import tabela_com_edicao
 
 SITUACAO_PEP_OPCOES = ["Todos", "Com PEP", "Sem PEP"]
+
+_ICONE_SITUACAO_PRAZO = {
+    "DENTRO DO PRAZO": "🟢",
+    "VENCE EM BREVE": "🟡",
+    "VENCE HOJE": "🟠",
+    "ATRASADO": "🔴",
+}
+_LABEL_SITUACAO_PRAZO = {
+    "DENTRO DO PRAZO": "Dentro do prazo",
+    "VENCE EM BREVE": "Vence em breve",
+    "VENCE HOJE": "Vence hoje",
+    "ATRASADO": "Atrasado",
+}
+
+
+def _rotulo_situacao_prazo(dias_restantes, revisao) -> str:
+    chave = situacao_prazo(int(dias_restantes) if pd.notna(dias_restantes) else None)
+    rotulo = f"{_ICONE_SITUACAO_PRAZO[chave]} {_LABEL_SITUACAO_PRAZO[chave]}"
+    if acima_da_meta_revisao(revisao):
+        rotulo += " · 🟣 Acima da REV2"
+    return rotulo
+
 
 _CHAVES_FILTRO = [
     "filtro_cess_resp", "filtro_cess_status", "filtro_cess_tipo",
@@ -103,8 +132,16 @@ def render(usuario: dict) -> None:
 
     st.caption(f"{len(df_filtrado)} registro(s) encontrados. Ordenação padrão: Item (ordem de chegada).")
 
+    df_filtrado["_avaliacao_pendente"] = marcar_avaliacao_obrigatoria(df_filtrado, "CESSIONARIO", "cessionario", "codigo")
+    df_filtrado["Avaliação"] = df_filtrado["_avaliacao_pendente"].map(
+        {True: "🔴 Obrigatória (REV1)", False: ""}
+    )
+    df_filtrado["Situação do Prazo"] = df_filtrado.apply(
+        lambda r: _rotulo_situacao_prazo(r["saldo_dias_uteis"], r.get("revisao")), axis=1
+    )
+
     colunas = list(COLUNAS_EXIBICAO_CESSIONARIOS.keys())
-    df_exibicao = df_filtrado[colunas].rename(columns=COLUNAS_EXIBICAO_CESSIONARIOS)
+    df_exibicao = df_filtrado[[*colunas[:3], "Avaliação", "Situação do Prazo", *colunas[3:]]].rename(columns=COLUNAS_EXIBICAO_CESSIONARIOS)
 
     def _abrir_edicao(registro: dict) -> None:
         exigir_area(usuario, "cessionarios.editar")

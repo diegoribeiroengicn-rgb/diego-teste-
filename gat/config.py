@@ -179,6 +179,72 @@ CORES_CLASSIFICACAO_AVALIACAO = {
     "CRÍTICO": CORES["vermelho"],
 }
 
+# Checklist de avaliação de Prestadores/Cessionários (15 perguntas Sim/Não/N-A,
+# agrupadas nas 5 categorias do modelo Tecnoplano). A pontuação (soma de
+# respostas "SIM", 0 a 15) usa as mesmas faixas de FAIXAS_AVALIACAO acima.
+CHECKLIST_AVALIACAO = {
+    "Qualidade de Projeto": [
+        ("qp_projeto_completo", "Projeto completo"),
+        ("qp_definicao_solucoes", "Definição clara das soluções"),
+        ("qp_qualidade_representacao", "Boa qualidade de representação"),
+    ],
+    "Manuais e Normas": [
+        ("mn_aderencia_manuais", "Aderência aos manuais internos"),
+        ("mn_atendimento_normas", "Atendimento às normas técnicas"),
+        ("mn_adequacao_levantamento", "Adequação aos materiais de levantamento fornecidos"),
+    ],
+    "Documentação Geral": [
+        ("dg_jogo_completo_mesma_data", "Submissão do jogo completo na mesma data, em PDF e DWG"),
+        ("dg_carimbo_codificacao", "Carimbo e codificação conforme procedimento"),
+        ("dg_prazo_entre_revisoes", "Prazo razoável entre revisões"),
+    ],
+    "Revisões": [
+        ("rv_atendimento_50pct_at", "Atendimento de pelo menos 50% dos itens da AT"),
+        ("rv_compatibilizacao", "Compatibilização entre arquitetura e projetos complementares"),
+        ("rv_consistencia_revisoes", "Consistência entre revisões"),
+    ],
+    "Comunicação": [
+        ("cm_participacao_reunioes", "Participação efetiva em reuniões"),
+        ("cm_alteracoes_evidenciadas", "Alterações evidenciadas conforme solicitado"),
+        ("cm_justificativa_plausivel", "Justificativa plausível para itens não atendidos"),
+    ],
+}
+RESPOSTA_CHECKLIST_OPCOES = ["SIM", "NÃO", "N/A"]
+ACOMPANHAMENTO_POR_FAIXA = {
+    "EXCELENTE": "Não demanda acompanhamento",
+    "BOM": "Não demanda acompanhamento",
+    "REGULAR": "Demanda acompanhamento",
+    "BAIXO": "Demanda acompanhamento",
+    "CRÍTICO": "Demanda atenção e acompanhamento",
+}
+TIPO_ENTIDADE_AVALIACAO = ["PRESTADOR", "CESSIONARIO"]
+
+# ---------------------------------------------------------------------------
+# Avaliação (nota) dos Analistas — módulo restrito, separado da produtividade
+# ---------------------------------------------------------------------------
+ESCALA_AVALIACAO_ANALISTA = {
+    1: "Insuficiente",
+    2: "Abaixo do esperado",
+    3: "Dentro do esperado",
+    4: "Bom",
+    5: "Excelente",
+}
+CRITERIOS_AVALIACAO_ANALISTA = [
+    ("etg", "Apontamento de ETG"),
+    ("horario", "Cumprimento de horário"),
+    ("reunioes", "Comparecimento em reuniões"),
+    ("disponibilidade", "Disponibilidade"),
+    ("conhecimento_tecnico", "Conhecimento técnico"),
+    ("produtividade", "Produtividade"),
+    ("qualidade", "Qualidade das análises"),
+    ("qtd_documentos", "Quantidade de documentos gerados"),
+    ("qtd_ats", "Quantidade de ATs"),
+    ("prazos", "Cumprimento de prazos"),
+    ("organizacao", "Organização"),
+    ("colaboracao", "Colaboração"),
+    ("comunicacao", "Comunicação"),
+]
+
 PRIORIDADE_OPCOES = ["BAIXA", "NORMAL", "ALTA"]
 
 MESES_PT = [
@@ -299,11 +365,32 @@ AREAS_PERMISSAO = {
     "alertas": "Acessar Central de Alertas",
     "lembretes": "Acessar Lembretes (Sem PEP)",
     "reunioes": "Acessar Reuniões e Planos de Ação",
-    "analistas": "Acessar dados dos analistas (desempenho/avaliação)",
+    "analistas": "Analistas — Visualizar módulo e estatísticas",
+    "analistas.notas": "Analistas — Visualizar notas/avaliações",
+    "analistas.avaliar": "Analistas — Inserir/editar avaliações",
+    "analistas.relatorios": "Analistas — Gerar relatórios/exportar",
+    "avaliacoes.editar": "Avaliação de Prestadores/Cessionários — Editar",
+    "avaliacoes.relatorios": "Avaliação de Prestadores/Cessionários — Relatórios/exportar",
+    "opr.prestadores": "OPR — Prestadores",
+    "opr.cessionarios": "OPR — Cessionários",
+    "opr.consolidado": "OPR — Consolidado",
+    "opr.exportar": "OPR — Exportar (PDF/Word)",
+    "linha_tempo": "Linha do Tempo — Visualizar/exportar",
+    "historico_atividades": "Histórico de Atividades por Login",
     "configuracoes": "Acessar Configurações",
     "auditoria": "Acessar Auditoria",
     "administrar_usuarios": "Administrar usuários",
 }
+
+# Áreas sensíveis que, para usuários já existentes (sem uma escolha explícita
+# do administrador ainda), começam BLOQUEADAS por padrão — ao contrário do
+# comportamento geral do sistema (área sem registro = liberada). Usado na
+# migração de backfill em `gat/database.py::init_db`.
+AREAS_RESTRITAS_PADRAO_BLOQUEADO = [
+    "analistas.notas", "analistas.avaliar", "analistas.relatorios",
+    "avaliacoes.editar", "avaliacoes.relatorios",
+    "opr.exportar", "historico_atividades",
+]
 
 # Templates padrão de permissão por perfil — usados apenas como ponto de
 # partida ao criar um usuário; a partir daí, as permissões viram
@@ -337,6 +424,17 @@ PERFIS_PADRAO: dict[str, dict[str, dict[str, bool]]] = {
             "lembretes": True,
             "reunioes": True,
             "analistas": True,
+            "analistas.notas": False,
+            "analistas.avaliar": False,
+            "analistas.relatorios": False,
+            "avaliacoes.editar": False,
+            "avaliacoes.relatorios": False,
+            "opr.prestadores": True,
+            "opr.cessionarios": True,
+            "opr.consolidado": True,
+            "opr.exportar": False,
+            "linha_tempo": True,
+            "historico_atividades": False,
             "configuracoes": False,
             "auditoria": False,
             "administrar_usuarios": False,
@@ -361,6 +459,17 @@ PERFIS_PADRAO: dict[str, dict[str, dict[str, bool]]] = {
             "lembretes": True,
             "reunioes": True,
             "analistas": True,
+            "analistas.notas": False,
+            "analistas.avaliar": False,
+            "analistas.relatorios": False,
+            "avaliacoes.editar": False,
+            "avaliacoes.relatorios": False,
+            "opr.prestadores": True,
+            "opr.cessionarios": True,
+            "opr.consolidado": True,
+            "opr.exportar": False,
+            "linha_tempo": True,
+            "historico_atividades": False,
             "configuracoes": False,
             "auditoria": False,
             "administrar_usuarios": False,
