@@ -167,6 +167,68 @@ def gauge_sla(percentual_cumprido: float, titulo: str = "SLA Cumprido") -> go.Fi
     return _aplicar_layout(fig, titulo)
 
 
+def grafico_situacao_sla_externo(intervalos: pd.DataFrame) -> go.Figure:
+    """Rosca com a distribuição dos intervalos entre revisões por situação
+    de SLA externo (Dentro do SLA / Próximo do limite / No limite / Fora do
+    SLA) — consolidado por código na Linha do Tempo."""
+    from gat.revisoes import SITUACAO_SLA_EXTERNO_CORES
+
+    mapa_cores = {situacao: CORES[chave] for situacao, chave in SITUACAO_SLA_EXTERNO_CORES.items()}
+    return grafico_status_donut(intervalos, "situacao_sla", "Situação do Retorno Externo (SLA)", mapa_cores)
+
+
+def grafico_evolucao_mensal_retorno(intervalos: pd.DataFrame) -> go.Figure:
+    """Evolução mensal do tempo médio de retorno externo (dias úteis),
+    tomando a data de entrada da revisão atual como referência temporal."""
+    titulo = "Evolução Mensal — Tempo Médio de Retorno Externo"
+    if intervalos.empty:
+        return _aplicar_layout(go.Figure(), titulo)
+    datas = pd.to_datetime(intervalos["data_entrada_atual"], errors="coerce")
+    serie = intervalos.assign(_periodo=datas.dt.to_period("M")).dropna(subset=["_periodo"])
+    if serie.empty:
+        return _aplicar_layout(go.Figure(), titulo)
+    agrupado = serie.groupby("_periodo")["dias_uteis_retorno"].mean().sort_index()
+    rotulos = [_rotulo_ano_mes(p.year, p.month) for p in agrupado.index]
+    fig = go.Figure(go.Scatter(x=rotulos, y=agrupado.values.round(1), mode="lines+markers", line=dict(color=CORES["navy"])))
+    fig.add_hline(y=10, line_dash="dash", line_color=CORES["vermelho"], annotation_text="SLA (10 dias úteis)")
+    return _aplicar_layout(fig, titulo)
+
+
+def grafico_projetos_por_revisao(intervalos: pd.DataFrame) -> go.Figure:
+    """Quantidade de intervalos calculados por número da revisão atual —
+    evidencia em qual revisão os projetos mais concentram atraso no
+    reenvio."""
+    titulo = "Projetos por Revisão"
+    if intervalos.empty:
+        return _aplicar_layout(go.Figure(), titulo)
+    contagem = intervalos["revisao_atual"].value_counts().sort_index()
+    fig = go.Figure(go.Bar(x=[f"REV{int(r):02d}" for r in contagem.index], y=contagem.values, marker_color=CORES["azul_2"]))
+    return _aplicar_layout(fig, titulo)
+
+
+def grafico_top_atraso_entidades(resumo_codigo: pd.DataFrame, top_n: int = 10) -> go.Figure:
+    """Ranking dos Prestadores/Cessionários (por código) com maior tempo
+    médio de retorno externo — os principais gargalos."""
+    titulo = "Maior Tempo Médio de Retorno Externo (dias úteis)"
+    if resumo_codigo.empty:
+        return _aplicar_layout(go.Figure(), titulo)
+    top = resumo_codigo.sort_values("media_dias", ascending=False).head(top_n).sort_values("media_dias")
+    rotulos = [f"{r['codigo'] or r['nome']} — {r['nome']}" for _, r in top.iterrows()]
+    fig = go.Figure(go.Bar(x=top["media_dias"], y=rotulos, orientation="h", marker_color=CORES["laranja"]))
+    return _aplicar_layout(fig, titulo)
+
+
+def grafico_interno_vs_externo(media_interno: float, media_externo: float) -> go.Figure:
+    """Comparação entre o tempo médio de análise interna (Tecnoplano) e o
+    tempo médio de retorno externo (Prestador/Cessionário)."""
+    fig = go.Figure(go.Bar(
+        x=["Análise interna (Tecnoplano)", "Retorno externo (Prestador/Cessionário)"],
+        y=[media_interno, media_externo],
+        marker_color=[CORES["navy"], CORES["laranja"]],
+    ))
+    return _aplicar_layout(fig, "Tempo Médio — Interno x Externo (dias úteis)")
+
+
 def grafico_disciplina(df: pd.DataFrame, coluna_disciplina: str = "disciplina") -> go.Figure:
     """Distribuição de projetos por disciplina técnica."""
     if df.empty or coluna_disciplina not in df.columns:
