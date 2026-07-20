@@ -120,6 +120,11 @@ if pode_modulo(usuario, "cessionarios"):
     if pode_area(usuario, "dashboard"):
         grupo_cessionarios.append(_pagina(lambda: cessionarios_dashboard.render(usuario), "Dashboard", ":material/dashboard:", "cessionarios_dashboard"))
     grupo_cessionarios.append(_pagina(lambda: cessionarios.render(usuario), "Projetos", ":material/store:", "cessionarios_projetos"))
+    # A tela de Avaliação cobre Prestadores e Cessionários numa única view —
+    # já aparece no grupo Prestadores quando esse módulo está liberado; aqui
+    # só é adicionada para não deixar um usuário só-Cessionários sem acesso.
+    if pode_area(usuario, "avaliacoes.visualizar") and not pode_modulo(usuario, "prestadores"):
+        grupo_cessionarios.append(_pagina(lambda: avaliacao_prestadores.render(usuario), "Avaliação", ":material/grade:", "cessionarios_avaliacao"))
     paginas["Cessionários"] = grupo_cessionarios
 
 if pode_modulo(usuario, "consolidado"):

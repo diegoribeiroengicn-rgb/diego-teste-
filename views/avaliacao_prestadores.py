@@ -1,4 +1,5 @@
-"""View: Avaliação de Prestadores (baseado em Avaliacao_Prestadores_GAT.xlsx)."""
+"""View: Avaliação de Prestadores e Cessionários (checklist + histórico do
+modelo de nota simples, baseado em Avaliacao_Prestadores_GAT.xlsx)."""
 
 from __future__ import annotations
 
@@ -7,31 +8,123 @@ import streamlit as st
 
 from gat.business_rules import classificar_nota, filtrar_por_competencia
 from gat.config import COLUNAS_EXIBICAO_AVALIACOES, CORES_CLASSIFICACAO_AVALIACAO, RESPONSAVEIS
-from gat.database import listar_avaliacoes, obter_avaliacao
-from gat.permissions import exigir_area, exigir_modulo, pode_area
+from gat.database import listar_avaliacoes, listar_avaliacoes_checklist, obter_avaliacao
+from gat.permissions import exigir_area, pode_area, pode_modulo
 from gat.ui.charts import grafico_status_donut
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.kpi_cards import renderizar_kpis
 from gat.ui.modals import dialog_avaliacao
+from gat.ui.modals_avaliacao import dialog_avaliacao_checklist
 from gat.ui.tables import tabela_com_edicao
 
 
-def render(usuario: dict) -> None:
-    exigir_modulo(usuario, "prestadores")
-    exigir_area(usuario, "avaliacoes.visualizar")
+def _tab_checklist(usuario: dict) -> None:
+    opcoes_tipo = []
+    if pode_modulo(usuario, "prestadores"):
+        opcoes_tipo.append("Prestador")
+    if pode_modulo(usuario, "cessionarios"):
+        opcoes_tipo.append("Cessionário")
+    if not opcoes_tipo:
+        st.info("Nenhum módulo (Prestadores/Cessionários) liberado para este usuário.")
+        return
 
-    st.subheader(":material/grade: Avaliação de Prestadores")
-    st.caption("Escala 1–15 · Crítico ≤3 · Baixo 4–6 · Regular 7–9 · Bom 10–12 · Excelente 13–15")
+    tipo_label = st.selectbox("Tipo", opcoes_tipo, key="aval_checklist_tipo")
+    tipo_entidade = "PRESTADOR" if tipo_label == "Prestador" else "CESSIONARIO"
 
     if pode_area(usuario, "avaliacoes.cadastrar"):
         col_novo, _ = st.columns([1, 4])
         with col_novo:
-            if st.button("Nova Avaliação", icon=":material/add:", type="primary", key="nova_avaliacao", use_container_width=True):
+            if st.button("Nova Avaliação (Checklist)", icon=":material/add:", type="primary", key="nova_avaliacao_checklist", use_container_width=True):
+                dialog_avaliacao_checklist(usuario["username"], tipo_entidade)
+
+    df = listar_avaliacoes_checklist(tipo_entidade)
+    if df.empty:
+        st.info(f"Nenhuma avaliação de {tipo_label.lower()} registrada ainda. Utilize o botão acima para iniciar.")
+        return
+
+    with st.expander("Filtros", icon=":material/filter_list:", expanded=False):
+        col1, col2, col3 = st.columns(3)
+        f_entidade = col1.multiselect("Nome", sorted(df["nome_entidade"].dropna().unique().tolist()), key=f"filtro_checklist_nome_{tipo_entidade}")
+        f_disciplina = col2.multiselect("Disciplina", sorted(df["disciplina"].dropna().unique().tolist()), key=f"filtro_checklist_disc_{tipo_entidade}")
+        f_classificacao = col3.multiselect("Classificação", sorted(df["classificacao"].dropna().unique().tolist()), key=f"filtro_checklist_class_{tipo_entidade}")
+        col4, col5, col6 = st.columns(3)
+        f_at = col4.text_input("N° AT", key=f"filtro_checklist_at_{tipo_entidade}")
+        f_revisao = col5.text_input("Revisão", key=f"filtro_checklist_rev_{tipo_entidade}")
+        f_analista = col6.multiselect("Analista responsável", RESPONSAVEIS, key=f"filtro_checklist_analista_{tipo_entidade}")
+        mes, ano = seletor_competencia(f"checklist_comp_{tipo_entidade}", rotulo="Competência da avaliação")
+
+    df_filtrado = df.copy()
+    if f_entidade:
+        df_filtrado = df_filtrado[df_filtrado["nome_entidade"].isin(f_entidade)]
+    if f_disciplina:
+        df_filtrado = df_filtrado[df_filtrado["disciplina"].isin(f_disciplina)]
+    if f_classificacao:
+        df_filtrado = df_filtrado[df_filtrado["classificacao"].isin(f_classificacao)]
+    if f_at.strip():
+        df_filtrado = df_filtrado[df_filtrado["at_referencia"].fillna("").astype(str).str.contains(f_at.strip(), case=False, na=False, regex=False)]
+    if f_revisao.strip():
+        df_filtrado = df_filtrado[df_filtrado["revisao"].astype(str) == f_revisao.strip()]
+    if f_analista:
+        df_filtrado = df_filtrado[df_filtrado["analista_responsavel"].isin(f_analista)]
+    if mes or ano:
+        df_filtrado = filtrar_por_competencia(df_filtrado, "data_avaliacao", mes, ano)
+        st.caption(f"Competência: **{rotulo_competencia(mes, ano)}**")
+
+    df_filtrado = df_filtrado.reset_index(drop=True)
+    if df_filtrado.empty:
+        st.warning("Nenhuma avaliação encontrada com os filtros aplicados.", icon=":material/search_off:")
+        return
+
+    media = df_filtrado["pontuacao"].mean()
+    renderizar_kpis([
+        ("Avaliações", str(len(df_filtrado)), None),
+        ("Pontuação Média", f"{media:.1f} / 15", None),
+        ("Demandam Acompanhamento", str((df_filtrado["classificacao"].isin(["CRÍTICO", "BAIXO"])).sum()), CORES_CLASSIFICACAO_AVALIACAO["CRÍTICO"]),
+    ])
+
+    df_classificacao = pd.DataFrame({"status_analise": df_filtrado["classificacao"]})
+    st.plotly_chart(
+        grafico_status_donut(df_classificacao, "status_analise", "Distribuição por Classificação", mapa_cores=CORES_CLASSIFICACAO_AVALIACAO),
+        use_container_width=True,
+    )
+
+    st.caption(f"{len(df_filtrado)} avaliação(ões) encontrada(s).")
+    colunas_tabela = ["nome_entidade", "codigo_entidade", "disciplina", "at_referencia", "revisao", "data_avaliacao", "analista_responsavel", "pontuacao", "classificacao", "acompanhamento"]
+    rotulos = {
+        "nome_entidade": "Nome", "codigo_entidade": "Código", "disciplina": "Disciplina",
+        "at_referencia": "N° AT", "revisao": "Revisão", "data_avaliacao": "Data", "analista_responsavel": "Analista",
+        "pontuacao": "Pontuação", "classificacao": "Classificação", "acompanhamento": "Acompanhamento",
+    }
+    df_exibicao = df_filtrado[colunas_tabela].rename(columns=rotulos)
+
+    def _abrir_edicao(registro: dict) -> None:
+        exigir_area(usuario, "avaliacoes.editar")
+        dialog_avaliacao_checklist(usuario["username"], tipo_entidade, registro)
+
+    def _obter(reg_id: int) -> dict:
+        from gat.database import obter_avaliacao_checklist
+        return obter_avaliacao_checklist(reg_id)
+
+    tabela_com_edicao(
+        df_exibicao, df_filtrado["id"], chave=f"avaliacoes_checklist_{tipo_entidade}",
+        abrir_dialog_edicao=_abrir_edicao, obter_registro=_obter,
+    )
+
+
+def _tab_historico_nota(usuario: dict) -> None:
+    if not pode_modulo(usuario, "prestadores"):
+        st.info("Disponível apenas para usuários com acesso ao módulo Prestadores.")
+        return
+
+    if pode_area(usuario, "avaliacoes.cadastrar"):
+        col_novo, _ = st.columns([1, 4])
+        with col_novo:
+            if st.button("Nova Avaliação (nota 1-15)", icon=":material/add:", key="nova_avaliacao", use_container_width=True):
                 dialog_avaliacao(usuario["username"])
 
     df = listar_avaliacoes()
     if df.empty:
-        st.info("Nenhuma avaliação registrada ainda. Utilize o botão acima para iniciar.")
+        st.info("Nenhuma avaliação (modelo anterior) registrada ainda.")
         return
 
     df["classificacao"] = df["nota"].apply(lambda n: classificar_nota(n)[0])
@@ -101,3 +194,22 @@ def render(usuario: dict) -> None:
         abrir_dialog_edicao=_abrir_edicao,
         obter_registro=obter_avaliacao,
     )
+
+
+def render(usuario: dict) -> None:
+    exigir_area(usuario, "avaliacoes.visualizar")
+    if not (pode_modulo(usuario, "prestadores") or pode_modulo(usuario, "cessionarios")):
+        st.info("Nenhum módulo (Prestadores/Cessionários) liberado para este usuário.")
+        return
+
+    st.subheader(":material/grade: Avaliação de Prestadores e Cessionários")
+    st.caption(
+        "Checklist por categorias (Qualidade de Projeto, Manuais e Normas, Documentação Geral, "
+        "Revisões, Comunicação) — pontuação 0-15 · Crítico ≤3 · Baixo 4-6 · Regular 7-9 · Bom 10-12 · Excelente 13-15."
+    )
+
+    aba_checklist, aba_historico = st.tabs(["Checklist (atual)", "Histórico — modelo anterior (nota 1-15)"])
+    with aba_checklist:
+        _tab_checklist(usuario)
+    with aba_historico:
+        _tab_historico_nota(usuario)
