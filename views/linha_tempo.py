@@ -12,20 +12,36 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia
+from gat.alertas_engine import TIPO_ALERTA_LABELS, montar_alertas_modulo
+from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia, indicadores_meta_rev2
 from gat.calendario import calcular_hold_dias, dias_uteis_entre
 from gat.config import DISCIPLINAS, RESPONSAVEIS
-from gat.database import listar_avaliacoes_checklist, listar_cessionarios, listar_prestadores, listar_reunioes_do_projeto
+from gat.database import listar_avaliacoes_checklist, listar_cessionarios, listar_prestadores, listar_reunioes_do_projeto, obter_configuracao, registrar_atividade
+from gat.export_word import (
+    cabecalho_institucional,
+    documento_para_bytes,
+    graficos_em_grade,
+    nome_arquivo,
+    novo_documento,
+    observacoes as observacoes_word,
+    rodape_institucional,
+    secao,
+    tabela_dataframe,
+    tabela_indicadores_compacta,
+)
+from gat.opr import indicadores_completos, indicadores_executivos
 from gat.permissions import exigir_area, pode_modulo
 from gat.revisoes import calcular_intervalos_revisao, consolidado_por_entidade, projetos_por_entidade, situacao_sla_externo
 from gat.ui.charts import (
+    grafico_aprovacao_rev2,
     grafico_evolucao_mensal_retorno,
     grafico_interno_vs_externo,
+    grafico_por_revisao,
     grafico_projetos_por_revisao,
     grafico_situacao_sla_externo,
     grafico_top_atraso_entidades,
 )
-from gat.ui.filtros import seletor_competencia
+from gat.ui.filtros import rotulo_competencia, seletor_competencia
 
 _MODULOS_VISIVEIS = {"Prestadores": "prestadores", "Cessionários": "cessionarios"}
 
@@ -260,3 +276,97 @@ def render(usuario: dict) -> None:
         with st.expander(rotulo_projeto, icon=":material/folder_open:"):
             df_grupo = df[df["id"].isin(projeto["ids"])]
             _sequencia_completa_projeto(modulo, coluna_nome, tipo_entidade, df_grupo)
+
+    st.markdown("---")
+    st.markdown("##### OPR individual deste código (Word)")
+    st.caption(
+        "Consolida, em um único documento Word editável, todos os dados deste código/entidade para o período "
+        "e filtros selecionados acima: indicadores, gráficos, avaliações, alertas, reuniões e a sequência da linha do tempo."
+    )
+    observacoes_opr_individual = st.text_area(
+        "Observações gerenciais deste OPR individual", key=f"lt_opr_obs_{chave_entidade}",
+    )
+    if st.button("Gerar OPR individual (Word)", icon=":material/description:", type="primary", key=f"lt_opr_gerar_{chave_entidade}"):
+        ids_entidade = [id_ for lista in projetos_entidade["ids"] for id_ in lista]
+        df_entidade = df[df["id"].isin(ids_entidade)]
+        meta_rev2_config = float(obter_configuracao("meta_aprovacao_rev2", "80"))
+        exec_ind_entidade = indicadores_executivos(df_entidade, coluna_nome, meta_rev2_config)
+        intervalos_entidade = calcular_intervalos_revisao(df_entidade, coluna_nome)
+        meta_rev2_dict_entidade = indicadores_meta_rev2(df_entidade, meta_rev2_config)
+
+        identificador = resumo_entidade["codigo"] or resumo_entidade["nome"]
+        periodo_label_lt = "Todos os períodos"
+        if usar_periodo and data_inicio and data_fim:
+            periodo_label_lt = f"{data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}"
+        elif mes or ano:
+            periodo_label_lt = rotulo_competencia(mes, ano)
+
+        doc = novo_documento()
+        cabecalho_institucional(
+            doc, f"OPR Individual — {identificador} ({resumo_entidade['nome']})",
+            "GAT 2026 · Controle de Análises Técnicas · Tecnoplano — Linha do Tempo por Código",
+            periodo_label_lt,
+            {"Código": f_codigo, "Nome": f_nome, "N° AT": f_at, "Disciplina": f_disciplina if f_disciplina != "Todas" else "", "Analista": f_analista if f_analista != "Todos" else "", "Revisão": f_revisao},
+            usuario.get("nome_completo") or usuario["username"],
+            compacto=True,
+        )
+
+        secao(doc, "Indicadores do período", nivel=2)
+        tabela_indicadores_compacta(doc, indicadores_completos(exec_ind_entidade), colunas=3)
+
+        if not df_entidade.empty:
+            figuras_entidade = [
+                {"fig": grafico_situacao_sla_externo(intervalos_entidade), "titulo": "Situação do Retorno Externo (SLA)"},
+                {"fig": grafico_por_revisao(df_entidade), "titulo": "Projetos por Revisão"},
+                {"fig": grafico_aprovacao_rev2(meta_rev2_dict_entidade), "titulo": "Aprovação até a REV2"},
+            ]
+            secao(doc, "Gráficos", nivel=2)
+            graficos_em_grade(doc, figuras_entidade, colunas=3)
+
+        secao(doc, "Projetos consolidados", nivel=2)
+        tabela_projetos = projetos_entidade[["num_at", "disciplina", "revisao_atual", "qtd_revisoes", "status_analise_atual", "status_entrega_atual"]].rename(columns={
+            "num_at": "N° AT", "disciplina": "Disciplina", "revisao_atual": "Revisão Atual", "qtd_revisoes": "Qtd. Revisões",
+            "status_analise_atual": "Status Análise", "status_entrega_atual": "Status Entrega",
+        })
+        tabela_dataframe(doc, tabela_projetos, max_linhas=30)
+
+        avaliacoes_todas = listar_avaliacoes_checklist(tipo_entidade)
+        avaliacoes_entidade = avaliacoes_todas[avaliacoes_todas["projeto_id"].isin(ids_entidade)] if not avaliacoes_todas.empty else avaliacoes_todas
+        tabela_avaliacoes = avaliacoes_entidade[["data_avaliacao", "revisao", "pontuacao", "classificacao", "acompanhamento"]].rename(columns={
+            "data_avaliacao": "Data", "revisao": "Revisão", "pontuacao": "Pontuação", "classificacao": "Classificação", "acompanhamento": "Acompanhamento",
+        }) if not avaliacoes_entidade.empty else avaliacoes_entidade
+        tabela_dataframe(doc, tabela_avaliacoes, "Avaliações", max_linhas=20)
+
+        alertas_entidade = montar_alertas_modulo(df_entidade, modulo, coluna_nome)
+        if not alertas_entidade.empty:
+            alertas_entidade = alertas_entidade.assign(motivo_label=alertas_entidade["tipo_alerta"].map(TIPO_ALERTA_LABELS))
+            tabela_alertas = alertas_entidade[["motivo_label", "num_at", "disciplina", "revisao", "status"]].rename(columns={
+                "motivo_label": "Tipo de Alerta", "num_at": "N° AT", "disciplina": "Disciplina", "revisao": "Revisão", "status": "Status",
+            })
+        else:
+            tabela_alertas = alertas_entidade
+        tabela_dataframe(doc, tabela_alertas, "Alertas (pendentes e tratados)", max_linhas=20)
+
+        reunioes_entidade = pd.concat(
+            [listar_reunioes_do_projeto(modulo, int(id_)) for id_ in ids_entidade], ignore_index=True,
+        ) if ids_entidade else pd.DataFrame()
+        if not reunioes_entidade.empty:
+            reunioes_entidade = reunioes_entidade.drop_duplicates(subset=["id"]) if "id" in reunioes_entidade.columns else reunioes_entidade.drop_duplicates()
+            tabela_reunioes = reunioes_entidade[["titulo", "data_prevista", "data_realizada"]].rename(columns={
+                "titulo": "Título", "data_prevista": "Data Prevista", "data_realizada": "Data Realizada",
+            })
+        else:
+            tabela_reunioes = reunioes_entidade
+        tabela_dataframe(doc, tabela_reunioes, "Reuniões vinculadas", max_linhas=20)
+
+        observacoes_word(doc, "Observações gerenciais", observacoes_opr_individual)
+        rodape_institucional(doc)
+
+        conteudo_lt = documento_para_bytes(doc)
+        nome_arquivo_lt = nome_arquivo("OPR", "Individual", str(identificador), periodo_label_lt.replace("/", "-"))
+        st.download_button(
+            "Baixar OPR individual (Word)", data=conteudo_lt, file_name=nome_arquivo_lt,
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            icon=":material/download:", type="primary", use_container_width=True, key=f"lt_opr_baixar_{chave_entidade}",
+        )
+        registrar_atividade(usuario["username"], usuario.get("perfil"), "OPR_INDIVIDUAL_GERADO", modulo=modulo, detalhe=str(identificador))
