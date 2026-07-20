@@ -16,7 +16,7 @@ from gat.config import (
     RESPOSTA_CHECKLIST_OPCOES,
     RESPONSAVEIS,
 )
-from gat.database import inserir_avaliacao_checklist, atualizar_avaliacao_checklist
+from gat.database import atualizar_avaliacao_checklist, inserir_avaliacao_checklist, registrar_atividade
 
 
 def _idx(opcoes: list[str], valor: Any) -> int:
@@ -160,9 +160,11 @@ def dialog_avaliacao_checklist(
         }
         if editando:
             atualizar_avaliacao_checklist(registro["id"], dados, usuario)
+            registrar_atividade(usuario, None, "AVALIACAO_EDITADA", modulo=tipo_entidade, detalhe=nome_entidade)
             st.toast("Avaliação atualizada com sucesso.", icon=":material/check_circle:")
         else:
             inserir_avaliacao_checklist(dados, usuario)
+            registrar_atividade(usuario, None, "AVALIACAO_REALIZADA", modulo=tipo_entidade, detalhe=nome_entidade)
             st.toast("Avaliação registrada com sucesso.", icon=":material/check_circle:")
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
         st.rerun()

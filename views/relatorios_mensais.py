@@ -12,6 +12,7 @@ from gat.database import (
     listar_cessionarios,
     listar_prestadores,
     obter_observacao_mensal,
+    registrar_atividade,
     salvar_observacao_mensal,
 )
 from gat.export_excel import gerar_relatorio_mensal_excel
@@ -144,19 +145,21 @@ def render(usuario: dict) -> None:
                 df_projetos=df_projetos_export, colunas_projetos=colunas_exib,
                 produtividade_df=produtividade if not produtividade.empty else None,
             )
-            st.download_button(
+            if st.download_button(
                 "Exportar Excel", data=excel_bytes,
                 file_name=f"GAT_2026_Relatorio_{modulo_label}_{chave_competencia(mes, ano)}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 icon=":material/download:", type="primary", use_container_width=True,
-            )
+            ):
+                registrar_atividade(usuario["username"], usuario.get("perfil"), "EXPORTACAO", modulo=modulo_label, detalhe=f"Excel {competencia_label}")
         with col_exp2:
             pdf_bytes = gerar_relatorio_mensal_pdf(modulo_label, competencia_label, indicadores, produtividade if not produtividade.empty else None)
-            st.download_button(
+            if st.download_button(
                 "Exportar PDF", data=pdf_bytes,
                 file_name=f"GAT_2026_Relatorio_{modulo_label}_{chave_competencia(mes, ano)}.pdf",
                 mime="application/pdf", icon=":material/picture_as_pdf:", use_container_width=True,
-            )
+            ):
+                registrar_atividade(usuario["username"], usuario.get("perfil"), "EXPORTACAO", modulo=modulo_label, detalhe=f"PDF {competencia_label}")
 
     st.markdown("#####")
     st.markdown("##### One Page Report — Resumo Executivo Mensal")
@@ -207,8 +210,9 @@ def render(usuario: dict) -> None:
         }
 
         opr_bytes = gerar_one_page_report_pdf(competencia_label, resumo, comparativo_opr, observacao_atual)
-        st.download_button(
+        if st.download_button(
             "Gerar One Page Report (PDF)", data=opr_bytes,
             file_name=f"GAT_2026_OnePageReport_{chave_competencia(mes, ano)}.pdf",
             mime="application/pdf", icon=":material/picture_as_pdf:", type="primary", use_container_width=True,
-        )
+        ):
+            registrar_atividade(usuario["username"], usuario.get("perfil"), "OPR_GERADO", modulo="consolidado", detalhe=competencia_label)

@@ -38,6 +38,7 @@ from gat.database import (
     inserir_avaliacao,
     inserir_cessionario,
     inserir_prestador,
+    registrar_atividade,
 )
 
 
@@ -204,9 +205,11 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
         }
         if editando:
             atualizar_prestador(registro["id"], dados, usuario)
+            registrar_atividade(usuario, None, "PROJETO_EDITADO", modulo="prestadores", detalhe=prestador)
             st.toast("Registro de prestador atualizado com sucesso.", icon=":material/check_circle:")
         else:
             inserir_prestador(dados, usuario)
+            registrar_atividade(usuario, None, "PROJETO_CRIADO", modulo="prestadores", detalhe=prestador)
             st.toast("Novo registro de prestador cadastrado com sucesso.", icon=":material/check_circle:")
         st.session_state[chave_tentativa] = False
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
@@ -333,9 +336,11 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
         }
         if editando:
             atualizar_cessionario(registro["id"], dados, usuario)
+            registrar_atividade(usuario, None, "PROJETO_EDITADO", modulo="cessionarios", detalhe=cessionario)
             st.toast("Registro de cessionário atualizado com sucesso.", icon=":material/check_circle:")
         else:
             inserir_cessionario(dados, usuario)
+            registrar_atividade(usuario, None, "PROJETO_CRIADO", modulo="cessionarios", detalhe=cessionario)
             st.toast("Novo registro de cessionário cadastrado com sucesso.", icon=":material/check_circle:")
         st.session_state[chave_tentativa] = False
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1

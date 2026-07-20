@@ -26,7 +26,7 @@ from gat.auth import (
     usuario_autenticado,
 )
 from gat.config import MODULOS_CONTROLADOS
-from gat.database import init_db
+from gat.database import init_db, registrar_atividade
 from gat.export_excel import gerar_relatorio_excel
 from gat.permissions import pode_area, pode_modulo
 from gat.styles import cabecalho_institucional, injetar_css_global, logo_base64
@@ -39,6 +39,7 @@ from views import (
     cessionarios_dashboard,
     consolidado,
     gestao_historico,
+    historico_atividades,
     inicio,
     lembretes_pep,
     meu_perfil,
@@ -156,13 +157,26 @@ if grupo_relatorios:
     paginas["Relatórios"] = grupo_relatorios
 
 if pode_area(usuario, "administrar_usuarios") or pode_area(usuario, "configuracoes") or pode_area(usuario, "auditoria"):
-    paginas["Sistema"] = [
+    grupo_sistema = [
         _pagina(lambda: administracao.render(usuario), "Administração", ":material/settings:", "administracao"),
+    ]
+    if pode_area(usuario, "historico_atividades"):
+        grupo_sistema.append(_pagina(lambda: historico_atividades.render(usuario), "Histórico de Atividades", ":material/manage_history:", "historico_atividades"))
+    paginas["Sistema"] = grupo_sistema
+elif pode_area(usuario, "historico_atividades"):
+    paginas["Sistema"] = [
+        _pagina(lambda: historico_atividades.render(usuario), "Histórico de Atividades", ":material/manage_history:", "historico_atividades"),
     ]
 
 st.session_state["_gat_paginas"] = _paginas_por_caminho
 
 pagina_atual = st.navigation(paginas, position="sidebar")
+
+# Histórico de atividades: registra a navegação para a página apenas quando
+# ela muda (evita duplicar a cada rerun disparado por widgets na mesma página).
+if st.session_state.get("_gat_ultima_pagina_logada") != pagina_atual.url_path:
+    registrar_atividade(usuario["username"], usuario.get("perfil"), "PAGINA", modulo=pagina_atual.url_path, detalhe=pagina_atual.title)
+    st.session_state["_gat_ultima_pagina_logada"] = pagina_atual.url_path
 
 with st.sidebar:
     st.divider()

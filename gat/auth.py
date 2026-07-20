@@ -11,7 +11,7 @@ from __future__ import annotations
 import bcrypt
 import streamlit as st
 
-from gat.database import buscar_usuario, concluir_troca_senha_obrigatoria, registrar_ultimo_acesso
+from gat.database import buscar_usuario, concluir_troca_senha_obrigatoria, registrar_atividade, registrar_ultimo_acesso
 from gat.styles import logo_base64
 
 
@@ -38,6 +38,9 @@ def usuario_atual() -> dict:
 
 
 def logout() -> None:
+    usuario = st.session_state.get("usuario") or {}
+    if usuario.get("username"):
+        registrar_atividade(usuario["username"], usuario.get("perfil"), "LOGOUT")
     for chave in ("autenticado", "usuario", "precisa_trocar_senha", "_usuario_pendente_troca"):
         st.session_state.pop(chave, None)
     st.rerun()
@@ -65,6 +68,7 @@ def _autenticar(username: str, senha: str) -> bool:
         return True
 
     registrar_ultimo_acesso(usuario["username"])
+    registrar_atividade(usuario["username"], usuario["perfil"], "LOGIN")
     st.session_state["autenticado"] = True
     st.session_state["usuario"] = dados_sessao
     return True
@@ -119,6 +123,7 @@ def tela_troca_senha_obrigatoria() -> None:
                 else:
                     concluir_troca_senha_obrigatoria(dados["username"], nova)
                     registrar_ultimo_acesso(dados["username"])
+                    registrar_atividade(dados["username"], dados.get("perfil"), "LOGIN")
                     st.session_state["autenticado"] = True
                     st.session_state["usuario"] = dados
                     st.session_state.pop("precisa_trocar_senha", None)
