@@ -23,6 +23,8 @@ import pandas as pd
 import plotly.graph_objects as go
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
 from gat.config import LOGO_PATH
@@ -126,6 +128,14 @@ def cabecalho_institucional(
 
     if not compacto:
         doc.add_paragraph()
+
+
+def sombrear_celula(celula, cor_hex: str) -> None:
+    """Aplica uma cor de fundo (shading) a uma célula de tabela — usado
+    para os indicadores de SLA nas cores padronizadas do sistema."""
+    sombra = OxmlElement("w:shd")
+    sombra.set(qn("w:fill"), cor_hex.lstrip("#"))
+    celula._tc.get_or_add_tcPr().append(sombra)
 
 
 def secao(doc: Document, titulo: str, nivel: int = 1) -> None:

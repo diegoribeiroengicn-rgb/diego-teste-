@@ -259,6 +259,23 @@ def grafico_aprovacao_rev2(meta_rev2: dict) -> go.Figure:
     return _aplicar_layout(fig, titulo)
 
 
+def grafico_linha_tempo_projeto(intervalos_projeto: pd.DataFrame) -> go.Figure:
+    """Linha do tempo visual de UM projeto: dias úteis entre cada par de
+    revisões consecutivas, com a barra colorida pela situação de SLA
+    daquela transição — usada no Relatório do Prestador/Cessionário."""
+    from gat.revisoes import SITUACAO_SLA_EXTERNO_CORES
+
+    titulo = "Linha do Tempo — Dias entre Revisões"
+    if intervalos_projeto.empty:
+        return _aplicar_layout(go.Figure(), titulo)
+    rotulos = [f"REV{int(r['revisao_anterior']):02d}→REV{int(r['revisao_atual']):02d}" for _, r in intervalos_projeto.iterrows()]
+    cores = [CORES[SITUACAO_SLA_EXTERNO_CORES.get(s, "texto_dim")] for s in intervalos_projeto["situacao_sla"]]
+    fig = go.Figure(go.Bar(x=rotulos, y=intervalos_projeto["dias_uteis_retorno"], marker_color=cores, text=intervalos_projeto["situacao_sla"], textposition="outside"))
+    fig.add_hline(y=10, line_dash="dash", line_color=CORES["vermelho"], annotation_text="SLA (10 dias úteis)")
+    fig.update_xaxes(tickangle=-20)
+    return _aplicar_layout(fig, titulo)
+
+
 def grafico_disciplina(df: pd.DataFrame, coluna_disciplina: str = "disciplina") -> go.Figure:
     """Distribuição de projetos por disciplina técnica."""
     if df.empty or coluna_disciplina not in df.columns:

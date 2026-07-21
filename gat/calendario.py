@@ -76,6 +76,20 @@ def dias_uteis_entre(data_inicio, data_fim) -> int:
     return int(dias) * sinal
 
 
+def dias_corridos_entre(data_inicio, data_fim) -> int | None:
+    """
+    Dias corridos (calendário) entre duas datas, inclusive — usado ao lado
+    de `dias_uteis_entre` nos relatórios que precisam apresentar as duas
+    contagens (nunca uma no lugar da outra). Retorna `None` quando alguma
+    das datas é inválida/ausente, em vez de inventar um valor.
+    """
+    inicio = _to_date(data_inicio)
+    fim = _to_date(data_fim)
+    if inicio is None or fim is None:
+        return None
+    return (fim - inicio).days
+
+
 def somar_dias_uteis(data_base, quantidade_dias: int) -> date | None:
     """
     Equivalente à função WORKDAY do Excel: soma `quantidade_dias` dias úteis

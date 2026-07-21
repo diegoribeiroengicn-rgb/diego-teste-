@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from gat.calendario import dias_uteis_entre
+from gat.calendario import dias_corridos_entre, dias_uteis_entre
 
 SLA_RETORNO_EXTERNO_DIAS_UTEIS = 10
 _LIMIAR_PROXIMO_LIMITE = SLA_RETORNO_EXTERNO_DIAS_UTEIS - 2  # 8 e 9 dias
@@ -45,6 +45,8 @@ SITUACAO_SLA_EXTERNO_CORES = {
 
 
 def _at_valido(num_at) -> bool:
+    if pd.isna(num_at):
+        return False
     return bool(num_at) and str(num_at).strip().upper() not in _AT_PLACEHOLDERS
 
 
@@ -82,15 +84,15 @@ def calcular_intervalos_revisao(df: pd.DataFrame, coluna_nome: str, coluna_codig
     grupo, que não tem revisão anterior para comparar), com as colunas:
     chave_grupo, chave_entidade, nome, codigo, num_at, disciplina,
     revisao_anterior, revisao_atual, data_entrada_anterior,
-    data_entrada_atual, dias_uteis_retorno, situacao_sla, e um flag
-    `sequencial` (False quando a revisão atual não é exatamente a anterior
-    + 1 — nesse caso o intervalo é reportado mas sinalizado como não
-    estritamente sequencial).
+    data_entrada_atual, dias_uteis_retorno, dias_corridos_retorno,
+    situacao_sla, e um flag `sequencial` (False quando a revisão atual não
+    é exatamente a anterior + 1 — nesse caso o intervalo é reportado mas
+    sinalizado como não estritamente sequencial).
     """
     colunas_saida = [
         "chave_grupo", "chave_entidade", "nome", "codigo", "num_at", "disciplina", "item", "id", "responsavel",
         "revisao_anterior", "revisao_atual", "data_entrada_anterior", "data_entrada_atual",
-        "dias_uteis_retorno", "situacao_sla", "sequencial",
+        "dias_uteis_retorno", "dias_corridos_retorno", "situacao_sla", "sequencial",
     ]
     if df.empty:
         return pd.DataFrame(columns=colunas_saida)
@@ -124,6 +126,7 @@ def calcular_intervalos_revisao(df: pd.DataFrame, coluna_nome: str, coluna_codig
                     "data_entrada_anterior": anterior["data_solicitacao"],
                     "data_entrada_atual": linha["data_solicitacao"],
                     "dias_uteis_retorno": dias,
+                    "dias_corridos_retorno": dias_corridos_entre(anterior["data_solicitacao"], linha["data_solicitacao"]),
                     "situacao_sla": situacao_sla_externo(dias),
                     "sequencial": int(linha["revisao"]) == int(anterior["revisao"]) + 1,
                 })
@@ -216,7 +219,12 @@ def projetos_por_entidade(df: pd.DataFrame, coluna_nome: str, coluna_codigo: str
     base = df.copy()
     base["_chave_entidade"] = _chave_entidade_serie(base, coluna_nome, coluna_codigo)
     base["_at_valido"] = base["num_at"].apply(_at_valido)
-    base["_chave_projeto"] = base["_chave_entidade"].astype(str) + "||" + base["num_at"].astype(str) + "||" + base["disciplina"].fillna("").astype(str)
+    # Registros sem AT válido (placeholder "***"/"-"/etc.) nunca são agrupados
+    # entre si — cada um vira seu próprio projeto (chave única pelo id), já
+    # que um AT placeholder repetido não indica que sejam o mesmo projeto.
+    chave_at = base["_chave_entidade"].astype(str) + "||" + base["num_at"].astype(str) + "||" + base["disciplina"].fillna("").astype(str)
+    chave_unica = base["_chave_entidade"].astype(str) + "||SEMAT||" + base["id"].astype(str)
+    base["_chave_projeto"] = chave_at.where(base["_at_valido"], chave_unica)
 
     linhas = []
     for _, grupo in base.groupby("_chave_projeto"):
