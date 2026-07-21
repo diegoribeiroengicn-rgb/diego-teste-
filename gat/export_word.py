@@ -16,7 +16,10 @@ documento inteiro é gerado como uma imagem única.
 from __future__ import annotations
 
 import io
+import logging
+import os
 import re
+import shutil
 from datetime import datetime
 
 import pandas as pd
@@ -29,14 +32,33 @@ from docx.shared import Cm, Pt, RGBColor
 
 from gat.config import LOGO_PATH
 
+_logger = logging.getLogger(__name__)
+
 _NAVY = RGBColor(0x1B, 0x3A, 0x8A)
 _TEXTO_FRACO = RGBColor(0x64, 0x74, 0x8B)
 _ESTILO_TABELA = "Light Grid Accent 1"
 
-# Chromium do Playwright já provisionado no ambiente — reaproveitado pelo
-# Kaleido para renderizar os gráficos Plotly como PNG, evitando um novo
-# download de navegador só para a exportação de relatórios.
-_KALEIDO_CHROME_PATH = "/opt/pw-browsers/chromium"
+
+def _detectar_chrome_path() -> str | None:
+    """Localiza um executável de Chrome/Chromium utilizável pelo Kaleido,
+    sem assumir um caminho fixo — em ambientes onde o Chromium do
+    Playwright não está provisionado (ex.: Streamlit Cloud), um caminho
+    fixo inválido faria o Kaleido falhar com `ChromeNotFoundError`.
+    Retorna `None` quando nada é encontrado, deixando o Kaleido tentar
+    sua própria detecção padrão."""
+    candidatos = [os.environ.get("BROWSER_PATH"), os.environ.get("CHROME_PATH")]
+    for nome in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser"):
+        candidatos.append(shutil.which(nome))
+    candidatos.append("/opt/pw-browsers/chromium")  # Chromium do Playwright, quando provisionado
+    for caminho in candidatos:
+        if caminho and os.path.isfile(caminho) and os.access(caminho, os.X_OK):
+            return caminho
+    return None
+
+
+# Resolvido uma única vez na importação do módulo — reavaliar a cada
+# gráfico seria desnecessário, já que o ambiente não muda em tempo de execução.
+_KALEIDO_CHROME_PATH = _detectar_chrome_path()
 
 
 def figura_para_imagem(fig: go.Figure, largura_px: int = 1400, altura_px: int = 800, escala: float = 2.0) -> bytes:
@@ -44,11 +66,9 @@ def figura_para_imagem(fig: go.Figure, largura_px: int = 1400, altura_px: int = 
     inserção individual no Word (nunca uma captura da tela inteira)."""
     import kaleido
 
-    return kaleido.calc_fig_sync(
-        fig,
-        opts={"width": largura_px, "height": altura_px, "scale": escala},
-        kopts={"path": _KALEIDO_CHROME_PATH},
-    )
+    opts = {"width": largura_px, "height": altura_px, "scale": escala}
+    kopts = {"path": _KALEIDO_CHROME_PATH} if _KALEIDO_CHROME_PATH else {}
+    return kaleido.calc_fig_sync(fig, opts=opts, kopts=kopts)
 
 
 def novo_documento() -> Document:
@@ -257,9 +277,20 @@ def tabela_dataframe(doc: Document, df: pd.DataFrame, titulo: str | None = None,
 def grafico(doc: Document, fig: go.Figure, titulo: str, legenda: str | None = None, largura_cm: float = 15.5) -> None:
     """Insere um gráfico como imagem individual em alta resolução, com
     título acima e legenda abaixo — cada gráfico pode ser removido, movido
-    ou substituído no Word sem afetar o restante do relatório."""
+    ou substituído no Word sem afetar o restante do relatório.
+
+    A renderização (Kaleido/Chrome) pode falhar em ambientes sem um
+    Chrome/Chromium disponível — nesse caso o erro é registrado em log e
+    um parágrafo informativo substitui a imagem, sem interromper a
+    geração do restante do documento."""
     _paragrafo(doc, titulo, cor=_NAVY, tamanho=11.5, negrito=True)
-    imagem_bytes = figura_para_imagem(fig)
+    try:
+        imagem_bytes = figura_para_imagem(fig)
+    except Exception:
+        _logger.exception("Falha ao renderizar o gráfico '%s' para o Word (Kaleido/Chrome indisponível).", titulo)
+        paragrafo(doc, "Gráfico não disponível nesta geração do documento — os dados completos permanecem nas tabelas deste relatório.", italico=True)
+        doc.add_paragraph()
+        return
     doc.add_picture(io.BytesIO(imagem_bytes), width=Cm(largura_cm))
     doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
     if legenda:
