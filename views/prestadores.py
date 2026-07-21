@@ -45,7 +45,7 @@ def _rotulo_situacao_prazo(dias_restantes, revisao) -> str:
 _CHAVES_FILTRO = [
     "filtro_prest_resp", "filtro_prest_status", "filtro_prest_pep",
     "filtro_prest_pendentes", "filtro_prest_cancelados",
-    "filtro_prest_at", "filtro_prest_nome",
+    "filtro_prest_at", "filtro_prest_codigo", "filtro_prest_nome", "filtro_prest_revisao",
 ]
 
 
@@ -85,9 +85,11 @@ def render(usuario: dict) -> None:
         f_pendentes = col4.checkbox("Somente Pendente de Reunião", key="filtro_prest_pendentes")
         f_cancelados = col5.checkbox("Incluir cancelados", value=False, key="filtro_prest_cancelados")
 
-        col6, col7 = st.columns(2)
+        col6, col7, col8, col9 = st.columns(4)
         f_at = col6.text_input("N° AT", key="filtro_prest_at", placeholder="Ex.: 1524 (busca exata ou parcial)")
-        f_nome = col7.text_input("Prestador (nome)", key="filtro_prest_nome", placeholder="Ex.: Empresa ABC")
+        f_codigo = col7.text_input("Código do Prestador", key="filtro_prest_codigo", placeholder="Ex.: P144 (busca exata ou parcial)")
+        f_nome = col8.text_input("Prestador (nome)", key="filtro_prest_nome", placeholder="Ex.: Empresa ABC")
+        f_revisao = col9.text_input("Revisão", key="filtro_prest_revisao", placeholder="Ex.: 2")
 
         mes, ano = seletor_competencia("filtro_prest_comp")
 
@@ -115,8 +117,12 @@ def render(usuario: dict) -> None:
         df_filtrado = df_filtrado[df_filtrado["pendente_reuniao"]]
     if f_at.strip():
         df_filtrado = df_filtrado[df_filtrado["num_at"].fillna("").astype(str).str.contains(f_at.strip(), case=False, na=False, regex=False)]
+    if f_codigo.strip():
+        df_filtrado = df_filtrado[df_filtrado["codigo"].fillna("").astype(str).str.contains(f_codigo.strip(), case=False, na=False, regex=False)]
     if f_nome.strip():
         df_filtrado = df_filtrado[df_filtrado["prestador"].fillna("").astype(str).str.contains(f_nome.strip(), case=False, na=False, regex=False)]
+    if f_revisao.strip():
+        df_filtrado = df_filtrado[df_filtrado["revisao"].astype(str).str.strip() == f_revisao.strip()]
     if mes or ano:
         df_filtrado = filtrar_por_competencia(df_filtrado, "data_solicitacao", mes, ano)
         st.caption(f"Competência: **{rotulo_competencia(mes, ano)}** (baseado na Data de Solicitação)")
