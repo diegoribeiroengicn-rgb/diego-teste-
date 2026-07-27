@@ -4,14 +4,21 @@ from __future__ import annotations
 
 import streamlit as st
 
+from datetime import datetime
+
 from gat.config import PERFIS_OPCOES
 from gat.database import (
+    criar_backup,
     criar_usuario,
     definir_configuracao,
+    exportar_banco_bytes,
     listar_historico,
     listar_usuarios,
     obter_configuracao,
+    registrar_atividade,
     relatorio_validacao_importacao,
+    restaurar_banco_de_bytes,
+    sincronizar_para_persistencia,
 )
 from gat.permissions import exigir_area, pode_area
 from gat.ui.modals_usuarios import renderizar_editor_usuario
@@ -50,7 +57,7 @@ def render(usuario: dict) -> None:
 
     if "Configurações" in abas_disponiveis:
         with abas[indice]:
-            _renderizar_configuracoes()
+            _renderizar_configuracoes(usuario)
         indice += 1
 
 
@@ -165,7 +172,7 @@ def _renderizar_historico() -> None:
     st.dataframe(df_hist, use_container_width=True, hide_index=True)
 
 
-def _renderizar_configuracoes() -> None:
+def _renderizar_configuracoes(usuario: dict) -> None:
     st.markdown("##### Criticidade de projetos sem PEP")
     st.caption(
         "Define, em dias corridos desde a Data de Solicitação, quando um projeto sem PEP passa a ser "
@@ -203,3 +210,81 @@ def _renderizar_configuracoes() -> None:
         definir_configuracao("meta_aprovacao_rev2", str(meta_rev2))
         st.success("Meta atualizada com sucesso.")
         st.rerun()
+
+    st.divider()
+    _renderizar_persistencia_dados(usuario)
+
+
+def _renderizar_persistencia_dados(usuario: dict) -> None:
+    st.markdown("##### Persistência e backup dos dados")
+    st.caption(
+        "O banco de dados deste ambiente fica em um disco temporário — ele pode ser apagado quando o ambiente "
+        "é reiniciado. Use os recursos abaixo para não perder o que for cadastrado pela interface (perfis, "
+        "reuniões, avaliações, etc.)."
+    )
+
+    col_backup, col_restaurar = st.columns(2)
+    with col_backup:
+        st.markdown("**Baixar cópia de segurança**")
+        st.caption("Baixe o banco de dados agora e guarde o arquivo em um local seguro (seu computador, e-mail, nuvem).")
+        conteudo_db = exportar_banco_bytes()
+        if conteudo_db:
+            nome_arquivo_backup = f"backup_gat_2026_{datetime.now().strftime('%Y-%m-%d_%H%M%S')}.db"
+            st.download_button(
+                "Baixar backup agora", data=conteudo_db, file_name=nome_arquivo_backup,
+                mime="application/octet-stream", icon=":material/download:", type="primary", use_container_width=True,
+            )
+        else:
+            st.info("Banco de dados ainda não encontrado.")
+
+    with col_restaurar:
+        st.markdown("**Restaurar de um backup**")
+        st.caption(
+            "Envie um arquivo `.db` baixado anteriormente para restaurar os dados — substitui os dados atuais "
+            "(um backup de segurança do estado atual é criado automaticamente antes)."
+        )
+        arquivo_restauracao = st.file_uploader("Arquivo de backup (.db)", type=["db"], key="admin_restaurar_upload")
+        if arquivo_restauracao is not None and st.button("Restaurar este backup", icon=":material/restore:", key="admin_restaurar_botao"):
+            st.session_state["admin_confirmar_restauracao"] = arquivo_restauracao.getvalue()
+            st.rerun()
+
+    if st.session_state.get("admin_confirmar_restauracao"):
+        _dialog_confirmar_restauracao(usuario)
+
+    st.divider()
+    st.markdown("**Sincronizar para persistência entre reinícios**")
+    st.caption(
+        "Atualiza o banco de sementes do repositório com os dados atuais, para que um reinício futuro do "
+        "ambiente já comece a partir deste estado, em vez do estado original da importação. Depois de "
+        "sincronizar, peça ao assistente para confirmar e salvar (\"commit/push\") essa atualização no "
+        "repositório — só assim ela realmente sobrevive a um reinício."
+    )
+    if st.button("Sincronizar dados atuais para persistência", icon=":material/cloud_sync:"):
+        if sincronizar_para_persistencia():
+            registrar_atividade(usuario["username"], usuario.get("perfil"), "SINCRONIZACAO_PERSISTENCIA", detalhe="Banco de sementes atualizado")
+            st.success("Dados sincronizados. Agora peça ao assistente para salvar (commit/push) essa atualização no repositório.")
+        else:
+            st.error("Não foi possível sincronizar — banco de dados atual não encontrado.")
+
+
+@st.dialog("Confirmar restauração de backup")
+def _dialog_confirmar_restauracao(usuario: dict) -> None:
+    st.warning(
+        "Isso vai substituir todos os dados atuais pelos dados do arquivo de backup enviado. Um backup de "
+        "segurança do estado atual é criado automaticamente antes, mas esta ação não pode ser desfeita pela "
+        "interface.",
+        icon=":material/warning:",
+    )
+    col1, col2 = st.columns(2)
+    if col1.button("Cancelar", use_container_width=True):
+        del st.session_state["admin_confirmar_restauracao"]
+        st.rerun()
+    if col2.button("Confirmar restauração", type="primary", use_container_width=True):
+        conteudo = st.session_state.pop("admin_confirmar_restauracao")
+        try:
+            restaurar_banco_de_bytes(conteudo)
+            registrar_atividade(usuario["username"], usuario.get("perfil"), "RESTAURACAO_BACKUP")
+            st.success("Backup restaurado com sucesso.")
+            st.rerun()
+        except Exception as exc:
+            st.error(f"Não foi possível restaurar o backup: {exc}")

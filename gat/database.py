@@ -179,6 +179,64 @@ def listar_backups() -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# Persistência manual — download/upload de backup e sincronização com a
+# semente versionada no repositório (o disco local do ambiente de execução
+# é temporário; sem um destes dois mecanismos, dados criados pela interface
+# não sobrevivem a um reinício do ambiente).
+# ---------------------------------------------------------------------------
+
+_SQLITE_MAGIC = b"SQLite format 3\x00"
+
+
+def exportar_banco_bytes() -> bytes | None:
+    """Bytes do arquivo de banco de dados atual, para download manual como
+    cópia de segurança pessoal (ex.: salva no computador do usuário)."""
+    if not DB_PATH.exists():
+        return None
+    return DB_PATH.read_bytes()
+
+
+def restaurar_banco_de_bytes(conteudo: bytes) -> None:
+    """
+    Restaura o banco de dados a partir dos bytes de um arquivo `.db`
+    previamente baixado como backup. Cria um backup do estado atual antes
+    de sobrescrever (nunca substitui sem guardar o estado anterior) e
+    reaplica as migrações pendentes, para que o schema restaurado fique
+    compatível com a versão atual do sistema mesmo que o backup seja de
+    uma versão mais antiga.
+    """
+    if not conteudo.startswith(_SQLITE_MAGIC):
+        raise ValueError("O arquivo enviado não é um banco de dados SQLite válido.")
+    if DB_PATH.exists():
+        caminho_backup = criar_backup()
+        if caminho_backup is None:
+            raise RuntimeError(
+                "Não foi possível criar um backup de segurança do banco atual antes de restaurar — "
+                "restauração cancelada para evitar perda de dados."
+            )
+    DB_PATH.write_bytes(conteudo)
+    init_db()
+
+
+def sincronizar_para_persistencia() -> bool:
+    """
+    Copia o banco de dados atual por cima do banco de sementes versionado
+    no repositório (`SEED_DB_PATH`) — o estado atual passa a ser o ponto de
+    partida em uma nova implantação, em vez do estado original da
+    importação. Sozinho isso não basta: o arquivo de sementes atualizado
+    ainda precisa ser publicado (commit/push) no repositório para que a
+    persistência realmente aconteça em um reinício futuro do ambiente.
+    """
+    if not DB_PATH.exists():
+        return False
+    try:
+        shutil.copy2(DB_PATH, SEED_DB_PATH)
+    except OSError:
+        return False
+    return SEED_DB_PATH.exists() and SEED_DB_PATH.stat().st_size > 0
+
+
+# ---------------------------------------------------------------------------
 # Migrações incrementais do schema
 # ---------------------------------------------------------------------------
 #
