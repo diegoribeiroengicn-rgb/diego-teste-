@@ -10,7 +10,13 @@ os registros no banco — para que a aplicação já nasça povoada com o
 histórico real, restando ao usuário cadastrar apenas os projetos novos.
 
 Uso:
-    python scripts/importar_planilha.py --xlsm <caminho.xlsm> [--avaliacao <caminho.xlsx>] [--destino <banco.db>]
+    python scripts/importar_planilha.py --xlsm <caminho.xlsm> [--avaliacao <caminho.xlsx>] --destino <banco.db>
+
+    Para atualizar os dados a partir de uma planilha mais recente (banco já
+    povoado): adicione --atualizar — cria um backup de segurança do banco
+    atual, apaga apenas os registros de prestadores/cessionarios (usuários,
+    reuniões, avaliações de checklist, planos de ação e configurações não
+    são afetados) e reimporta do zero a partir da planilha informada.
 
 Regras aplicadas (decisões registradas conforme engenharia reversa):
 * Linhas sem nome do prestador/cessionário são ignoradas (linhas em branco
@@ -223,6 +229,12 @@ def main() -> None:
     parser.add_argument("--avaliacao", required=False, help="Caminho do arquivo Avaliacao_Prestadores_GAT.xlsx")
     parser.add_argument("--destino", required=True, help="Caminho do banco SQLite de destino")
     parser.add_argument("--forcar", action="store_true", help="Sobrescreve mesmo se já houver dados no destino")
+    parser.add_argument(
+        "--atualizar", action="store_true",
+        help="Atualiza os dados a partir de uma planilha mais recente: cria um backup do banco atual, apaga "
+             "os registros existentes de prestadores/cessionarios (não mexe em usuários, reuniões, avaliações "
+             "de checklist, planos de ação nem configurações) e reimporta do zero a partir da planilha informada.",
+    )
     args = parser.parse_args()
 
     destino = Path(args.destino)
@@ -240,11 +252,26 @@ def main() -> None:
     conn = sqlite3.connect(destino)
     conn.row_factory = sqlite3.Row
 
-    existentes = conn.execute("SELECT COUNT(*) AS n FROM prestadores").fetchone()["n"] + \
-        conn.execute("SELECT COUNT(*) AS n FROM cessionarios").fetchone()["n"]
-    if existentes > 0 and not args.forcar:
+    existentes_prest = conn.execute("SELECT COUNT(*) AS n FROM prestadores").fetchone()["n"]
+    existentes_cess = conn.execute("SELECT COUNT(*) AS n FROM cessionarios").fetchone()["n"]
+    existentes = existentes_prest + existentes_cess
+
+    if args.atualizar:
+        caminho_backup = database.criar_backup()
+        if caminho_backup is None and destino.exists():
+            print("Não foi possível criar um backup de segurança antes de atualizar — operação cancelada.")
+            conn.close()
+            sys.exit(1)
+        if caminho_backup is not None:
+            print(f"Backup de segurança criado em: {caminho_backup}")
+        conn.execute("DELETE FROM prestadores")
+        conn.execute("DELETE FROM cessionarios")
+        conn.commit()
+        print(f"Registros anteriores apagados: {existentes_prest} prestador(es), {existentes_cess} cessionário(s).")
+    elif existentes > 0 and not args.forcar:
         print(f"O destino já possui {existentes} registro(s) nas tabelas de projetos. "
-              f"Use --forcar para importar mesmo assim (pode gerar duplicidade).")
+              f"Use --atualizar para substituir pelos dados de uma planilha mais nova (com backup automático), "
+              f"ou --forcar para importar mesmo assim (pode gerar duplicidade).")
         conn.close()
         sys.exit(1)
 
@@ -261,12 +288,13 @@ def main() -> None:
     aval_ok, aval_skip = importar_avaliacoes(wb_avaliacao, conn)
 
     agora = datetime.now().isoformat()
+    evento = "ATUALIZACAO_PLANILHA" if args.atualizar else "IMPORTACAO_INICIAL"
     for tabela, ok in (("prestadores", prest_ok), ("cessionarios", cess_ok), ("avaliacoes_prestadores", aval_ok)):
         if ok:
             conn.execute(
                 "INSERT INTO historico_edicoes (tabela, registro_id, campo, valor_anterior, valor_novo, usuario, data_hora) "
-                "VALUES (?, 0, 'IMPORTACAO_INICIAL', NULL, ?, ?, ?)",
-                (tabela, f"{ok} registro(s) importado(s) da planilha original", USUARIO_IMPORTACAO, agora),
+                "VALUES (?, 0, ?, NULL, ?, ?, ?)",
+                (tabela, evento, f"{ok} registro(s) importado(s) da planilha", USUARIO_IMPORTACAO, agora),
             )
 
     conn.commit()
