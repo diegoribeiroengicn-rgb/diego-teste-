@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
+import pandas as pd
 import streamlit as st
 
 from gat.business_rules import (
@@ -41,8 +42,10 @@ from gat.database import (
     listar_cadastro_cessionarios,
     listar_cadastro_prestadores,
     listar_obras_prestador,
+    listar_repactuacoes_prazo,
     nome_exibicao_obra,
     registrar_atividade,
+    registrar_repactuacao_prazo,
 )
 
 
@@ -92,6 +95,36 @@ def _pode_persistir_com_pep(valor_pep: str, chave_confirmacao: str) -> bool:
         icon=":material/warning:",
     )
     return st.button("Confirmar cadastro sem PEP", key=f"{chave_confirmacao}_botao", type="primary")
+
+
+def _pode_repactuar(repactuando: bool, motivo: str) -> bool:
+    """Bloqueia o salvamento até que o motivo da repactuação seja informado,
+    quando a Data de Entrega Acordada/Prevista de um projeto já existente é
+    alterada em relação ao valor gravado."""
+    if not repactuando:
+        return True
+    if motivo and motivo.strip():
+        return True
+    st.error("Informe o motivo da repactuação de prazo para salvar.", icon=":material/error:")
+    return False
+
+
+def _historico_repactuacoes(tabela: str, registro_id: int) -> None:
+    historico = listar_repactuacoes_prazo(tabela, registro_id)
+    if historico.empty:
+        return
+    with st.expander(f"Histórico de repactuações de prazo ({len(historico)})", icon=":material/history:"):
+        exibicao = historico[["data_anterior", "data_nova", "motivo", "usuario", "data_hora"]].copy()
+        for coluna in ("data_anterior", "data_nova"):
+            exibicao[coluna] = pd.to_datetime(exibicao[coluna], errors="coerce").dt.strftime("%d/%m/%Y")
+        exibicao["data_hora"] = pd.to_datetime(exibicao["data_hora"], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
+        st.dataframe(
+            exibicao.rename(columns={
+                "data_anterior": "Data anterior", "data_nova": "Nova data", "motivo": "Motivo",
+                "usuario": "Usuário", "data_hora": "Quando",
+            }),
+            use_container_width=True, hide_index=True,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +234,19 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
     hold_dias = calcular_hold_dias(hold_inicio, hold_fim)
     status_calc, dias_decorridos = status_entrega_prestador(data_solicitacao, data_analise, hold_dias)
 
+    data_limite_original = _parse_data(registro.get("data_limite")) if editando else None
+    repactuando = editando and data_limite_original is not None and data_limite is not None and data_limite != data_limite_original
+    motivo_repactuacao = ""
+    if repactuando:
+        st.warning(
+            f"Data de Entrega alterada de **{data_limite_original.strftime('%d/%m/%Y')}** para "
+            f"**{data_limite.strftime('%d/%m/%Y')}**. Informe o motivo da repactuação de prazo.",
+            icon=":material/event_repeat:",
+        )
+        motivo_repactuacao = st.text_input("Motivo da repactuação de prazo *", key=f"pr_motivo_repac_{sufixo}")
+    if editando:
+        _historico_repactuacoes("prestadores", registro["id"])
+
     st.markdown("##### Cálculo automático (dias úteis · calendário RJ)")
     m1, m2, m3 = st.columns(3)
     m1.metric("Dias úteis decorridos", dias_decorridos)
@@ -231,7 +277,11 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
         st.error("Preencha ao menos Prestador de Serviço e Data de Solicitação.")
         salvar = False
 
-    if _tentativa_salvar_iniciada(chave_tentativa, salvar) and _pode_persistir_com_pep(peps, f"pr_confirma_sem_pep_{sufixo}"):
+    if (
+        _tentativa_salvar_iniciada(chave_tentativa, salvar)
+        and _pode_persistir_com_pep(peps, f"pr_confirma_sem_pep_{sufixo}")
+        and _pode_repactuar(repactuando, motivo_repactuacao)
+    ):
         dados = {
             "item": registro.get("item") if editando else None,
             "codigo": codigo,
@@ -260,6 +310,11 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
         }
         if editando:
             atualizar_prestador(registro["id"], dados, usuario)
+            if repactuando:
+                registrar_repactuacao_prazo(
+                    "prestadores", registro["id"], data_limite_original.isoformat(), data_limite.isoformat(),
+                    motivo_repactuacao.strip(), usuario,
+                )
             registrar_atividade(usuario, None, "PROJETO_EDITADO", modulo="prestadores", detalhe=prestador)
             st.toast("Registro de prestador atualizado com sucesso.", icon=":material/check_circle:")
         else:
@@ -364,6 +419,19 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
     hold_dias = calcular_hold_dias(hold_inicio, hold_fim)
     status_calc, saldo = status_entrega_cessionario(data_solicitacao, data_analise, hold_dias, sla_dias)
 
+    data_limite_original = _parse_data(registro.get("data_limite")) if editando else None
+    repactuando = editando and data_limite_original is not None and data_limite is not None and data_limite != data_limite_original
+    motivo_repactuacao = ""
+    if repactuando:
+        st.warning(
+            f"Data de Entrega alterada de **{data_limite_original.strftime('%d/%m/%Y')}** para "
+            f"**{data_limite.strftime('%d/%m/%Y')}**. Informe o motivo da repactuação de prazo.",
+            icon=":material/event_repeat:",
+        )
+        motivo_repactuacao = st.text_input("Motivo da repactuação de prazo *", key=f"ce_motivo_repac_{sufixo}")
+    if editando:
+        _historico_repactuacoes("cessionarios", registro["id"])
+
     st.markdown("##### Cálculo automático (dias úteis · calendário RJ)")
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("SLA (dias úteis)", sla_dias)
@@ -395,7 +463,11 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
         st.error("Preencha ao menos Cessionário e Data de Solicitação.")
         salvar = False
 
-    if _tentativa_salvar_iniciada(chave_tentativa, salvar) and _pode_persistir_com_pep(pep, f"ce_confirma_sem_pep_{sufixo}"):
+    if (
+        _tentativa_salvar_iniciada(chave_tentativa, salvar)
+        and _pode_persistir_com_pep(pep, f"ce_confirma_sem_pep_{sufixo}")
+        and _pode_repactuar(repactuando, motivo_repactuacao)
+    ):
         dados = {
             "item": registro.get("item") if editando else None,
             "codigo": codigo,
@@ -424,6 +496,11 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
         }
         if editando:
             atualizar_cessionario(registro["id"], dados, usuario)
+            if repactuando:
+                registrar_repactuacao_prazo(
+                    "cessionarios", registro["id"], data_limite_original.isoformat(), data_limite.isoformat(),
+                    motivo_repactuacao.strip(), usuario,
+                )
             registrar_atividade(usuario, None, "PROJETO_EDITADO", modulo="cessionarios", detalhe=cessionario)
             st.toast("Registro de cessionário atualizado com sucesso.", icon=":material/check_circle:")
         else:

@@ -427,11 +427,34 @@ def _migracao_0004_cadastro_mestre(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migracao_0005_repactuacoes_prazo(conn: sqlite3.Connection) -> None:
+    """Histórico estruturado de repactuações de prazo (Data de Entrega
+    Acordada/Prevista alterada em um projeto já existente), com o motivo
+    informado pelo usuário — complementa (sem substituir) o histórico
+    genérico de edições já existente em `historico_edicoes`."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS repactuacoes_prazo (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tabela TEXT NOT NULL,
+            registro_id INTEGER NOT NULL,
+            data_anterior TEXT,
+            data_nova TEXT,
+            motivo TEXT NOT NULL,
+            usuario TEXT,
+            data_hora TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_repactuacoes_prazo_registro ON repactuacoes_prazo(tabela, registro_id)")
+
+
 _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (1, "Índices de busca por N° AT e nome em Prestadores e Cessionários", _migracao_0001_indices_busca),
     (2, "Índices para avaliações (checklist/analistas), alertas com radar e histórico de atividades", _migracao_0002_indices_avaliacoes_alertas),
     (3, "Ciclo de vida completo dos alertas (Pendente/Em tratamento/Tratado/Adiado/Retirado/Reaberto)", _migracao_0003_ciclo_vida_alertas),
     (4, "Cadastro mestre de Prestadores/Cessionários + Obras/Canteiros, com backfill e vínculo aos projetos existentes", _migracao_0004_cadastro_mestre),
+    (5, "Histórico estruturado de repactuações de prazo (data anterior/nova, motivo)", _migracao_0005_repactuacoes_prazo),
 ]
 
 
@@ -1060,6 +1083,24 @@ def listar_historico(tabela: str | None = None, registro_id: int | None = None) 
     query += " ORDER BY data_hora DESC"
     with _conectar() as conn:
         return pd.read_sql_query(query, conn, params=params)
+
+
+def registrar_repactuacao_prazo(tabela: str, registro_id: int, data_anterior: str | None, data_nova: str | None, motivo: str, usuario: str) -> None:
+    agora = datetime.now().isoformat()
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO repactuacoes_prazo (tabela, registro_id, data_anterior, data_nova, motivo, usuario, data_hora) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (tabela, registro_id, data_anterior, data_nova, motivo, usuario, agora),
+        )
+
+
+def listar_repactuacoes_prazo(tabela: str, registro_id: int) -> pd.DataFrame:
+    with _conectar() as conn:
+        return pd.read_sql_query(
+            "SELECT * FROM repactuacoes_prazo WHERE tabela = ? AND registro_id = ? ORDER BY data_hora DESC",
+            conn, params=(tabela, registro_id),
+        )
 
 
 # ---------------------------------------------------------------------------
