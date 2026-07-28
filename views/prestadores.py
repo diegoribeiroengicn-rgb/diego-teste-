@@ -13,7 +13,8 @@ from gat.business_rules import (
     situacao_prazo,
 )
 from gat.config import COLUNAS_EXIBICAO_PRESTADORES, RESPONSAVEIS, SLA_PRESTADORES_DIAS_UTEIS, STATUS_ANALISE_OPCOES
-from gat.database import listar_prestadores, obter_prestador
+from gat.database import listar_prestadores, obter_prestador, registrar_atividade
+from gat.export_projetos import gerar_csv_bytes, gerar_excel_bytes, montar_exportacao_prestadores, nome_arquivo_exportacao
 from gat.permissions import exigir_area, exigir_modulo, pode_area
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.modals import dialog_prestador
@@ -158,3 +159,34 @@ def render(usuario: dict) -> None:
         abrir_dialog_edicao=_abrir_edicao,
         obter_registro=obter_prestador,
     )
+
+    if pode_area(usuario, "prestadores.exportar"):
+        st.markdown("---")
+        st.markdown("##### Exportar dados")
+        pode_completo = pode_area(usuario, "prestadores.exportar_completo")
+        col_escopo, col_formato = st.columns(2)
+        opcoes_escopo = ["Dados filtrados"] + (["Base completa"] if pode_completo else [])
+        escopo = col_escopo.selectbox("Escopo da exportação", opcoes_escopo, key="export_prest_escopo")
+        formato = col_formato.selectbox("Formato", ["Excel (.xlsx)", "CSV (.csv)"], key="export_prest_formato")
+
+        filtrado = escopo == "Dados filtrados"
+        base_exportacao = df_filtrado if filtrado else df
+        st.caption(f"Você está prestes a baixar: **{escopo}** — {len(base_exportacao)} registro(s).")
+
+        if st.button("Baixar Projetos de Prestadores", icon=":material/description:", key="export_prest_gerar"):
+            exigir_area(usuario, "prestadores.exportar" if filtrado else "prestadores.exportar_completo")
+            exportacao = montar_exportacao_prestadores(base_exportacao)
+            rotulo_periodo = rotulo_competencia(mes, ano) if (filtrado and (mes or ano)) else None
+            if formato.startswith("Excel"):
+                conteudo = gerar_excel_bytes(exportacao, "Prestadores")
+                arquivo = nome_arquivo_exportacao("Prestadores", "xlsx", filtrado, rotulo_periodo)
+                mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            else:
+                conteudo = gerar_csv_bytes(exportacao)
+                arquivo = nome_arquivo_exportacao("Prestadores", "csv", filtrado, rotulo_periodo)
+                mime = "text/csv"
+            st.download_button(
+                f"Confirmar download — {escopo}", data=conteudo, file_name=arquivo, mime=mime,
+                icon=":material/download:", type="primary", use_container_width=True, key="export_prest_baixar",
+            )
+            registrar_atividade(usuario["username"], usuario.get("perfil"), "EXPORTACAO_PROJETOS", modulo="prestadores", detalhe=f"{escopo} · {formato}")

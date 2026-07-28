@@ -7,7 +7,8 @@ import streamlit as st
 
 from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia
 from gat.config import CORES
-from gat.database import listar_cessionarios, listar_prestadores
+from gat.database import listar_cessionarios, listar_prestadores, registrar_atividade
+from gat.export_projetos import gerar_csv_bytes, gerar_excel_bytes, montar_exportacao_consolidada, nome_arquivo_exportacao
 from gat.ui.charts import (
     gauge_sla,
     grafico_aging,
@@ -16,7 +17,7 @@ from gat.ui.charts import (
     grafico_status_donut,
     grafico_top_responsaveis,
 )
-from gat.permissions import exigir_modulo
+from gat.permissions import exigir_modulo, exigir_area, pode_area
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.kpi_cards import renderizar_kpis
 
@@ -137,3 +138,36 @@ def render(usuario: dict) -> None:
                 pendentes_reuniao=("pendente_reuniao", "sum"),
             ).reset_index()
             st.dataframe(resumo, use_container_width=True, hide_index=True)
+
+    if pode_area(usuario, "consolidado.exportar"):
+        st.markdown("---")
+        st.markdown("##### Exportar Projetos Consolidados")
+        st.caption("Junta Prestadores e Cessionários em um único arquivo, com a coluna \"Tipo de Projeto\" identificando a origem de cada linha.")
+        pode_completo = pode_area(usuario, "consolidado.exportar_completo")
+        col_escopo, col_formato = st.columns(2)
+        opcoes_escopo = ["Dados filtrados"] + (["Base completa"] if pode_completo else [])
+        escopo = col_escopo.selectbox("Escopo da exportação", opcoes_escopo, key="export_cons_escopo")
+        formato = col_formato.selectbox("Formato", ["Excel (.xlsx)", "CSV (.csv)"], key="export_cons_formato")
+
+        filtrado = escopo == "Dados filtrados"
+        base_prest = df_prest if filtrado else df_prest_completo
+        base_cess = df_cess if filtrado else df_cess_completo
+        st.caption(f"Você está prestes a baixar: **{escopo}** — {len(base_prest) + len(base_cess)} registro(s) ({len(base_prest)} prestadores + {len(base_cess)} cessionários).")
+
+        if st.button("Baixar Projetos Consolidados", icon=":material/description:", key="export_cons_gerar"):
+            exigir_area(usuario, "consolidado.exportar" if filtrado else "consolidado.exportar_completo")
+            exportacao = montar_exportacao_consolidada(base_prest, base_cess)
+            rotulo_periodo = rotulo_competencia(mes, ano) if (filtrado and (mes or ano)) else None
+            if formato.startswith("Excel"):
+                conteudo = gerar_excel_bytes(exportacao, "Consolidado")
+                arquivo = nome_arquivo_exportacao("Consolidado", "xlsx", filtrado, rotulo_periodo)
+                mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            else:
+                conteudo = gerar_csv_bytes(exportacao)
+                arquivo = nome_arquivo_exportacao("Consolidado", "csv", filtrado, rotulo_periodo)
+                mime = "text/csv"
+            st.download_button(
+                f"Confirmar download — {escopo}", data=conteudo, file_name=arquivo, mime=mime,
+                icon=":material/download:", type="primary", use_container_width=True, key="export_cons_baixar",
+            )
+            registrar_atividade(usuario["username"], usuario.get("perfil"), "EXPORTACAO_PROJETOS", modulo="consolidado", detalhe=f"{escopo} · {formato}")

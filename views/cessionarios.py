@@ -13,7 +13,8 @@ from gat.business_rules import (
     situacao_prazo,
 )
 from gat.config import COLUNAS_EXIBICAO_CESSIONARIOS, RESPONSAVEIS, STATUS_ANALISE_OPCOES, TIPO_CESSIONARIO_OPCOES
-from gat.database import listar_cessionarios, obter_cessionario
+from gat.database import listar_cessionarios, obter_cessionario, registrar_atividade
+from gat.export_projetos import gerar_csv_bytes, gerar_excel_bytes, montar_exportacao_cessionarios, nome_arquivo_exportacao
 from gat.permissions import exigir_area, exigir_modulo, pode_area
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.modals import dialog_cessionario
@@ -160,3 +161,34 @@ def render(usuario: dict) -> None:
         abrir_dialog_edicao=_abrir_edicao,
         obter_registro=obter_cessionario,
     )
+
+    if pode_area(usuario, "cessionarios.exportar"):
+        st.markdown("---")
+        st.markdown("##### Exportar dados")
+        pode_completo = pode_area(usuario, "cessionarios.exportar_completo")
+        col_escopo, col_formato = st.columns(2)
+        opcoes_escopo = ["Dados filtrados"] + (["Base completa"] if pode_completo else [])
+        escopo = col_escopo.selectbox("Escopo da exportação", opcoes_escopo, key="export_cess_escopo")
+        formato = col_formato.selectbox("Formato", ["Excel (.xlsx)", "CSV (.csv)"], key="export_cess_formato")
+
+        filtrado = escopo == "Dados filtrados"
+        base_exportacao = df_filtrado if filtrado else df
+        st.caption(f"Você está prestes a baixar: **{escopo}** — {len(base_exportacao)} registro(s).")
+
+        if st.button("Baixar Projetos de Cessionários", icon=":material/description:", key="export_cess_gerar"):
+            exigir_area(usuario, "cessionarios.exportar" if filtrado else "cessionarios.exportar_completo")
+            exportacao = montar_exportacao_cessionarios(base_exportacao)
+            rotulo_periodo = rotulo_competencia(mes, ano) if (filtrado and (mes or ano)) else None
+            if formato.startswith("Excel"):
+                conteudo = gerar_excel_bytes(exportacao, "Cessionarios")
+                arquivo = nome_arquivo_exportacao("Cessionarios", "xlsx", filtrado, rotulo_periodo)
+                mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            else:
+                conteudo = gerar_csv_bytes(exportacao)
+                arquivo = nome_arquivo_exportacao("Cessionarios", "csv", filtrado, rotulo_periodo)
+                mime = "text/csv"
+            st.download_button(
+                f"Confirmar download — {escopo}", data=conteudo, file_name=arquivo, mime=mime,
+                icon=":material/download:", type="primary", use_container_width=True, key="export_cess_baixar",
+            )
+            registrar_atividade(usuario["username"], usuario.get("perfil"), "EXPORTACAO_PROJETOS", modulo="cessionarios", detalhe=f"{escopo} · {formato}")
