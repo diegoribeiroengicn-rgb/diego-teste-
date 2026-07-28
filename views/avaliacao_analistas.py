@@ -8,20 +8,60 @@ import pandas as pd
 import streamlit as st
 
 from gat.config import CRITERIOS_AVALIACAO_ANALISTA, ESCALA_AVALIACAO_ANALISTA, MESES_PT, RESPONSAVEIS
+from gat.business_rules import filtrar_por_competencia
 from gat.database import (
     atualizar_avaliacao_analista,
     inserir_avaliacao_analista,
     listar_avaliacoes_analistas,
+    listar_cessionarios,
+    listar_prestadores,
 )
 from gat.permissions import exigir_area, pode_area
 from gat.ui.kpi_cards import renderizar_kpis
 
 _CHAVES_CRITERIOS = [c for c, _ in CRITERIOS_AVALIACAO_ANALISTA]
 
+PENALIDADE_ETG = 0.5  # redução de 50% aplicada à média quando o analista teve ETG=SIM no período
 
-def _media_geral(row: pd.Series) -> float:
+
+def _media_bruta(row: pd.Series) -> float:
     valores = [row[c] for c in _CHAVES_CRITERIOS if pd.notna(row.get(c))]
     return round(sum(valores) / len(valores), 2) if valores else 0.0
+
+
+def _analistas_com_etg_no_periodo(mes: int, ano: int) -> set[str]:
+    """Analistas (Responsável) com ao menos um projeto de Prestador ou
+    Cessionário marcado com ETG=SIM na competência (Data de Solicitação)
+    informada — usado para aplicar a penalidade automática na avaliação."""
+    df_p = filtrar_por_competencia(listar_prestadores(), "data_solicitacao", mes, ano)
+    df_c = filtrar_por_competencia(listar_cessionarios(), "data_solicitacao", mes, ano)
+    analistas: set[str] = set()
+    if not df_p.empty and "etg" in df_p.columns:
+        analistas |= set(df_p.loc[df_p["etg"] == "SIM", "responsavel"].dropna())
+    if not df_c.empty and "etg" in df_c.columns:
+        analistas |= set(df_c.loc[df_c["etg"] == "SIM", "responsavel"].dropna())
+    return analistas
+
+
+def _aplicar_penalidade_etg(df: pd.DataFrame) -> pd.DataFrame:
+    """Adiciona `media_bruta` (média dos critérios, sem ajuste),
+    `etg_penalizado` (bool) e `media_geral` (a nota final, com a
+    penalidade de -50% já aplicada quando o analista teve ETG=SIM na
+    mesma competência da avaliação)."""
+    df = df.copy()
+    df["media_bruta"] = df.apply(_media_bruta, axis=1)
+
+    cache_etg: dict[tuple[int, int], set[str]] = {}
+    for mes, ano in df[["mes", "ano"]].drop_duplicates().itertuples(index=False):
+        cache_etg[(int(mes), int(ano))] = _analistas_com_etg_no_periodo(int(mes), int(ano))
+
+    df["etg_penalizado"] = df.apply(
+        lambda r: r["analista"] in cache_etg.get((int(r["mes"]), int(r["ano"])), set()), axis=1
+    )
+    df["media_geral"] = df.apply(
+        lambda r: round(r["media_bruta"] * PENALIDADE_ETG, 2) if r["etg_penalizado"] else r["media_bruta"], axis=1
+    )
+    return df
 
 
 @st.dialog("Avaliação do Analista", width="large")
@@ -87,6 +127,11 @@ def render(usuario: dict) -> None:
         "Notas de desempenho por critério — módulo restrito, separado da produtividade. "
         "Escala: " + " · ".join(f"{k} = {v}" for k, v in ESCALA_AVALIACAO_ANALISTA.items())
     )
+    st.caption(
+        f":material/rule: Penalidade automática: quando o analista teve pelo menos um projeto (Prestador ou "
+        f"Cessionário) com ETG = SIM na mesma competência da avaliação, a Média Geral é reduzida em "
+        f"{int((1 - PENALIDADE_ETG) * 100)}%."
+    )
 
     if pode_area(usuario, "analistas.avaliar"):
         if st.button("Nova Avaliação", icon=":material/add:", type="primary", key="nova_avaliacao_analista"):
@@ -97,7 +142,7 @@ def render(usuario: dict) -> None:
         st.info("Nenhuma avaliação de analista registrada ainda.")
         return
 
-    df["media_geral"] = df.apply(_media_geral, axis=1)
+    df = _aplicar_penalidade_etg(df)
 
     with st.expander("Filtros", icon=":material/filter_list:", expanded=False):
         col1, col2, col3 = st.columns(3)
@@ -131,8 +176,13 @@ def render(usuario: dict) -> None:
     st.line_chart(evolucao.set_index("competencia")["media_geral"])
 
     st.markdown("##### Avaliações registradas")
-    colunas_tabela = ["analista", "avaliador", "mes", "ano", "media_geral", "justificativa"]
-    rotulos = {"analista": "Analista", "avaliador": "Avaliador", "mes": "Mês", "ano": "Ano", "media_geral": "Média Geral", "justificativa": "Justificativa"}
+    df_filtrado["etg_rotulo"] = df_filtrado["etg_penalizado"].map({True: f"Sim (-{int((1 - PENALIDADE_ETG) * 100)}%)", False: "—"})
+    colunas_tabela = ["analista", "avaliador", "mes", "ano", "media_bruta", "etg_rotulo", "media_geral", "justificativa"]
+    rotulos = {
+        "analista": "Analista", "avaliador": "Avaliador", "mes": "Mês", "ano": "Ano",
+        "media_bruta": "Média (critérios)", "etg_rotulo": "Penalidade ETG", "media_geral": "Média Geral (final)",
+        "justificativa": "Justificativa",
+    }
     df_exibicao = df_filtrado[colunas_tabela].copy()
     df_exibicao["mes"] = df_exibicao["mes"].apply(lambda m: MESES_PT[int(m) - 1])
     df_exibicao = df_exibicao.rename(columns=rotulos).sort_values(["Ano", "Analista"], ascending=False).reset_index(drop=True)
