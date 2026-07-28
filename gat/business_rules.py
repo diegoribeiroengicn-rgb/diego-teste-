@@ -294,9 +294,37 @@ def enriquecer_prestadores(df: pd.DataFrame) -> pd.DataFrame:
 
     calculados = df.apply(_linha, axis=1)
     df = pd.concat([df, calculados], axis=1)
-    df = enriquecer_situacao_pep(df, "peps")
+    df["peps_efetivo"] = _pep_efetivo_prestadores(df)
+    df = enriquecer_situacao_pep(df, "peps_efetivo")
     df["situacao_pep"] = df["tem_pep"].map({True: "OK", False: "SEM PEP"})
     return adicionar_flags_governanca(df)
+
+
+def _pep_efetivo_prestadores(df: pd.DataFrame) -> pd.Series:
+    """PEP efetivo de cada projeto de prestador: usa o cadastro mestre do
+    prestador vinculado (`prestador_cadastro_id`) quando ele já tiver PEP
+    informado — assim, atualizar o PEP no Cadastro de Prestadores propaga
+    automaticamente para todos os projetos do mesmo código, sem precisar
+    digitar em cada um. Projetos ainda sem vínculo de cadastro (dado
+    histórico) ou cujo cadastro não tem PEP continuam usando o valor
+    gravado no próprio projeto (`peps`), sem perder histórico."""
+    if "prestador_cadastro_id" not in df.columns:
+        return df["peps"]
+
+    from gat.database import listar_cadastro_prestadores
+
+    cadastro = listar_cadastro_prestadores().set_index("id")
+
+    def _linha(linha):
+        cadastro_id = linha.get("prestador_cadastro_id")
+        if pd.notna(cadastro_id) and int(cadastro_id) in cadastro.index:
+            registro = cadastro.loc[int(cadastro_id)]
+            numero_pep = registro.get("numero_pep")
+            if registro.get("possui_pep") == "SIM" and numero_pep and str(numero_pep).strip():
+                return numero_pep
+        return linha.get("peps")
+
+    return df.apply(_linha, axis=1)
 
 
 # ---------------------------------------------------------------------------

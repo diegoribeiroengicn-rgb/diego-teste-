@@ -69,6 +69,20 @@ COLUNAS_CESSIONARIOS = [
     "natureza_revisao", "num_erros", "etg", "pep",
 ]
 
+COLUNAS_CADASTRO_PRESTADORES = [
+    "codigo", "nome_empresa", "possui_pep", "numero_pep", "responsavel",
+    "telefone", "email", "contatos", "status", "observacoes",
+]
+
+COLUNAS_OBRAS_PRESTADOR = [
+    "prestador_id", "nome_obra", "codigo_referencia", "status", "e_canteiro", "observacoes",
+]
+
+COLUNAS_CADASTRO_CESSIONARIOS = [
+    "codigo", "nome_empresa", "luc", "rvp", "rci", "responsavel",
+    "telefone", "email", "contatos", "status", "observacoes",
+]
+
 COLUNAS_AVALIACOES = [
     "codigo_prestador", "nome_prestador", "data_avaliacao", "nome_projeto",
     "at_referencia", "nota", "analista_responsavel", "observacoes",
@@ -282,10 +296,142 @@ def _migracao_0003_ciclo_vida_alertas(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_alertas_radar_status ON alertas_radar(status)")
 
 
+def _migracao_0004_cadastro_mestre(conn: sqlite3.Connection) -> None:
+    """Cadastro mestre de Prestadores e Cessionários — tabelas de cadastro
+    centralizadas (empresa, PEP, RVP/RCI/LUC, contatos) e Obras/Canteiros
+    vinculados a um prestador, complementando (sem substituir) as tabelas
+    de projeto/análise `prestadores`/`cessionarios`, que continuam com sua
+    função original intacta. Faz backfill automático: cria um cadastro
+    para cada código já usado nos projetos existentes (nunca duplica —
+    `INSERT OR IGNORE` respeita a UNIQUE(codigo) — e nunca inventa dados,
+    herda nome/PEP do registro mais recente daquele código) e vincula os
+    projetos existentes ao cadastro correspondente pelo código."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cadastro_prestadores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo TEXT NOT NULL UNIQUE,
+            nome_empresa TEXT NOT NULL,
+            possui_pep TEXT NOT NULL DEFAULT 'NAO',
+            numero_pep TEXT,
+            responsavel TEXT,
+            telefone TEXT,
+            email TEXT,
+            contatos TEXT,
+            status TEXT NOT NULL DEFAULT 'ATIVO',
+            observacoes TEXT,
+            criado_em TEXT NOT NULL,
+            criado_por TEXT,
+            atualizado_em TEXT,
+            atualizado_por TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS obras_prestador (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            prestador_id INTEGER NOT NULL REFERENCES cadastro_prestadores(id) ON DELETE CASCADE,
+            nome_obra TEXT NOT NULL,
+            codigo_referencia TEXT,
+            status TEXT NOT NULL DEFAULT 'ATIVA',
+            e_canteiro INTEGER NOT NULL DEFAULT 0,
+            observacoes TEXT,
+            criado_em TEXT NOT NULL,
+            criado_por TEXT,
+            atualizado_em TEXT,
+            atualizado_por TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cadastro_cessionarios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo TEXT NOT NULL UNIQUE,
+            nome_empresa TEXT NOT NULL,
+            luc TEXT,
+            rvp TEXT,
+            rci TEXT,
+            responsavel TEXT,
+            telefone TEXT,
+            email TEXT,
+            contatos TEXT,
+            status TEXT NOT NULL DEFAULT 'ATIVO',
+            observacoes TEXT,
+            criado_em TEXT NOT NULL,
+            criado_por TEXT,
+            atualizado_em TEXT,
+            atualizado_por TEXT
+        )
+        """
+    )
+
+    _garantir_coluna(conn, "prestadores", "prestador_cadastro_id", "INTEGER")
+    _garantir_coluna(conn, "prestadores", "obra_id", "INTEGER")
+    _garantir_coluna(conn, "cessionarios", "cessionario_cadastro_id", "INTEGER")
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cadastro_prestadores_codigo ON cadastro_prestadores(codigo)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cadastro_cessionarios_codigo ON cadastro_cessionarios(codigo)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_obras_prestador_prestador_id ON obras_prestador(prestador_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_prestadores_cadastro_id ON prestadores(prestador_cadastro_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_prestadores_obra_id ON prestadores(obra_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cessionarios_cadastro_id ON cessionarios(cessionario_cadastro_id)")
+
+    agora = datetime.now().isoformat()
+
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO cadastro_prestadores
+            (codigo, nome_empresa, possui_pep, numero_pep, status, criado_em, criado_por, atualizado_em, atualizado_por)
+        SELECT
+            p1.codigo,
+            (SELECT p2.prestador FROM prestadores p2 WHERE p2.codigo = p1.codigo AND p2.prestador IS NOT NULL AND TRIM(p2.prestador) <> '' ORDER BY p2.criado_em DESC, p2.id DESC LIMIT 1),
+            CASE WHEN (SELECT MAX(NULLIF(TRIM(p3.peps), '')) FROM prestadores p3 WHERE p3.codigo = p1.codigo) IS NOT NULL THEN 'SIM' ELSE 'NAO' END,
+            (SELECT p4.peps FROM prestadores p4 WHERE p4.codigo = p1.codigo AND p4.peps IS NOT NULL AND TRIM(p4.peps) <> '' ORDER BY p4.criado_em DESC, p4.id DESC LIMIT 1),
+            'ATIVO', ?, 'MIGRACAO_0004', ?, 'MIGRACAO_0004'
+        FROM prestadores p1
+        WHERE p1.codigo IS NOT NULL AND TRIM(p1.codigo) <> ''
+        GROUP BY p1.codigo
+        """,
+        (agora, agora),
+    )
+    conn.execute(
+        """
+        UPDATE prestadores
+        SET prestador_cadastro_id = (SELECT id FROM cadastro_prestadores WHERE cadastro_prestadores.codigo = prestadores.codigo)
+        WHERE codigo IS NOT NULL AND TRIM(codigo) <> '' AND prestador_cadastro_id IS NULL
+        """
+    )
+
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO cadastro_cessionarios
+            (codigo, nome_empresa, status, criado_em, criado_por, atualizado_em, atualizado_por)
+        SELECT
+            c1.codigo,
+            (SELECT c2.cessionario FROM cessionarios c2 WHERE c2.codigo = c1.codigo AND c2.cessionario IS NOT NULL AND TRIM(c2.cessionario) <> '' ORDER BY c2.criado_em DESC, c2.id DESC LIMIT 1),
+            'ATIVO', ?, 'MIGRACAO_0004', ?, 'MIGRACAO_0004'
+        FROM cessionarios c1
+        WHERE c1.codigo IS NOT NULL AND TRIM(c1.codigo) <> ''
+        GROUP BY c1.codigo
+        """,
+        (agora, agora),
+    )
+    conn.execute(
+        """
+        UPDATE cessionarios
+        SET cessionario_cadastro_id = (SELECT id FROM cadastro_cessionarios WHERE cadastro_cessionarios.codigo = cessionarios.codigo)
+        WHERE codigo IS NOT NULL AND TRIM(codigo) <> '' AND cessionario_cadastro_id IS NULL
+        """
+    )
+
+
 _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (1, "Índices de busca por N° AT e nome em Prestadores e Cessionários", _migracao_0001_indices_busca),
     (2, "Índices para avaliações (checklist/analistas), alertas com radar e histórico de atividades", _migracao_0002_indices_avaliacoes_alertas),
     (3, "Ciclo de vida completo dos alertas (Pendente/Em tratamento/Tratado/Adiado/Retirado/Reaberto)", _migracao_0003_ciclo_vida_alertas),
+    (4, "Cadastro mestre de Prestadores/Cessionários + Obras/Canteiros, com backfill e vínculo aos projetos existentes", _migracao_0004_cadastro_mestre),
 ]
 
 
@@ -1018,6 +1164,223 @@ def obter_cessionario(registro_id: int) -> dict[str, Any] | None:
     with _conectar() as conn:
         linha = conn.execute("SELECT * FROM cessionarios WHERE id = ?", (registro_id,)).fetchone()
         return dict(linha) if linha else None
+
+
+# ---------------------------------------------------------------------------
+# Cadastro mestre de Prestadores (empresa, PEP, contatos — não é uma análise)
+# ---------------------------------------------------------------------------
+
+
+def inserir_cadastro_prestador(dados: dict[str, Any], usuario: str) -> int:
+    codigo = (dados.get("codigo") or "").strip()
+    if not codigo:
+        raise ValueError("Código do prestador é obrigatório.")
+    with _conectar() as conn:
+        if conn.execute("SELECT id FROM cadastro_prestadores WHERE codigo = ?", (codigo,)).fetchone():
+            raise ValueError(f"Já existe um cadastro de prestador com o código '{codigo}'.")
+        campos = {c: dados.get(c) for c in COLUNAS_CADASTRO_PRESTADORES}
+        campos["codigo"] = codigo
+        campos["status"] = campos.get("status") or "ATIVO"
+        campos["possui_pep"] = campos.get("possui_pep") or "NAO"
+        agora = datetime.now().isoformat()
+        cursor = conn.execute(
+            f"INSERT INTO cadastro_prestadores ({', '.join(campos.keys())}, criado_em, criado_por, atualizado_em, atualizado_por) "
+            f"VALUES ({', '.join(['?'] * len(campos))}, ?, ?, ?, ?)",
+            (*campos.values(), agora, usuario, agora, usuario),
+        )
+        novo_id = cursor.lastrowid
+        _registrar_historico(conn, "cadastro_prestadores", novo_id, {}, campos, usuario)
+        return novo_id
+
+
+def atualizar_cadastro_prestador(registro_id: int, dados: dict[str, Any], usuario: str) -> None:
+    codigo = (dados.get("codigo") or "").strip()
+    if not codigo:
+        raise ValueError("Código do prestador é obrigatório.")
+    with _conectar() as conn:
+        antigo = conn.execute("SELECT * FROM cadastro_prestadores WHERE id = ?", (registro_id,)).fetchone()
+        antigo_dict = dict(antigo) if antigo else {}
+        if conn.execute("SELECT id FROM cadastro_prestadores WHERE codigo = ? AND id != ?", (codigo, registro_id)).fetchone():
+            raise ValueError(f"Já existe outro cadastro de prestador com o código '{codigo}'.")
+        campos = {c: dados.get(c) for c in COLUNAS_CADASTRO_PRESTADORES}
+        campos["codigo"] = codigo
+        campos["status"] = campos.get("status") or "ATIVO"
+        campos["possui_pep"] = campos.get("possui_pep") or "NAO"
+        agora = datetime.now().isoformat()
+        set_clause = ", ".join(f"{c} = ?" for c in campos)
+        conn.execute(
+            f"UPDATE cadastro_prestadores SET {set_clause}, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
+            (*campos.values(), agora, usuario, registro_id),
+        )
+        _registrar_historico(conn, "cadastro_prestadores", registro_id, antigo_dict, campos, usuario)
+
+
+def listar_cadastro_prestadores() -> pd.DataFrame:
+    with _conectar() as conn:
+        return pd.read_sql_query("SELECT * FROM cadastro_prestadores ORDER BY codigo", conn)
+
+
+def obter_cadastro_prestador(registro_id: int) -> dict[str, Any] | None:
+    with _conectar() as conn:
+        linha = conn.execute("SELECT * FROM cadastro_prestadores WHERE id = ?", (registro_id,)).fetchone()
+        return dict(linha) if linha else None
+
+
+def obter_cadastro_prestador_por_codigo(codigo: str) -> dict[str, Any] | None:
+    with _conectar() as conn:
+        linha = conn.execute("SELECT * FROM cadastro_prestadores WHERE codigo = ?", (codigo,)).fetchone()
+        return dict(linha) if linha else None
+
+
+def definir_status_cadastro_prestador(registro_id: int, status: str, usuario: str) -> None:
+    with _conectar() as conn:
+        antigo = conn.execute("SELECT status FROM cadastro_prestadores WHERE id = ?", (registro_id,)).fetchone()
+        antigo_dict = dict(antigo) if antigo else {}
+        agora = datetime.now().isoformat()
+        conn.execute(
+            "UPDATE cadastro_prestadores SET status = ?, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
+            (status, agora, usuario, registro_id),
+        )
+        _registrar_historico(conn, "cadastro_prestadores", registro_id, antigo_dict, {"status": status}, usuario)
+
+
+# ---------------------------------------------------------------------------
+# Obras / Áreas vinculadas a um prestador (inclui identificação de canteiro)
+# ---------------------------------------------------------------------------
+
+
+def inserir_obra_prestador(dados: dict[str, Any], usuario: str) -> int:
+    if not dados.get("prestador_id"):
+        raise ValueError("Prestador é obrigatório para cadastrar uma obra.")
+    if not (dados.get("nome_obra") or "").strip():
+        raise ValueError("Nome da obra é obrigatório.")
+    with _conectar() as conn:
+        campos = {c: dados.get(c) for c in COLUNAS_OBRAS_PRESTADOR}
+        campos["e_canteiro"] = 1 if campos.get("e_canteiro") else 0
+        campos["status"] = campos.get("status") or "ATIVA"
+        agora = datetime.now().isoformat()
+        cursor = conn.execute(
+            f"INSERT INTO obras_prestador ({', '.join(campos.keys())}, criado_em, criado_por, atualizado_em, atualizado_por) "
+            f"VALUES ({', '.join(['?'] * len(campos))}, ?, ?, ?, ?)",
+            (*campos.values(), agora, usuario, agora, usuario),
+        )
+        novo_id = cursor.lastrowid
+        _registrar_historico(conn, "obras_prestador", novo_id, {}, campos, usuario)
+        return novo_id
+
+
+def atualizar_obra_prestador(registro_id: int, dados: dict[str, Any], usuario: str) -> None:
+    with _conectar() as conn:
+        antigo = conn.execute("SELECT * FROM obras_prestador WHERE id = ?", (registro_id,)).fetchone()
+        antigo_dict = dict(antigo) if antigo else {}
+        campos = {c: dados.get(c) for c in COLUNAS_OBRAS_PRESTADOR}
+        campos["e_canteiro"] = 1 if campos.get("e_canteiro") else 0
+        campos["status"] = campos.get("status") or "ATIVA"
+        agora = datetime.now().isoformat()
+        set_clause = ", ".join(f"{c} = ?" for c in campos)
+        conn.execute(
+            f"UPDATE obras_prestador SET {set_clause}, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
+            (*campos.values(), agora, usuario, registro_id),
+        )
+        _registrar_historico(conn, "obras_prestador", registro_id, antigo_dict, campos, usuario)
+
+
+def listar_obras_prestador(prestador_id: int | None = None) -> pd.DataFrame:
+    with _conectar() as conn:
+        if prestador_id is None:
+            return pd.read_sql_query("SELECT * FROM obras_prestador ORDER BY nome_obra", conn)
+        return pd.read_sql_query(
+            "SELECT * FROM obras_prestador WHERE prestador_id = ? ORDER BY nome_obra", conn, params=(prestador_id,)
+        )
+
+
+def obter_obra_prestador(registro_id: int) -> dict[str, Any] | None:
+    with _conectar() as conn:
+        linha = conn.execute("SELECT * FROM obras_prestador WHERE id = ?", (registro_id,)).fetchone()
+        return dict(linha) if linha else None
+
+
+def nome_exibicao_obra(obra: dict[str, Any]) -> str:
+    """Nome de exibição da obra — "CANTEIRO – <nome>" quando marcada como
+    canteiro, sem alterar o nome original armazenado no banco."""
+    nome = obra.get("nome_obra") or ""
+    return f"CANTEIRO – {nome}" if obra.get("e_canteiro") else nome
+
+
+# ---------------------------------------------------------------------------
+# Cadastro mestre de Cessionários (empresa, RVP/RCI/LUC, contatos)
+# ---------------------------------------------------------------------------
+
+
+def inserir_cadastro_cessionario(dados: dict[str, Any], usuario: str) -> int:
+    codigo = (dados.get("codigo") or "").strip()
+    if not codigo:
+        raise ValueError("Código do cessionário é obrigatório.")
+    with _conectar() as conn:
+        if conn.execute("SELECT id FROM cadastro_cessionarios WHERE codigo = ?", (codigo,)).fetchone():
+            raise ValueError(f"Já existe um cadastro de cessionário com o código '{codigo}'.")
+        campos = {c: dados.get(c) for c in COLUNAS_CADASTRO_CESSIONARIOS}
+        campos["codigo"] = codigo
+        campos["status"] = campos.get("status") or "ATIVO"
+        agora = datetime.now().isoformat()
+        cursor = conn.execute(
+            f"INSERT INTO cadastro_cessionarios ({', '.join(campos.keys())}, criado_em, criado_por, atualizado_em, atualizado_por) "
+            f"VALUES ({', '.join(['?'] * len(campos))}, ?, ?, ?, ?)",
+            (*campos.values(), agora, usuario, agora, usuario),
+        )
+        novo_id = cursor.lastrowid
+        _registrar_historico(conn, "cadastro_cessionarios", novo_id, {}, campos, usuario)
+        return novo_id
+
+
+def atualizar_cadastro_cessionario(registro_id: int, dados: dict[str, Any], usuario: str) -> None:
+    codigo = (dados.get("codigo") or "").strip()
+    if not codigo:
+        raise ValueError("Código do cessionário é obrigatório.")
+    with _conectar() as conn:
+        antigo = conn.execute("SELECT * FROM cadastro_cessionarios WHERE id = ?", (registro_id,)).fetchone()
+        antigo_dict = dict(antigo) if antigo else {}
+        if conn.execute("SELECT id FROM cadastro_cessionarios WHERE codigo = ? AND id != ?", (codigo, registro_id)).fetchone():
+            raise ValueError(f"Já existe outro cadastro de cessionário com o código '{codigo}'.")
+        campos = {c: dados.get(c) for c in COLUNAS_CADASTRO_CESSIONARIOS}
+        campos["codigo"] = codigo
+        campos["status"] = campos.get("status") or "ATIVO"
+        agora = datetime.now().isoformat()
+        set_clause = ", ".join(f"{c} = ?" for c in campos)
+        conn.execute(
+            f"UPDATE cadastro_cessionarios SET {set_clause}, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
+            (*campos.values(), agora, usuario, registro_id),
+        )
+        _registrar_historico(conn, "cadastro_cessionarios", registro_id, antigo_dict, campos, usuario)
+
+
+def listar_cadastro_cessionarios() -> pd.DataFrame:
+    with _conectar() as conn:
+        return pd.read_sql_query("SELECT * FROM cadastro_cessionarios ORDER BY codigo", conn)
+
+
+def obter_cadastro_cessionario(registro_id: int) -> dict[str, Any] | None:
+    with _conectar() as conn:
+        linha = conn.execute("SELECT * FROM cadastro_cessionarios WHERE id = ?", (registro_id,)).fetchone()
+        return dict(linha) if linha else None
+
+
+def obter_cadastro_cessionario_por_codigo(codigo: str) -> dict[str, Any] | None:
+    with _conectar() as conn:
+        linha = conn.execute("SELECT * FROM cadastro_cessionarios WHERE codigo = ?", (codigo,)).fetchone()
+        return dict(linha) if linha else None
+
+
+def definir_status_cadastro_cessionario(registro_id: int, status: str, usuario: str) -> None:
+    with _conectar() as conn:
+        antigo = conn.execute("SELECT status FROM cadastro_cessionarios WHERE id = ?", (registro_id,)).fetchone()
+        antigo_dict = dict(antigo) if antigo else {}
+        agora = datetime.now().isoformat()
+        conn.execute(
+            "UPDATE cadastro_cessionarios SET status = ?, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
+            (status, agora, usuario, registro_id),
+        )
+        _registrar_historico(conn, "cadastro_cessionarios", registro_id, antigo_dict, {"status": status}, usuario)
 
 
 # ---------------------------------------------------------------------------
