@@ -449,12 +449,21 @@ def _migracao_0005_repactuacoes_prazo(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_repactuacoes_prazo_registro ON repactuacoes_prazo(tabela, registro_id)")
 
 
+def _migracao_0006_avaliacao_checklist_obra(conn: sqlite3.Connection) -> None:
+    """Vincula (opcionalmente) uma avaliação de checklist de Prestador à
+    obra/canteiro avaliada — coluna aditiva, sem afetar avaliações já
+    registradas (permanecem sem obra vinculada, exatamente como estão)."""
+    _garantir_coluna(conn, "avaliacoes_checklist", "obra_id", "INTEGER")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_avaliacoes_checklist_obra ON avaliacoes_checklist(obra_id)")
+
+
 _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (1, "Índices de busca por N° AT e nome em Prestadores e Cessionários", _migracao_0001_indices_busca),
     (2, "Índices para avaliações (checklist/analistas), alertas com radar e histórico de atividades", _migracao_0002_indices_avaliacoes_alertas),
     (3, "Ciclo de vida completo dos alertas (Pendente/Em tratamento/Tratado/Adiado/Retirado/Reaberto)", _migracao_0003_ciclo_vida_alertas),
     (4, "Cadastro mestre de Prestadores/Cessionários + Obras/Canteiros, com backfill e vínculo aos projetos existentes", _migracao_0004_cadastro_mestre),
     (5, "Histórico estruturado de repactuações de prazo (data anterior/nova, motivo)", _migracao_0005_repactuacoes_prazo),
+    (6, "Vínculo opcional de avaliação de checklist de Prestador com obra/canteiro", _migracao_0006_avaliacao_checklist_obra),
 ]
 
 
@@ -1685,6 +1694,7 @@ COLUNAS_AVALIACAO_CHECKLIST = [
     "tipo_entidade", "codigo_entidade", "nome_entidade", "disciplina", "projeto_id",
     "at_referencia", "revisao", "data_avaliacao", "analista_responsavel",
     "respostas_json", "pontuacao", "classificacao", "acompanhamento", "observacoes_gerais",
+    "obra_id",
 ]
 
 

@@ -8,7 +8,13 @@ import streamlit as st
 
 from gat.business_rules import classificar_nota, filtrar_por_competencia
 from gat.config import COLUNAS_EXIBICAO_AVALIACOES, CORES_CLASSIFICACAO_AVALIACAO, RESPONSAVEIS
-from gat.database import listar_avaliacoes, listar_avaliacoes_checklist, obter_avaliacao
+from gat.database import (
+    listar_avaliacoes,
+    listar_avaliacoes_checklist,
+    listar_obras_prestador,
+    nome_exibicao_obra,
+    obter_avaliacao,
+)
 from gat.permissions import exigir_area, pode_area, pode_modulo
 from gat.ui.charts import grafico_status_donut
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
@@ -42,6 +48,14 @@ def _tab_checklist(usuario: dict) -> None:
         st.info(f"Nenhuma avaliação de {tipo_label.lower()} registrada ainda. Utilize o botão acima para iniciar.")
         return
 
+    segmentacao_obra = tipo_entidade == "PRESTADOR"
+    if segmentacao_obra:
+        obras_df = listar_obras_prestador()
+        mapa_nome_obra = {
+            o["id"]: nome_exibicao_obra(o) for o in obras_df.to_dict("records")
+        } if not obras_df.empty else {}
+        df["nome_obra"] = df.get("obra_id", pd.Series(dtype="Int64")).map(mapa_nome_obra)
+
     with st.expander("Filtros", icon=":material/filter_list:", expanded=False):
         col1, col2, col3 = st.columns(3)
         f_entidade = col1.multiselect("Nome", sorted(df["nome_entidade"].dropna().unique().tolist()), key=f"filtro_checklist_nome_{tipo_entidade}")
@@ -51,6 +65,12 @@ def _tab_checklist(usuario: dict) -> None:
         f_at = col4.text_input("N° AT", key=f"filtro_checklist_at_{tipo_entidade}")
         f_revisao = col5.text_input("Revisão", key=f"filtro_checklist_rev_{tipo_entidade}")
         f_analista = col6.multiselect("Analista responsável", RESPONSAVEIS, key=f"filtro_checklist_analista_{tipo_entidade}")
+        f_obra = []
+        if segmentacao_obra:
+            f_obra = st.multiselect(
+                "Obra/Canteiro", sorted(df["nome_obra"].dropna().unique().tolist()),
+                key=f"filtro_checklist_obra_{tipo_entidade}",
+            )
         mes, ano = seletor_competencia(f"checklist_comp_{tipo_entidade}", rotulo="Competência da avaliação")
 
     df_filtrado = df.copy()
@@ -66,6 +86,8 @@ def _tab_checklist(usuario: dict) -> None:
         df_filtrado = df_filtrado[df_filtrado["revisao"].astype(str) == f_revisao.strip()]
     if f_analista:
         df_filtrado = df_filtrado[df_filtrado["analista_responsavel"].isin(f_analista)]
+    if f_obra:
+        df_filtrado = df_filtrado[df_filtrado["nome_obra"].isin(f_obra)]
     if mes or ano:
         df_filtrado = filtrar_por_competencia(df_filtrado, "data_avaliacao", mes, ano)
         st.caption(f"Competência: **{rotulo_competencia(mes, ano)}**")
@@ -82,6 +104,17 @@ def _tab_checklist(usuario: dict) -> None:
         ("Demandam Acompanhamento", str((df_filtrado["classificacao"].isin(["CRÍTICO", "BAIXO"])).sum()), CORES_CLASSIFICACAO_AVALIACAO["CRÍTICO"]),
     ])
 
+    if segmentacao_obra and df_filtrado["nome_obra"].notna().any():
+        st.markdown("##### Resumo por Obra/Canteiro")
+        resumo_obra = df_filtrado.dropna(subset=["nome_obra"]).groupby("nome_obra").agg(
+            avaliacoes=("id", "count"), pontuacao_media=("pontuacao", "mean"),
+        ).reset_index()
+        resumo_obra["pontuacao_media"] = resumo_obra["pontuacao_media"].round(1)
+        resumo_obra = resumo_obra.rename(columns={
+            "nome_obra": "Obra/Canteiro", "avaliacoes": "Avaliações", "pontuacao_media": "Pontuação Média",
+        }).sort_values("Avaliações", ascending=False)
+        st.dataframe(resumo_obra, use_container_width=True, hide_index=True)
+
     df_classificacao = pd.DataFrame({"status_analise": df_filtrado["classificacao"]})
     st.plotly_chart(
         grafico_status_donut(df_classificacao, "status_analise", "Distribuição por Classificação", mapa_cores=CORES_CLASSIFICACAO_AVALIACAO),
@@ -95,7 +128,13 @@ def _tab_checklist(usuario: dict) -> None:
         "at_referencia": "N° AT", "revisao": "Revisão", "data_avaliacao": "Data", "analista_responsavel": "Analista",
         "pontuacao": "Pontuação", "classificacao": "Classificação", "acompanhamento": "Acompanhamento",
     }
-    df_exibicao = df_filtrado[colunas_tabela].rename(columns=rotulos)
+    if segmentacao_obra:
+        colunas_tabela.insert(2, "nome_obra")
+        rotulos["nome_obra"] = "Obra/Canteiro"
+    df_exibicao = df_filtrado[colunas_tabela].copy()
+    if segmentacao_obra:
+        df_exibicao["nome_obra"] = df_exibicao["nome_obra"].fillna("—")
+    df_exibicao = df_exibicao.rename(columns=rotulos)
 
     def _abrir_edicao(registro: dict) -> None:
         exigir_area(usuario, "avaliacoes.editar")

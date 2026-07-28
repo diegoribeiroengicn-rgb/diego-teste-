@@ -16,7 +16,14 @@ from gat.config import (
     RESPOSTA_CHECKLIST_OPCOES,
     RESPONSAVEIS,
 )
-from gat.database import atualizar_avaliacao_checklist, inserir_avaliacao_checklist, registrar_atividade
+from gat.database import (
+    atualizar_avaliacao_checklist,
+    inserir_avaliacao_checklist,
+    listar_obras_prestador,
+    nome_exibicao_obra,
+    obter_cadastro_prestador_por_codigo,
+    registrar_atividade,
+)
 
 
 def _idx(opcoes: list[str], valor: Any) -> int:
@@ -80,6 +87,28 @@ def dialog_avaliacao_checklist(
         value=datetime.fromisoformat(registro["data_avaliacao"][:10]).date() if editando and registro.get("data_avaliacao") else date.today(),
         key=f"av_data_{sufixo}",
     )
+
+    obra_id_atual = registro.get("obra_id") if editando else prefill.get("obra_id")
+    obra_id = obra_id_atual
+    if tipo_entidade == "PRESTADOR" and codigo_entidade.strip():
+        cadastro_prestador = obter_cadastro_prestador_por_codigo(codigo_entidade.strip())
+        if cadastro_prestador:
+            obras_df = listar_obras_prestador(cadastro_prestador["id"])
+            if not obras_df.empty:
+                obras_df = obras_df[(obras_df["status"] == "ATIVA") | (obras_df["id"] == obra_id_atual)]
+            mapa_obra = {nome_exibicao_obra(o): o for o in obras_df.to_dict("records")}
+            opcoes_obra = ["— Nenhuma —"] + list(mapa_obra.keys())
+            rotulo_obra_atual = next((r for r, o in mapa_obra.items() if o["id"] == obra_id_atual), "— Nenhuma —")
+            rotulo_obra = st.selectbox(
+                "Obra/Canteiro avaliado (opcional)", opcoes_obra,
+                index=_idx(opcoes_obra, rotulo_obra_atual),
+                key=f"av_obra_{sufixo}_{cadastro_prestador['id']}",
+                help="Obras/canteiros cadastrados para este código de prestador em Prestadores → Cadastro.",
+            )
+            obra_selecionada = mapa_obra.get(rotulo_obra)
+            obra_id = obra_selecionada["id"] if obra_selecionada else None
+        else:
+            obra_id = None
 
     respostas_atuais: dict[str, dict[str, str]] = {}
     if editando and registro.get("respostas_json"):
@@ -157,6 +186,7 @@ def dialog_avaliacao_checklist(
             "classificacao": classificacao,
             "acompanhamento": acompanhamento,
             "observacoes_gerais": observacoes_gerais,
+            "obra_id": obra_id,
         }
         if editando:
             atualizar_avaliacao_checklist(registro["id"], dados, usuario)
