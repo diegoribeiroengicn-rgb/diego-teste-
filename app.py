@@ -37,6 +37,8 @@ from views import (
     alertas_prestadores,
     avaliacao_analistas,
     avaliacao_prestadores,
+    cadastro_cessionarios,
+    cadastro_prestadores,
     cessionarios,
     cessionarios_dashboard,
     consolidado,
@@ -116,6 +118,7 @@ if pode_modulo(usuario, "prestadores"):
     if pode_area(usuario, "dashboard"):
         grupo_prestadores.append(_pagina(lambda: prestadores_dashboard.render(usuario), "Dashboard", ":material/dashboard:", "prestadores_dashboard"))
     grupo_prestadores.append(_pagina(lambda: prestadores.render(usuario), "Projetos", ":material/folder_open:", "prestadores_projetos"))
+    grupo_prestadores.append(_pagina(lambda: cadastro_prestadores.render(usuario), "Cadastro", ":material/badge:", "prestadores_cadastro"))
     if pode_area(usuario, "avaliacoes.visualizar"):
         grupo_prestadores.append(_pagina(lambda: avaliacao_prestadores.render(usuario), "Avaliação", ":material/grade:", "prestadores_avaliacao"))
     paginas["Prestadores"] = grupo_prestadores
@@ -125,6 +128,7 @@ if pode_modulo(usuario, "cessionarios"):
     if pode_area(usuario, "dashboard"):
         grupo_cessionarios.append(_pagina(lambda: cessionarios_dashboard.render(usuario), "Dashboard", ":material/dashboard:", "cessionarios_dashboard"))
     grupo_cessionarios.append(_pagina(lambda: cessionarios.render(usuario), "Projetos", ":material/store:", "cessionarios_projetos"))
+    grupo_cessionarios.append(_pagina(lambda: cadastro_cessionarios.render(usuario), "Cadastro", ":material/badge:", "cessionarios_cadastro"))
     # A tela de Avaliação cobre Prestadores e Cessionários numa única view —
     # já aparece no grupo Prestadores quando esse módulo está liberado; aqui
     # só é adicionada para não deixar um usuário só-Cessionários sem acesso.
