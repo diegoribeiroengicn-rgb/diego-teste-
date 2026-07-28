@@ -127,6 +127,63 @@ def _historico_repactuacoes(tabela: str, registro_id: int) -> None:
         )
 
 
+def _houve_alteracoes_nao_salvas(chave_snapshot: str, valores_atuais: dict) -> bool:
+    """
+    Compara o estado atual dos campos do formulário com o "instantâneo"
+    capturado na primeira renderização deste modal (antes de qualquer
+    digitação do usuário) — feito via `session_state` porque o valor
+    inicial só é conhecido no primeiro run, e precisa sobreviver aos
+    reruns seguintes disparados por cada tecla digitada.
+
+    Limitação conhecida: só é possível interceptar o botão "Cancelar" do
+    próprio formulário — o "X" nativo do `st.dialog` e o fechamento por
+    clique fora do modal não passam pelo código Python e não podem ser
+    interceptados por este mecanismo.
+    """
+    if chave_snapshot not in st.session_state:
+        st.session_state[chave_snapshot] = dict(valores_atuais)
+        return False
+    return st.session_state[chave_snapshot] != valores_atuais
+
+
+def _confirmar_descarte(chave_confirmacao: str, houve_alteracoes: bool, cancelar_clicado: bool) -> bool:
+    """
+    Gerencia a confirmação de descarte ao clicar em "Cancelar" quando há
+    alterações não salvas. Retorna True quando o fechamento do modal deve
+    de fato prosseguir (sem alterações, ou descarte explicitamente
+    confirmado pelo usuário) — quem chama é responsável por só então
+    limpar o estado e chamar `st.rerun()`.
+
+    Os botões usam `on_click` (executado antes do rerun automático do
+    próprio clique) em vez de checar o valor de retorno do `st.button`:
+    chamar `st.rerun()` manualmente fecharia o `st.dialog` também no
+    caminho "Continuar editando", que deve apenas ocultar o aviso e manter
+    o modal aberto — reruns automáticos disparados por um clique não
+    fecham o dialog, só os manuais fecham.
+    """
+    chave_pendente = f"{chave_confirmacao}_pendente"
+    chave_confirmado = f"{chave_confirmacao}_confirmado"
+
+    if cancelar_clicado:
+        if not houve_alteracoes:
+            return True
+        st.session_state[chave_pendente] = True
+
+    if st.session_state.get(chave_pendente):
+        st.warning("Existem alterações não salvas neste formulário. Deseja realmente descartá-las?", icon=":material/warning:")
+        col_sim, col_nao = st.columns(2)
+        col_sim.button(
+            "Descartar alterações", type="primary", use_container_width=True, key=f"{chave_confirmacao}_sim",
+            on_click=lambda: st.session_state.update({chave_pendente: False, chave_confirmado: True}),
+        )
+        col_nao.button(
+            "Continuar editando", use_container_width=True, key=f"{chave_confirmacao}_nao",
+            on_click=lambda: st.session_state.update({chave_pendente: False}),
+        )
+
+    return st.session_state.pop(chave_confirmado, False)
+
+
 # ---------------------------------------------------------------------------
 # Modal de Prestadores (Aba A)
 # ---------------------------------------------------------------------------
@@ -263,14 +320,27 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
 
     observacoes = st.text_area("Observações", value=registro.get("observacoes", "") if registro else "", key=f"pr_obs_{sufixo}")
 
+    valores_atuais = {
+        "prestador": prestador, "codigo": codigo, "disciplina": disciplina, "disciplina_sla": disciplina_sla,
+        "peps": peps, "obra_referencia": obra_referencia, "obra_id": obra_id, "num_at": num_at,
+        "revisao": revisao, "revisao_at": revisao_at, "num_documentos": num_documentos,
+        "responsavel": responsavel, "status_analise": status_analise, "data_solicitacao": data_solicitacao,
+        "data_limite": data_limite, "data_analise": data_analise, "hold_inicio": hold_inicio, "hold_fim": hold_fim,
+        "natureza_revisao": natureza_revisao, "num_erros": num_erros, "etg": etg, "observacoes": observacoes,
+        "motivo_repactuacao": motivo_repactuacao,
+        "prestador_cadastro_id": cadastro_selecionado["id"] if cadastro_selecionado else None,
+    }
+    houve_alteracoes = _houve_alteracoes_nao_salvas(f"pr_snapshot_{sufixo}", valores_atuais)
+
     col_salvar, col_cancelar = st.columns(2)
     salvar = col_salvar.button("Salvar", icon=":material/save:", type="primary", use_container_width=True, key=f"pr_salvar_{sufixo}")
     cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"pr_cancelar_{sufixo}")
 
     chave_tentativa = f"pr_tentativa_salvar_{sufixo}"
 
-    if cancelar:
+    if _confirmar_descarte(f"pr_descarte_{sufixo}", houve_alteracoes, cancelar):
         st.session_state[chave_tentativa] = False
+        st.session_state.pop(f"pr_snapshot_{sufixo}", None)
         st.rerun()
 
     if salvar and (not prestador or not data_solicitacao):
@@ -322,6 +392,7 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
             registrar_atividade(usuario, None, "PROJETO_CRIADO", modulo="prestadores", detalhe=prestador)
             st.toast("Novo registro de prestador cadastrado com sucesso.", icon=":material/check_circle:")
         st.session_state[chave_tentativa] = False
+        st.session_state.pop(f"pr_snapshot_{sufixo}", None)
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
         st.rerun()
 
@@ -449,14 +520,26 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
 
     observacoes = st.text_area("Observações", value=registro.get("observacoes", "") if registro else "", key=f"ce_obs_{sufixo}")
 
+    valores_atuais = {
+        "cessionario": cessionario, "codigo": codigo, "disciplina": disciplina, "disciplina_sla": disciplina_sla,
+        "tipo": tipo, "num_at": num_at, "pep": pep, "revisao": revisao, "revisao_at": revisao_at,
+        "num_documentos": num_documentos, "responsavel": responsavel, "status_analise": status_analise,
+        "data_solicitacao": data_solicitacao, "data_limite": data_limite, "data_analise": data_analise,
+        "hold_inicio": hold_inicio, "hold_fim": hold_fim, "natureza_revisao": natureza_revisao,
+        "num_erros": num_erros, "etg": etg, "observacoes": observacoes, "motivo_repactuacao": motivo_repactuacao,
+        "cessionario_cadastro_id": cadastro_cess_selecionado["id"] if cadastro_cess_selecionado else None,
+    }
+    houve_alteracoes = _houve_alteracoes_nao_salvas(f"ce_snapshot_{sufixo}", valores_atuais)
+
     col_salvar, col_cancelar = st.columns(2)
     salvar = col_salvar.button("Salvar", icon=":material/save:", type="primary", use_container_width=True, key=f"ce_salvar_{sufixo}")
     cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"ce_cancelar_{sufixo}")
 
     chave_tentativa = f"ce_tentativa_salvar_{sufixo}"
 
-    if cancelar:
+    if _confirmar_descarte(f"ce_descarte_{sufixo}", houve_alteracoes, cancelar):
         st.session_state[chave_tentativa] = False
+        st.session_state.pop(f"ce_snapshot_{sufixo}", None)
         st.rerun()
 
     if salvar and (not cessionario or not data_solicitacao):
@@ -508,6 +591,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
             registrar_atividade(usuario, None, "PROJETO_CRIADO", modulo="cessionarios", detalhe=cessionario)
             st.toast("Novo registro de cessionário cadastrado com sucesso.", icon=":material/check_circle:")
         st.session_state[chave_tentativa] = False
+        st.session_state.pop(f"ce_snapshot_{sufixo}", None)
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
         st.rerun()
 
