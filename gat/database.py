@@ -58,7 +58,7 @@ COLUNAS_PRESTADORES = [
     "obra_referencia", "revisao", "num_documentos", "data_solicitacao",
     "data_limite", "data_analise", "hold_inicio", "hold_fim", "num_at",
     "revisao_at", "responsavel", "status_analise", "observacoes",
-    "natureza_revisao", "num_erros", "etg",
+    "natureza_revisao", "num_erros", "etg", "prestador_cadastro_id", "obra_id",
 ]
 
 COLUNAS_CESSIONARIOS = [
@@ -66,7 +66,7 @@ COLUNAS_CESSIONARIOS = [
     "revisao", "num_documentos", "data_solicitacao", "tipo", "sla_dias",
     "data_limite", "data_analise", "hold_inicio", "hold_fim", "num_at",
     "revisao_at", "responsavel", "status_analise", "observacoes",
-    "natureza_revisao", "num_erros", "etg", "pep",
+    "natureza_revisao", "num_erros", "etg", "pep", "cessionario_cadastro_id",
 ]
 
 COLUNAS_CADASTRO_PRESTADORES = [

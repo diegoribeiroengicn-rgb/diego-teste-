@@ -38,6 +38,10 @@ from gat.database import (
     inserir_avaliacao,
     inserir_cessionario,
     inserir_prestador,
+    listar_cadastro_cessionarios,
+    listar_cadastro_prestadores,
+    listar_obras_prestador,
+    nome_exibicao_obra,
     registrar_atividade,
 )
 
@@ -102,14 +106,63 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
     st.caption("Edite os campos e clique em **Salvar**. A data limite sugerida e o prazo são calculados automaticamente pelo calendário oficial de feriados do RJ." if editando else
                "Preencha os dados da análise. A data limite sugerida e o prazo são calculados automaticamente pelo calendário oficial de feriados do RJ.")
 
+    cadastro_id_atual = registro.get("prestador_cadastro_id") if registro else None
+    cadastros_df = listar_cadastro_prestadores()
+    if not cadastros_df.empty:
+        cadastros_df = cadastros_df[(cadastros_df["status"] == "ATIVO") | (cadastros_df["id"] == cadastro_id_atual)]
+    mapa_cadastro = {f"{linha['codigo']} – {linha['nome_empresa']}": linha.to_dict() for _, linha in cadastros_df.iterrows()}
+    opcoes_cadastro = ["— Digitar manualmente —"] + list(mapa_cadastro.keys())
+    rotulo_atual = next((rotulo for rotulo, linha in mapa_cadastro.items() if linha["id"] == cadastro_id_atual), "— Digitar manualmente —")
+    rotulo_selecionado = st.selectbox(
+        "Vincular ao Cadastro de Prestador (opcional)",
+        opcoes_cadastro,
+        index=_idx(opcoes_cadastro, rotulo_atual),
+        key=f"pr_cadastro_{sufixo}",
+        help="Ao vincular, código, nome e PEP são preenchidos automaticamente a partir do Cadastro de Prestadores.",
+    )
+    cadastro_selecionado = mapa_cadastro.get(rotulo_selecionado)
+    # Sufixo dedicado (inclui o id do cadastro) para os campos derivados abaixo:
+    # evita que o `value=` de um novo cadastro selecionado seja ignorado pelo
+    # Streamlit por reaproveitar uma key já presente no session_state.
+    sufixo_cad = f"{sufixo}_{cadastro_selecionado['id']}" if cadastro_selecionado else sufixo
+
     col1, col2 = st.columns(2)
     with col1:
-        prestador = st.text_input("Prestador de Serviço *", value=registro.get("prestador", "") if registro else "", key=f"pr_prestador_{sufixo}")
-        codigo = st.text_input("Código", value=registro.get("codigo", "") if registro else "", key=f"pr_codigo_{sufixo}")
+        if cadastro_selecionado:
+            prestador = cadastro_selecionado["nome_empresa"]
+            codigo = cadastro_selecionado["codigo"]
+            st.text_input("Prestador de Serviço *", value=prestador, disabled=True, key=f"pr_prestador_cad_{sufixo_cad}")
+            st.text_input("Código", value=codigo, disabled=True, key=f"pr_codigo_cad_{sufixo_cad}")
+        else:
+            prestador = st.text_input("Prestador de Serviço *", value=registro.get("prestador", "") if registro else "", key=f"pr_prestador_{sufixo}")
+            codigo = st.text_input("Código", value=registro.get("codigo", "") if registro else "", key=f"pr_codigo_{sufixo}")
         disciplina = st.selectbox("Disciplina", DISCIPLINAS, index=_idx(DISCIPLINAS, registro.get("disciplina") if registro else None), key=f"pr_disc_{sufixo}")
         disciplina_sla = st.selectbox("Disciplina (SLA)", DISCIPLINAS_SLA, index=_idx(DISCIPLINAS_SLA, registro.get("disciplina_sla") if registro else None), key=f"pr_discsla_{sufixo}")
-        peps = st.text_input("PEP'S", value=registro.get("peps", "") if registro else "", key=f"pr_peps_{sufixo}")
-        obra_referencia = st.text_input("Obra de Referência", value=registro.get("obra_referencia", "") if registro else "", key=f"pr_obra_{sufixo}")
+        if cadastro_selecionado:
+            peps = cadastro_selecionado.get("numero_pep") or ""
+            st.text_input(
+                "PEP'S", value=peps, disabled=True, key=f"pr_peps_cad_{sufixo_cad}",
+                help="Preenchido automaticamente pelo Cadastro de Prestador. Para alterar, atualize o PEP no Cadastro de Prestadores.",
+            )
+        else:
+            peps = st.text_input("PEP'S", value=registro.get("peps", "") if registro else "", key=f"pr_peps_{sufixo}")
+        if cadastro_selecionado:
+            obras_df = listar_obras_prestador(cadastro_selecionado["id"])
+            obra_id_atual = registro.get("obra_id") if registro else None
+            if not obras_df.empty:
+                obras_df = obras_df[(obras_df["status"] == "ATIVA") | (obras_df["id"] == obra_id_atual)]
+            mapa_obra = {nome_exibicao_obra(o): o for o in obras_df.to_dict("records")}
+            opcoes_obra = ["— Nenhuma —"] + list(mapa_obra.keys())
+            rotulo_obra_atual = next((r for r, o in mapa_obra.items() if o["id"] == obra_id_atual), "— Nenhuma —")
+            rotulo_obra = st.selectbox(
+                "Obra/Canteiro vinculado", opcoes_obra, index=_idx(opcoes_obra, rotulo_obra_atual), key=f"pr_obraid_cad_{sufixo_cad}",
+            )
+            obra_selecionada = mapa_obra.get(rotulo_obra)
+            obra_id = obra_selecionada["id"] if obra_selecionada else None
+            obra_referencia = nome_exibicao_obra(obra_selecionada) if obra_selecionada else ""
+        else:
+            obra_referencia = st.text_input("Obra de Referência", value=registro.get("obra_referencia", "") if registro else "", key=f"pr_obra_{sufixo}")
+            obra_id = registro.get("obra_id") if registro else None
         num_at = st.text_input("N° AT", value=registro.get("num_at", "") if registro else "", key=f"pr_at_{sufixo}")
     with col2:
         revisao = st.number_input("Revisão", min_value=0, step=1, value=int(registro.get("revisao", 0)) if registro else 0, key=f"pr_rev_{sufixo}")
@@ -202,6 +255,8 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
             "natureza_revisao": natureza_revisao,
             "num_erros": int(num_erros),
             "etg": etg,
+            "prestador_cadastro_id": cadastro_selecionado["id"] if cadastro_selecionado else None,
+            "obra_id": obra_id,
         }
         if editando:
             atualizar_prestador(registro["id"], dados, usuario)
@@ -228,10 +283,42 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
     st.caption("Edite os campos e clique em **Salvar**. O saldo de dias úteis é calculado automaticamente pelo calendário oficial de feriados do RJ." if editando else
                "Preencha os dados da análise. O saldo de dias úteis é calculado automaticamente pelo calendário oficial de feriados do RJ.")
 
+    cadastro_cess_id_atual = registro.get("cessionario_cadastro_id") if registro else None
+    cadastros_cess_df = listar_cadastro_cessionarios()
+    if not cadastros_cess_df.empty:
+        cadastros_cess_df = cadastros_cess_df[(cadastros_cess_df["status"] == "ATIVO") | (cadastros_cess_df["id"] == cadastro_cess_id_atual)]
+    mapa_cadastro_cess = {f"{linha['codigo']} – {linha['nome_empresa']}": linha.to_dict() for _, linha in cadastros_cess_df.iterrows()}
+    opcoes_cadastro_cess = ["— Digitar manualmente —"] + list(mapa_cadastro_cess.keys())
+    rotulo_cess_atual = next((rotulo for rotulo, linha in mapa_cadastro_cess.items() if linha["id"] == cadastro_cess_id_atual), "— Digitar manualmente —")
+    rotulo_cess_selecionado = st.selectbox(
+        "Vincular ao Cadastro de Cessionário (opcional)",
+        opcoes_cadastro_cess,
+        index=_idx(opcoes_cadastro_cess, rotulo_cess_atual),
+        key=f"ce_cadastro_{sufixo}",
+        help="Ao vincular, código e nome são preenchidos automaticamente a partir do Cadastro de Cessionários.",
+    )
+    cadastro_cess_selecionado = mapa_cadastro_cess.get(rotulo_cess_selecionado)
+    if cadastro_cess_selecionado:
+        st.caption(
+            f"RVP: **{cadastro_cess_selecionado.get('rvp') or '—'}** · "
+            f"RCI: **{cadastro_cess_selecionado.get('rci') or '—'}** · "
+            f"LUC: **{cadastro_cess_selecionado.get('luc') or '—'}**"
+        )
+    # Sufixo dedicado (inclui o id do cadastro) para os campos derivados abaixo:
+    # evita que o `value=` de um novo cadastro selecionado seja ignorado pelo
+    # Streamlit por reaproveitar uma key já presente no session_state.
+    sufixo_cad_cess = f"{sufixo}_{cadastro_cess_selecionado['id']}" if cadastro_cess_selecionado else sufixo
+
     col1, col2 = st.columns(2)
     with col1:
-        cessionario = st.text_input("Cessionário *", value=registro.get("cessionario", "") if registro else "", key=f"ce_cess_{sufixo}")
-        codigo = st.text_input("Código", value=registro.get("codigo", "") if registro else "", key=f"ce_codigo_{sufixo}")
+        if cadastro_cess_selecionado:
+            cessionario = cadastro_cess_selecionado["nome_empresa"]
+            codigo = cadastro_cess_selecionado["codigo"]
+            st.text_input("Cessionário *", value=cessionario, disabled=True, key=f"ce_cess_cad_{sufixo_cad_cess}")
+            st.text_input("Código", value=codigo, disabled=True, key=f"ce_codigo_cad_{sufixo_cad_cess}")
+        else:
+            cessionario = st.text_input("Cessionário *", value=registro.get("cessionario", "") if registro else "", key=f"ce_cess_{sufixo}")
+            codigo = st.text_input("Código", value=registro.get("codigo", "") if registro else "", key=f"ce_codigo_{sufixo}")
         disciplina = st.selectbox("Disciplina", DISCIPLINAS, index=_idx(DISCIPLINAS, registro.get("disciplina") if registro else None), key=f"ce_disc_{sufixo}")
         disciplina_sla = st.selectbox("Disciplina (SLA)", DISCIPLINAS_SLA, index=_idx(DISCIPLINAS_SLA, registro.get("disciplina_sla") if registro else None), key=f"ce_discsla_{sufixo}")
         tipo = st.selectbox("Tipo", TIPO_CESSIONARIO_OPCOES, index=_idx(TIPO_CESSIONARIO_OPCOES, registro.get("tipo") if registro else None), key=f"ce_tipo_{sufixo}")
@@ -333,6 +420,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
             "natureza_revisao": natureza_revisao,
             "num_erros": int(num_erros),
             "etg": etg,
+            "cessionario_cadastro_id": cadastro_cess_selecionado["id"] if cadastro_cess_selecionado else None,
         }
         if editando:
             atualizar_cessionario(registro["id"], dados, usuario)
