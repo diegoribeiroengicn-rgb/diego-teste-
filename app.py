@@ -39,6 +39,7 @@ from views import (
     avaliacao_prestadores,
     cadastro_cessionarios,
     cadastro_prestadores,
+    canteiros,
     cessionarios,
     cessionarios_dashboard,
     consolidado,
@@ -119,6 +120,7 @@ if pode_modulo(usuario, "prestadores"):
         grupo_prestadores.append(_pagina(lambda: prestadores_dashboard.render(usuario), "Dashboard", ":material/dashboard:", "prestadores_dashboard"))
     grupo_prestadores.append(_pagina(lambda: prestadores.render(usuario), "Projetos", ":material/folder_open:", "prestadores_projetos"))
     grupo_prestadores.append(_pagina(lambda: cadastro_prestadores.render(usuario), "Cadastro", ":material/badge:", "prestadores_cadastro"))
+    grupo_prestadores.append(_pagina(lambda: canteiros.render(usuario), "Canteiros", ":material/construction:", "prestadores_canteiros"))
     if pode_area(usuario, "avaliacoes.visualizar"):
         grupo_prestadores.append(_pagina(lambda: avaliacao_prestadores.render(usuario), "Avaliação", ":material/grade:", "prestadores_avaliacao"))
     paginas["Prestadores"] = grupo_prestadores
