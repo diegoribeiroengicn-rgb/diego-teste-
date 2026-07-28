@@ -449,13 +449,29 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
         disciplina_sla = st.selectbox("Disciplina (SLA)", DISCIPLINAS_SLA, index=_idx(DISCIPLINAS_SLA, registro.get("disciplina_sla") if registro else None), key=f"ce_discsla_{sufixo}")
         tipo = st.selectbox("Tipo", TIPO_CESSIONARIO_OPCOES, index=_idx(TIPO_CESSIONARIO_OPCOES, registro.get("tipo") if registro else None), key=f"ce_tipo_{sufixo}")
         num_at = st.text_input("N° AT", value=registro.get("num_at", "") if registro else "", key=f"ce_at_{sufixo}")
-        pep = st.text_input("PEP", value=registro.get("pep", "") if registro else "", help="Não obrigatório para concluir o cadastro. Se ficar vazio, o projeto gera pendência e lembrete automáticos.", key=f"ce_pep_{sufixo}")
+        luc = st.text_input("LUC", value=registro.get("luc", "") if registro else "", key=f"ce_luc_{sufixo}")
     with col2:
         revisao = st.number_input("Revisão", min_value=0, step=1, value=int(registro.get("revisao", 0)) if registro else 0, key=f"ce_rev_{sufixo}")
         revisao_at = st.number_input("REV. AT", min_value=0, step=1, value=int(registro.get("revisao_at") or 0) if registro else 0, key=f"ce_revat_{sufixo}")
         num_documentos = st.number_input("N° de Doc.", min_value=0, step=1, value=int(registro.get("num_documentos", 0)) if registro else 0, key=f"ce_ndoc_{sufixo}")
         responsavel = st.selectbox("Responsável (Analista)", RESPONSAVEIS, index=_idx(RESPONSAVEIS, registro.get("responsavel") if registro else None), key=f"ce_resp_{sufixo}")
         status_analise = st.selectbox("Status Análise", STATUS_ANALISE_OPCOES, index=_idx(STATUS_ANALISE_OPCOES, registro.get("status_analise") if registro else "EM ANÁLISE"), key=f"ce_status_{sufixo}")
+
+    st.markdown("##### RCI e RVP")
+    st.caption("Informe apenas o RCI, apenas o RVP, ou ambos — nenhum dos dois é obrigatório.")
+    col_rci, col_rvp = st.columns(2)
+    with col_rci:
+        numero_rci = st.text_input("N° RCI", value=registro.get("numero_rci", "") if registro else "", key=f"ce_rci_{sufixo}")
+        data_atualizacao_rci = st.date_input(
+            "Data de Atualização do RCI", value=_parse_data(registro.get("data_atualizacao_rci")) if registro else None,
+            format="DD/MM/YYYY", key=f"ce_data_rci_{sufixo}",
+        )
+    with col_rvp:
+        numero_rvp = st.text_input("N° RVP", value=registro.get("numero_rvp", "") if registro else "", key=f"ce_rvp_{sufixo}")
+        data_atualizacao_rvp = st.date_input(
+            "Data de Atualização do RVP", value=_parse_data(registro.get("data_atualizacao_rvp")) if registro else None,
+            format="DD/MM/YYYY", key=f"ce_data_rvp_{sufixo}",
+        )
 
     sla_dias = calcular_sla_cessionario(tipo, int(revisao))
 
@@ -522,7 +538,9 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
 
     valores_atuais = {
         "cessionario": cessionario, "codigo": codigo, "disciplina": disciplina, "disciplina_sla": disciplina_sla,
-        "tipo": tipo, "num_at": num_at, "pep": pep, "revisao": revisao, "revisao_at": revisao_at,
+        "tipo": tipo, "num_at": num_at, "luc": luc, "numero_rci": numero_rci, "numero_rvp": numero_rvp,
+        "data_atualizacao_rci": data_atualizacao_rci, "data_atualizacao_rvp": data_atualizacao_rvp,
+        "revisao": revisao, "revisao_at": revisao_at,
         "num_documentos": num_documentos, "responsavel": responsavel, "status_analise": status_analise,
         "data_solicitacao": data_solicitacao, "data_limite": data_limite, "data_analise": data_analise,
         "hold_inicio": hold_inicio, "hold_fim": hold_fim, "natureza_revisao": natureza_revisao,
@@ -548,13 +566,16 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
 
     if (
         _tentativa_salvar_iniciada(chave_tentativa, salvar)
-        and _pode_persistir_com_pep(pep, f"ce_confirma_sem_pep_{sufixo}")
         and _pode_repactuar(repactuando, motivo_repactuacao)
     ):
         dados = {
             "item": registro.get("item") if editando else None,
             "codigo": codigo,
-            "pep": pep,
+            "luc": luc,
+            "numero_rci": numero_rci,
+            "numero_rvp": numero_rvp,
+            "data_atualizacao_rci": data_atualizacao_rci.isoformat() if data_atualizacao_rci else None,
+            "data_atualizacao_rvp": data_atualizacao_rvp.isoformat() if data_atualizacao_rvp else None,
             "cessionario": cessionario,
             "disciplina": disciplina,
             "disciplina_sla": disciplina_sla,

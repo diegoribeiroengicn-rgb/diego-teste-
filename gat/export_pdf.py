@@ -136,7 +136,7 @@ def gerar_one_page_report_pdf(
     linha2 = [
         ("% SLA Cumprido", f"{resumo.get('sla_percentual', 0)}%"),
         ("Backlog do Período", resumo.get("backlog", 0)),
-        ("Projetos sem PEP", resumo.get("sem_pep", 0)),
+        ("Projetos sem PEP (Prestadores)", resumo.get("sem_pep", 0)),
         ("Produtividade — Projetos/Analista", resumo.get("produtividade_media", 0)),
     ]
 

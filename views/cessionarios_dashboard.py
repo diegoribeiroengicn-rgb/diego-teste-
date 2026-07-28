@@ -74,7 +74,6 @@ def render(usuario: dict) -> None:
     revisao_media = round(df["revisao"].mean(), 1) if total_projetos else 0
     num_erros = int(df["num_erros"].fillna(0).sum())
     etgs = int((df["etg"] == "SIM").sum())
-    sem_pep = int((~df["tem_pep"]).sum())
     criticos = int(df["pendente_reuniao"].sum())
 
     total_status_entrega = df["status_entrega_calc"].notna().sum()
@@ -123,7 +122,6 @@ def render(usuario: dict) -> None:
         ("N° de Erros Encontrados", str(num_erros), CORES["laranja"]),
         ("ETGs", str(etgs), CORES["roxo"]),
         ("Projetos Críticos (Pendente Reunião)", str(criticos), CORES["vermelho"]),
-        ("Projetos sem PEP", str(sem_pep), CORES["dourado"]),
     ])
 
     col1, col2 = st.columns([2, 1])

@@ -29,9 +29,9 @@ def _colunas_prestadores_exportacao() -> dict[str, str]:
 
 def _colunas_cessionarios_exportacao() -> dict[str, str]:
     colunas = dict(COLUNAS_EXIBICAO_CESSIONARIOS)
-    colunas["rvp"] = "RVP"
-    colunas["rci"] = "RCI"
-    colunas["luc"] = "LUC"
+    colunas["rvp_cadastro"] = "RVP (Cadastro Mestre)"
+    colunas["rci_cadastro"] = "RCI (Cadastro Mestre)"
+    colunas["luc_cadastro"] = "LUC (Cadastro Mestre)"
     return colunas
 
 
@@ -46,26 +46,31 @@ def preparar_prestadores_exportacao(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def preparar_cessionarios_exportacao(df: pd.DataFrame) -> pd.DataFrame:
-    """Acrescenta RVP/RCI/LUC do cadastro mestre do cessionário vinculado,
-    sem alterar nenhuma coluna existente do projeto."""
+    """Acrescenta RVP/RCI/LUC do cadastro mestre do cessionário vinculado
+    (colunas `*_cadastro`, distintas dos campos próprios do projeto — LUC,
+    N° RCI e N° RVP —, já presentes em `df`), sem alterar nenhuma coluna
+    existente do projeto."""
     df = df.copy()
     cadastro = listar_cadastro_cessionarios()
     if not cadastro.empty and "cessionario_cadastro_id" in df.columns:
         mapa = cadastro.set_index("id")
-        df["rvp"] = df["cessionario_cadastro_id"].map(mapa["rvp"])
-        df["rci"] = df["cessionario_cadastro_id"].map(mapa["rci"])
-        df["luc"] = df["cessionario_cadastro_id"].map(mapa["luc"])
+        df["rvp_cadastro"] = df["cessionario_cadastro_id"].map(mapa["rvp"])
+        df["rci_cadastro"] = df["cessionario_cadastro_id"].map(mapa["rci"])
+        df["luc_cadastro"] = df["cessionario_cadastro_id"].map(mapa["luc"])
     else:
-        df["rvp"] = None
-        df["rci"] = None
-        df["luc"] = None
+        df["rvp_cadastro"] = None
+        df["rci_cadastro"] = None
+        df["luc_cadastro"] = None
     return df
 
 
 def _dataframe_para_exportacao(df: pd.DataFrame, colunas: dict[str, str]) -> pd.DataFrame:
     colunas_presentes = [c for c in colunas if c in df.columns]
     exportacao = df[colunas_presentes].rename(columns=colunas)
-    for coluna_data in ("Data de Solicitação", "Data Limite", "Data Análise", "Hold (Início)", "Hold (Fim)"):
+    for coluna_data in (
+        "Data de Solicitação", "Data Limite", "Data Análise", "Hold (Início)", "Hold (Fim)",
+        "Data Atualização RCI", "Data Atualização RVP",
+    ):
         if coluna_data in exportacao.columns:
             exportacao[coluna_data] = pd.to_datetime(exportacao[coluna_data], errors="coerce").dt.strftime("%d/%m/%Y")
     return exportacao.fillna("—")

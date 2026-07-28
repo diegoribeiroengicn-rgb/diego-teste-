@@ -66,7 +66,8 @@ COLUNAS_CESSIONARIOS = [
     "revisao", "num_documentos", "data_solicitacao", "tipo", "sla_dias",
     "data_limite", "data_analise", "hold_inicio", "hold_fim", "num_at",
     "revisao_at", "responsavel", "status_analise", "observacoes",
-    "natureza_revisao", "num_erros", "etg", "pep", "cessionario_cadastro_id",
+    "natureza_revisao", "num_erros", "etg", "luc", "numero_rci", "numero_rvp",
+    "data_atualizacao_rci", "data_atualizacao_rvp", "cessionario_cadastro_id",
 ]
 
 COLUNAS_CADASTRO_PRESTADORES = [
@@ -457,6 +458,18 @@ def _migracao_0006_avaliacao_checklist_obra(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_avaliacoes_checklist_obra ON avaliacoes_checklist(obra_id)")
 
 
+def _migracao_0007_luc_rci_rvp_cessionarios(conn: sqlite3.Connection) -> None:
+    """Projetos de Cessionários não utilizam PEP — acrescenta os campos
+    próprios do módulo (LUC, N° RCI, N° RVP e suas datas de atualização),
+    aditivos e sem afetar a coluna `pep` já existente (mantida intacta, mas
+    não mais lida/gravada pela aplicação para este módulo)."""
+    _garantir_coluna(conn, "cessionarios", "luc", "TEXT")
+    _garantir_coluna(conn, "cessionarios", "numero_rci", "TEXT")
+    _garantir_coluna(conn, "cessionarios", "numero_rvp", "TEXT")
+    _garantir_coluna(conn, "cessionarios", "data_atualizacao_rci", "TEXT")
+    _garantir_coluna(conn, "cessionarios", "data_atualizacao_rvp", "TEXT")
+
+
 _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (1, "Índices de busca por N° AT e nome em Prestadores e Cessionários", _migracao_0001_indices_busca),
     (2, "Índices para avaliações (checklist/analistas), alertas com radar e histórico de atividades", _migracao_0002_indices_avaliacoes_alertas),
@@ -464,6 +477,7 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (4, "Cadastro mestre de Prestadores/Cessionários + Obras/Canteiros, com backfill e vínculo aos projetos existentes", _migracao_0004_cadastro_mestre),
     (5, "Histórico estruturado de repactuações de prazo (data anterior/nova, motivo)", _migracao_0005_repactuacoes_prazo),
     (6, "Vínculo opcional de avaliação de checklist de Prestador com obra/canteiro", _migracao_0006_avaliacao_checklist_obra),
+    (7, "Projetos de Cessionários: substitui PEP por LUC, N° RCI, N° RVP e datas de atualização", _migracao_0007_luc_rci_rvp_cessionarios),
 ]
 
 

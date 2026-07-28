@@ -212,7 +212,7 @@ def render(usuario: dict) -> None:
             pd.concat([df_prest, df_cess], ignore_index=True) if not (df_prest.empty and df_cess.empty) else pd.DataFrame(),
             mes, ano,
         )
-        sem_pep_geral = (int((~df_prest["tem_pep"]).sum()) if not df_prest.empty else 0) + (int((~df_cess["tem_pep"]).sum()) if not df_cess.empty else 0)
+        sem_pep_geral = int((~df_prest["tem_pep"]).sum()) if not df_prest.empty else 0
         total_projetos = ind_prest_geral["recebidos"] + ind_cess_geral["recebidos"]
         produtividade_media = round(prod_geral["projetos_analisados"].mean(), 1) if not prod_geral.empty and prod_geral["projetos_analisados"].sum() else 0.0
 

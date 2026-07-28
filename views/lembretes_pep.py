@@ -1,4 +1,4 @@
-"""View: Lembretes — Projetos sem PEP (Prestadores e Cessionários)."""
+"""View: Lembretes — Projetos de Prestadores sem PEP."""
 
 from __future__ import annotations
 
@@ -9,15 +9,14 @@ from gat.business_rules import (
     CRITICIDADE_ATENCAO,
     CRITICIDADE_CRITICO,
     CRITICIDADE_INFORMATIVO,
-    enriquecer_cessionarios,
     enriquecer_prestadores,
     filtrar_ativos,
 )
 from gat.config import CORES, RESPONSAVEIS
-from gat.database import listar_cessionarios, listar_prestadores, obter_cessionario, obter_prestador
+from gat.database import listar_prestadores, obter_prestador
 from gat.permissions import exigir_area
 from gat.ui.kpi_cards import renderizar_kpis
-from gat.ui.modals import dialog_cessionario, dialog_prestador
+from gat.ui.modals import dialog_prestador
 
 _ORDEM_CRITICIDADE = {CRITICIDADE_CRITICO: 0, CRITICIDADE_ATENCAO: 1, CRITICIDADE_INFORMATIVO: 2}
 
@@ -46,12 +45,11 @@ def render(usuario: dict) -> None:
 
     st.subheader(":material/pending_actions: Lembretes — Projetos sem PEP")
     st.caption(
-        "Reúne, dos módulos de Prestadores e Cessionários, todo projeto ativo cadastrado sem PEP. "
+        "Reúne, do módulo de Prestadores, todo projeto ativo cadastrado sem PEP. "
         "O lembrete some automaticamente assim que o PEP é informado no cadastro."
     )
 
     df_prest = enriquecer_prestadores(filtrar_ativos(listar_prestadores()))
-    df_cess = enriquecer_cessionarios(filtrar_ativos(listar_cessionarios()))
 
     linhas = []
     if not df_prest.empty:
@@ -63,22 +61,6 @@ def render(usuario: dict) -> None:
                 "item": linha["item"],
                 "codigo": linha.get("codigo"),
                 "nome": linha.get("prestador"),
-                "disciplina": linha.get("disciplina"),
-                "num_at": linha.get("num_at"),
-                "responsavel": linha.get("responsavel"),
-                "data_solicitacao": linha.get("data_solicitacao"),
-                "dias_sem_pep": linha.get("dias_sem_pep"),
-                "criticidade_pep": linha.get("criticidade_pep"),
-            })
-    if not df_cess.empty:
-        sem_pep = df_cess[~df_cess["tem_pep"]]
-        for _, linha in sem_pep.iterrows():
-            linhas.append({
-                "modulo": "Cessionários",
-                "id": linha["id"],
-                "item": linha["item"],
-                "codigo": linha.get("codigo"),
-                "nome": linha.get("cessionario"),
                 "disciplina": linha.get("disciplina"),
                 "num_at": linha.get("num_at"),
                 "responsavel": linha.get("responsavel"),
@@ -106,21 +88,18 @@ def render(usuario: dict) -> None:
         return
 
     with st.expander("Filtros", icon=":material/filter_list:", expanded=False):
-        col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 1.4, 1])
-        f_modulo = col1.multiselect("Módulo", ["Prestadores", "Cessionários"], key="filtro_lemb_modulo")
+        col2, col3, col4, col5 = st.columns([2, 2, 1.4, 1])
         f_resp = col2.multiselect("Responsável", RESPONSAVEIS, key="filtro_lemb_resp")
         f_criticidade = col3.multiselect("Criticidade", [CRITICIDADE_CRITICO, CRITICIDADE_ATENCAO, CRITICIDADE_INFORMATIVO], key="filtro_lemb_criticidade")
         f_dias_min = col4.number_input("Dias sem PEP (mínimo)", min_value=0, step=1, value=0, key="filtro_lemb_dias")
         with col5:
             st.write("")
             if st.button("Limpar", icon=":material/filter_alt_off:", key="limpar_filtros_lemb"):
-                for chave in ("filtro_lemb_modulo", "filtro_lemb_resp", "filtro_lemb_criticidade", "filtro_lemb_dias"):
+                for chave in ("filtro_lemb_resp", "filtro_lemb_criticidade", "filtro_lemb_dias"):
                     st.session_state.pop(chave, None)
                 st.rerun()
 
     df_filtrado = df_lembretes.copy()
-    if f_modulo:
-        df_filtrado = df_filtrado[df_filtrado["modulo"].isin(f_modulo)]
     if f_resp:
         df_filtrado = df_filtrado[df_filtrado["responsavel"].isin(f_resp)]
     if f_criticidade:
@@ -146,10 +125,6 @@ def render(usuario: dict) -> None:
             st.markdown(_badge_criticidade(linha["criticidade_pep"]), unsafe_allow_html=True)
         with col_acao:
             if st.button("Abrir projeto", icon=":material/open_in_new:", key=f"abrir_lembrete_{linha['modulo']}_{linha['id']}", use_container_width=True):
-                if linha["modulo"] == "Prestadores":
-                    exigir_area(usuario, "prestadores.editar")
-                    dialog_prestador(usuario["username"], obter_prestador(int(linha["id"])))
-                else:
-                    exigir_area(usuario, "cessionarios.editar")
-                    dialog_cessionario(usuario["username"], obter_cessionario(int(linha["id"])))
+                exigir_area(usuario, "prestadores.editar")
+                dialog_prestador(usuario["username"], obter_prestador(int(linha["id"])))
         st.divider()

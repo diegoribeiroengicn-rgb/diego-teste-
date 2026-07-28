@@ -63,7 +63,6 @@ def render(usuario: dict) -> None:
         pct_no_prazo = round((no_prazo / total_geral) * 100, 1)
 
     sem_pep_prest = int((~df_prest["tem_pep"]).sum()) if not df_prest.empty else 0
-    sem_pep_cess = int((~df_cess["tem_pep"]).sum()) if not df_cess.empty else 0
 
     renderizar_kpis([
         ("Projetos Ativos (Total)", str(total_geral), CORES["navy"]),
@@ -74,9 +73,7 @@ def render(usuario: dict) -> None:
     ])
 
     renderizar_kpis([
-        ("Projetos sem PEP (Total)", str(sem_pep_prest + sem_pep_cess), CORES["dourado"]),
-        ("Sem PEP — Prestadores", str(sem_pep_prest), CORES["dourado"]),
-        ("Sem PEP — Cessionários", str(sem_pep_cess), CORES["dourado"]),
+        ("Projetos sem PEP — Prestadores", str(sem_pep_prest), CORES["dourado"]),
     ])
 
     st.markdown("####")

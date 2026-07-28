@@ -76,8 +76,7 @@ def render(usuario: dict) -> None:
         int((df_cess["status_entrega_calc"] == "ATRASADO").sum() if not df_cess.empty else 0)
     total_pendente_reuniao = int(df_prest["pendente_reuniao"].sum() if not df_prest.empty else 0) + \
         int(df_cess["pendente_reuniao"].sum() if not df_cess.empty else 0)
-    total_sem_pep = int((~df_prest["tem_pep"]).sum() if not df_prest.empty else 0) + \
-        int((~df_cess["tem_pep"]).sum() if not df_cess.empty else 0)
+    total_sem_pep = int((~df_prest["tem_pep"]).sum() if not df_prest.empty else 0)
 
     st.markdown("##### Indicadores gerais")
     col1, col2, col3 = st.columns(3)

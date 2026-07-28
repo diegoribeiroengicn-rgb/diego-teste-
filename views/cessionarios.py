@@ -20,8 +20,6 @@ from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.modals import dialog_cessionario
 from gat.ui.tables import tabela_com_edicao
 
-SITUACAO_PEP_OPCOES = ["Todos", "Com PEP", "Sem PEP"]
-
 _ICONE_SITUACAO_PRAZO = {
     "DENTRO DO PRAZO": "🟢",
     "VENCE EM BREVE": "🟡",
@@ -46,7 +44,7 @@ def _rotulo_situacao_prazo(dias_restantes, revisao) -> str:
 
 _CHAVES_FILTRO = [
     "filtro_cess_resp", "filtro_cess_status", "filtro_cess_tipo",
-    "filtro_cess_pep", "filtro_cess_pendentes", "filtro_cess_cancelados",
+    "filtro_cess_pendentes", "filtro_cess_cancelados",
     "filtro_cess_at", "filtro_cess_codigo", "filtro_cess_nome", "filtro_cess_revisao",
 ]
 
@@ -79,13 +77,12 @@ def render(usuario: dict) -> None:
         st.session_state["filtro_cess_status"] = status_default
 
     with st.expander("Filtros", icon=":material/filter_list:", expanded=False):
-        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        col1, col2, col3, col4, col5 = st.columns(5)
         f_resp = col1.multiselect("Responsável", RESPONSAVEIS, key="filtro_cess_resp")
         f_status = col2.multiselect("Status Análise", STATUS_ANALISE_OPCOES, key="filtro_cess_status")
         f_tipo = col3.multiselect("Tipo", TIPO_CESSIONARIO_OPCOES, key="filtro_cess_tipo")
-        f_pep = col4.selectbox("Situação do PEP", SITUACAO_PEP_OPCOES, key="filtro_cess_pep")
-        f_pendentes = col5.checkbox("Somente Pendente de Reunião", key="filtro_cess_pendentes")
-        f_cancelados = col6.checkbox("Incluir cancelados", value=False, key="filtro_cess_cancelados")
+        f_pendentes = col4.checkbox("Somente Pendente de Reunião", key="filtro_cess_pendentes")
+        f_cancelados = col5.checkbox("Incluir cancelados", value=False, key="filtro_cess_cancelados")
 
         col7, col8, col9, col10 = st.columns(4)
         f_at = col7.text_input("N° AT", key="filtro_cess_at", placeholder="Ex.: 1524 (busca exata ou parcial)")
@@ -113,10 +110,6 @@ def render(usuario: dict) -> None:
         df_filtrado = df_filtrado[df_filtrado["status_analise"].isin(f_status)]
     if f_tipo:
         df_filtrado = df_filtrado[df_filtrado["tipo"].isin(f_tipo)]
-    if f_pep == "Com PEP":
-        df_filtrado = df_filtrado[df_filtrado["tem_pep"]]
-    elif f_pep == "Sem PEP":
-        df_filtrado = df_filtrado[~df_filtrado["tem_pep"]]
     if f_pendentes:
         df_filtrado = df_filtrado[df_filtrado["pendente_reuniao"]]
     if f_at.strip():
