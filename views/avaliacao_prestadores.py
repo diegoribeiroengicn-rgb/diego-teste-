@@ -14,6 +14,14 @@ from gat.database import (
     listar_obras_prestador,
     nome_exibicao_obra,
     obter_avaliacao,
+    registrar_atividade,
+)
+from gat.export_avaliacoes import (
+    gerar_excel_multiplas_abas,
+    gerar_json_bytes,
+    gerar_zip_csv,
+    montar_backup_avaliacoes_checklist,
+    nome_arquivo_backup,
 )
 from gat.permissions import exigir_area, pode_area, pode_modulo
 from gat.ui.charts import grafico_status_donut
@@ -22,6 +30,31 @@ from gat.ui.kpi_cards import renderizar_kpis
 from gat.ui.modals import dialog_avaliacao
 from gat.ui.modals_avaliacao import dialog_avaliacao_checklist
 from gat.ui.tables import tabela_com_edicao
+
+
+def _renderizar_backup(usuario: dict, tipo_label: str, tipo_entidade: str) -> None:
+    if not pode_area(usuario, "avaliacoes.relatorios"):
+        return
+    with st.expander(f"Backup — Avaliação de {tipo_label}", icon=":material/backup:", expanded=False):
+        st.caption(
+            "Exporta todas as avaliações (checklist), com AT, projeto, disciplina, revisão, analista, "
+            f"{tipo_label.lower()}, notas, comentários, datas e histórico completo de auditoria."
+        )
+        formato = st.selectbox("Formato", ["Excel (.xlsx)", "CSV (.zip)", "JSON"], key=f"backup_aval_formato_{tipo_entidade}")
+        if st.button("Gerar backup", icon=":material/backup:", type="primary", key=f"backup_aval_gerar_{tipo_entidade}"):
+            tabelas = montar_backup_avaliacoes_checklist(tipo_entidade)
+            prefixo = f"Avaliacoes_{tipo_label.replace('á', 'a').replace('ã', 'a')}"
+            if formato.startswith("Excel"):
+                conteudo, arquivo, mime = gerar_excel_multiplas_abas(tabelas), nome_arquivo_backup(prefixo, "xlsx"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            elif formato.startswith("CSV"):
+                conteudo, arquivo, mime = gerar_zip_csv(tabelas), nome_arquivo_backup(prefixo, "zip"), "application/zip"
+            else:
+                conteudo, arquivo, mime = gerar_json_bytes(tabelas), nome_arquivo_backup(prefixo, "json"), "application/json"
+            st.download_button(
+                f"Baixar backup ({formato})", data=conteudo, file_name=arquivo, mime=mime,
+                icon=":material/download:", type="primary", key=f"backup_aval_baixar_{tipo_entidade}",
+            )
+            registrar_atividade(usuario["username"], usuario.get("perfil"), "BACKUP_AVALIACOES", modulo=tipo_entidade, detalhe=formato)
 
 
 def _tab_checklist(usuario: dict) -> None:
@@ -36,6 +69,8 @@ def _tab_checklist(usuario: dict) -> None:
 
     tipo_label = st.selectbox("Tipo", opcoes_tipo, key="aval_checklist_tipo")
     tipo_entidade = "PRESTADOR" if tipo_label == "Prestador" else "CESSIONARIO"
+
+    _renderizar_backup(usuario, tipo_label, tipo_entidade)
 
     if pode_area(usuario, "avaliacoes.cadastrar"):
         col_novo, _ = st.columns([1, 4])

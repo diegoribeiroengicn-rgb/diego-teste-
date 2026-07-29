@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from datetime import datetime
 
 from gat import backup_externo
-from gat.config import PERFIS_OPCOES
+from gat.config import MAX_BACKUPS, PERFIS_OPCOES
 from gat.database import (
     criar_backup,
     criar_usuario,
     definir_configuracao,
     exportar_banco_bytes,
+    listar_backups,
     listar_historico,
     listar_usuarios,
     obter_configuracao,
@@ -251,6 +253,28 @@ def _renderizar_persistencia_dados(usuario: dict) -> None:
 
     if st.session_state.get("admin_confirmar_restauracao"):
         _dialog_confirmar_restauracao(usuario)
+
+    st.divider()
+    st.markdown("**Backups automáticos**")
+    st.caption(
+        "O sistema cria backups automaticamente: antes de qualquer migração de banco de dados, pelo menos "
+        "uma vez por dia de uso, e sempre que a versão da aplicação em execução muda (a aproximação mais "
+        "próxima possível de \"antes de uma atualização\" para um processo sem acesso ao pipeline de deploy). "
+        f"São mantidos os {MAX_BACKUPS} backups mais recentes."
+    )
+    backups = listar_backups()
+    if backups:
+        col_b1, col_b2, col_b3 = st.columns(3)
+        col_b1.metric("Total de backups", len(backups))
+        col_b2.metric("Mais recente", backups[0]["criado_em"][:16].replace("T", " "))
+        col_b3.metric("Mais antigo mantido", backups[-1]["criado_em"][:16].replace("T", " "))
+        with st.expander("Ver todos os backups", icon=":material/history:"):
+            st.dataframe(
+                pd.DataFrame(backups).rename(columns={"arquivo": "Arquivo", "tamanho_bytes": "Tamanho (bytes)", "criado_em": "Criado em"}),
+                use_container_width=True, hide_index=True,
+            )
+    else:
+        st.info("Nenhum backup automático criado ainda.")
 
     st.divider()
     st.markdown("**Sincronizar para persistência entre reinícios (manual)**")

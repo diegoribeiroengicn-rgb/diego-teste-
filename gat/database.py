@@ -13,7 +13,7 @@ from __future__ import annotations
 import shutil
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
@@ -198,6 +198,31 @@ def listar_backups() -> list[dict[str, Any]]:
         {"arquivo": p.name, "tamanho_bytes": p.stat().st_size, "criado_em": datetime.fromtimestamp(p.stat().st_mtime).isoformat(timespec="seconds")}
         for p in backups
     ]
+
+
+def _backup_diario_e_por_atualizacao() -> None:
+    """
+    Reforço do backup automático (além do já existente antes de qualquer
+    migração de banco): garante pelo menos um backup por dia de uso, e um
+    backup assim que a versão da aplicação em execução mudar em relação
+    à última registrada — a aproximação mais próxima possível de "antes
+    de qualquer atualização do sistema" que um processo sem acesso ao
+    pipeline de deploy consegue oferecer (o backup pré-migração, esse
+    sim, sempre acontece genuinamente antes da alteração de schema — ver
+    `_aplicar_migracoes`). Nunca interrompe a inicialização caso o
+    backup falhe — apenas não atualiza os marcadores, para tentar de
+    novo na próxima subida.
+    """
+    if not DB_PATH.exists():
+        return
+    versao_anterior = obter_configuracao("app_versao_ultimo_backup", "")
+    ultimo_backup_dia = obter_configuracao("data_ultimo_backup_diario", "")
+    hoje = date.today().isoformat()
+    if versao_anterior == APP_VERSION and ultimo_backup_dia == hoje:
+        return
+    if criar_backup() is not None:
+        definir_configuracao("app_versao_ultimo_backup", APP_VERSION)
+        definir_configuracao("data_ultimo_backup_diario", hoje)
 
 
 # ---------------------------------------------------------------------------
@@ -927,6 +952,7 @@ def init_db() -> None:
         _semear_configuracoes_padrao(conn)
 
     _aplicar_migracoes()
+    _backup_diario_e_por_atualizacao()
 
 
 # ---------------------------------------------------------------------------

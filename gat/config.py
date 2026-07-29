@@ -34,7 +34,7 @@ LOGO_PATH = BASE_DIR / "assets" / "tecnoplano_logo.png"
 # estrutural do banco (ver `gat/database.py::_aplicar_migracoes`).
 BACKUP_DIR = Path(os.environ.get("GAT_BACKUP_DIR", "").strip() or (DB_PATH.parent / "backups"))
 BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-MAX_BACKUPS = int(os.environ.get("GAT_MAX_BACKUPS", "15"))
+MAX_BACKUPS = int(os.environ.get("GAT_MAX_BACKUPS", "30"))
 
 # Versão da aplicação — usada apenas para identificar o release de origem
 # nos nomes dos arquivos de backup (não confundir com a versão do schema,

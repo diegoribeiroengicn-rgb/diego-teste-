@@ -20,6 +20,13 @@ from gat.database import (
     recalcular_fechamento_avaliacao_analista,
     registrar_atividade,
 )
+from gat.export_avaliacoes import (
+    gerar_excel_multiplas_abas,
+    gerar_json_bytes,
+    gerar_zip_csv,
+    montar_backup_avaliacoes_analistas,
+    nome_arquivo_backup,
+)
 from gat.permissions import exigir_area, pode_area
 from gat.relatorios_mensais import avaliacoes_obrigatorias_do_mes, produtividade_analistas
 from gat.ui.kpi_cards import renderizar_kpis
@@ -266,6 +273,30 @@ def _dialog_avaliacao(usuario: dict, registro: dict | None = None) -> None:
         st.rerun()
 
 
+def _renderizar_backup_analistas(usuario: dict) -> None:
+    if not pode_area(usuario, "analistas.relatorios"):
+        return
+    with st.expander("Backup — Avaliação de Analistas", icon=":material/backup:", expanded=False):
+        st.caption(
+            "Exporta todas as avaliações de analistas, fechamentos mensais (nota original, penalização, "
+            "bonificação, nota final, justificativa) e histórico completo de auditoria."
+        )
+        formato = st.selectbox("Formato", ["Excel (.xlsx)", "CSV (.zip)", "JSON"], key="backup_aa_formato")
+        if st.button("Gerar backup", icon=":material/backup:", type="primary", key="backup_aa_gerar"):
+            tabelas = montar_backup_avaliacoes_analistas()
+            if formato.startswith("Excel"):
+                conteudo, arquivo, mime = gerar_excel_multiplas_abas(tabelas), nome_arquivo_backup("Avaliacoes_Analistas", "xlsx"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            elif formato.startswith("CSV"):
+                conteudo, arquivo, mime = gerar_zip_csv(tabelas), nome_arquivo_backup("Avaliacoes_Analistas", "zip"), "application/zip"
+            else:
+                conteudo, arquivo, mime = gerar_json_bytes(tabelas), nome_arquivo_backup("Avaliacoes_Analistas", "json"), "application/json"
+            st.download_button(
+                f"Baixar backup ({formato})", data=conteudo, file_name=arquivo, mime=mime,
+                icon=":material/download:", type="primary", key="backup_aa_baixar",
+            )
+            registrar_atividade(usuario["username"], usuario.get("perfil"), "BACKUP_AVALIACOES", modulo="analistas", detalhe=formato)
+
+
 def render(usuario: dict) -> None:
     exigir_area(usuario, "analistas.notas")
 
@@ -285,6 +316,8 @@ def render(usuario: dict) -> None:
         f"mês) soma +{BONUS_AVALIACOES_OBRIGATORIAS} ponto, respeitando o limite máximo da nota "
         f"({NOTA_MAXIMA_ANALISTA}). Penalização e bonificação nunca se aplicam juntas."
     )
+
+    _renderizar_backup_analistas(usuario)
 
     if pode_area(usuario, "analistas.avaliar"):
         if st.button("Nova Avaliação", icon=":material/add:", type="primary", key="nova_avaliacao_analista"):
