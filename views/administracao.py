@@ -6,6 +6,7 @@ import streamlit as st
 
 from datetime import datetime
 
+from gat import backup_externo
 from gat.config import PERFIS_OPCOES
 from gat.database import (
     criar_backup,
@@ -252,12 +253,13 @@ def _renderizar_persistencia_dados(usuario: dict) -> None:
         _dialog_confirmar_restauracao(usuario)
 
     st.divider()
-    st.markdown("**Sincronizar para persistência entre reinícios**")
+    st.markdown("**Sincronizar para persistência entre reinícios (manual)**")
     st.caption(
         "Atualiza o banco de sementes do repositório com os dados atuais, para que um reinício futuro do "
         "ambiente já comece a partir deste estado, em vez do estado original da importação. Depois de "
         "sincronizar, peça ao assistente para confirmar e salvar (\"commit/push\") essa atualização no "
-        "repositório — só assim ela realmente sobrevive a um reinício."
+        "repositório — só assim ela realmente sobrevive a um reinício. **Se o backup automático abaixo "
+        "estiver configurado, isto não é mais necessário** — ele já faz isso sozinho a cada gravação."
     )
     if st.button("Sincronizar dados atuais para persistência", icon=":material/cloud_sync:"):
         if sincronizar_para_persistencia():
@@ -265,6 +267,35 @@ def _renderizar_persistencia_dados(usuario: dict) -> None:
             st.success("Dados sincronizados. Agora peça ao assistente para salvar (commit/push) essa atualização no repositório.")
         else:
             st.error("Não foi possível sincronizar — banco de dados atual não encontrado.")
+
+    st.divider()
+    st.markdown("**Backup automático no GitHub (recomendado)**")
+    st.caption(
+        "Publica automaticamente, a cada gravação feita pela interface, o estado atual do banco direto no "
+        "repositório — sem precisar clicar em nada nem pedir commit/push manual. Requer configurar os "
+        "segredos `GAT_BACKUP_GITHUB_TOKEN` e `GAT_BACKUP_GITHUB_REPO` em Settings → Secrets do app no "
+        "Streamlit Cloud (veja o README para o passo a passo)."
+    )
+    if backup_externo.configurado():
+        st.success("Backup automático configurado.", icon=":material/cloud_done:")
+    else:
+        st.warning("Backup automático ainda não configurado — os dados continuam vulneráveis a reinícios do ambiente.", icon=":material/cloud_off:")
+
+    status_backup = backup_externo.status()
+    if status_backup["em"]:
+        icone = ":material/check_circle:" if status_backup["sucesso"] else ":material/error:"
+        st.caption(f"{icone} Última tentativa ({status_backup['em']}): {status_backup['mensagem']}")
+
+    if st.button("Testar backup automático agora", icon=":material/cloud_upload:", key="admin_testar_backup_externo"):
+        with st.spinner("Enviando backup para o GitHub..."):
+            sincronizar_para_persistencia()
+            sucesso = backup_externo.enviar_backup_agora()
+        if sucesso:
+            registrar_atividade(usuario["username"], usuario.get("perfil"), "BACKUP_EXTERNO_TESTADO", detalhe="Sucesso")
+            st.success(backup_externo.status()["mensagem"])
+        else:
+            registrar_atividade(usuario["username"], usuario.get("perfil"), "BACKUP_EXTERNO_TESTADO", detalhe="Falha")
+            st.error(backup_externo.status()["mensagem"])
 
 
 @st.dialog("Confirmar restauração de backup")

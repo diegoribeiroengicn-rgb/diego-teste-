@@ -146,6 +146,47 @@ A migração só prossegue se o backup for criado com sucesso. São mantidos os
 `GAT_MAX_BACKUPS` backups mais recentes (padrão: 15, configurável por
 variável de ambiente), sem nunca apagar o mais recente válido.
 
+### Disco efêmero (Streamlit Community Cloud) e backup automático no GitHub
+
+Em ambientes sem disco persistente — como o Streamlit Community Cloud — o
+disco inteiro é recriado do zero a cada reinício/deploy, a partir apenas do
+que está no repositório Git. Como o banco de produção (`data/gat_tecnoplano.db`)
+fica fora do controle de versão de propósito (nunca deve subir dados reais
+para o Git sem controle), um reinício nesse tipo de ambiente perde tudo que
+foi cadastrado pela interface desde a última vez que o banco de sementes
+(`data/seed_gat_tecnoplano.db`) foi atualizado no repositório.
+
+Para isso não depender de alguém lembrar de sincronizar manualmente, o
+sistema pode publicar sozinho, a cada gravação feita pela interface, o
+estado atual do banco direto no branch em produção do repositório. Para
+ativar, configure em **Settings → Secrets** do app no Streamlit Cloud:
+
+```toml
+GAT_BACKUP_GITHUB_TOKEN = "ghp_..."
+GAT_BACKUP_GITHUB_REPO = "owner/repo"
+```
+
+- `GAT_BACKUP_GITHUB_TOKEN`: um [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new)
+  do GitHub, com acesso restrito **apenas a este repositório** e permissão
+  **Contents: Read and write** (nenhuma outra permissão é necessária).
+- `GAT_BACKUP_GITHUB_REPO`: `owner/repo` deste repositório.
+- Opcionalmente, `GAT_BACKUP_GITHUB_BRANCH` (default: o branch publicado
+  atual) e `GAT_BACKUP_GITHUB_PATH` (default: `data/seed_gat_tecnoplano.db`).
+
+Depois de configurar os segredos, reinicie o app uma vez e confira em
+**Administração → Configurações → Backup automático no GitHub** (botão
+"Testar backup automático agora"). Sem esses segredos configurados, este
+recurso fica desativado e o sistema se comporta exatamente como antes —
+nenhum outro fluxo é afetado.
+
+Como cada gravação publica um novo commit contendo uma cópia completa do
+banco (incluindo hashes de senha e dados de negócio), **mantenha o
+repositório privado** e use um token com o escopo mais restrito possível.
+O histórico do branch de backup cresce ao longo do tempo — se isso vier a
+incomodar, ele pode ser esvaziado/squashado periodicamente sem afetar o
+funcionamento do sistema (o mecanismo só depende do conteúdo mais recente
+do arquivo, não do histórico).
+
 ### Reimportar ou atualizar a base de sementes
 
 Caso a planilha oficial seja atualizada e você queira regerar a base de

@@ -20,6 +20,7 @@ from typing import Any, Callable, Iterator
 import bcrypt
 import pandas as pd
 
+from gat import backup_externo
 from gat.config import (
     APP_VERSION,
     AREAS_PERMISSAO,
@@ -47,6 +48,12 @@ def _conectar() -> Iterator[sqlite3.Connection]:
     try:
         yield conn
         conn.commit()
+        if conn.total_changes > 0:
+            # Ambientes com disco efêmero (ex.: Streamlit Community Cloud)
+            # recriam o disco do zero a cada reinício — sem isto, qualquer
+            # gravação feita pela interface se perderia no próximo reinício.
+            sincronizar_para_persistencia()
+            backup_externo.agendar_backup_apos_gravacao()
     finally:
         conn.close()
 
