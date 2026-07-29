@@ -477,6 +477,59 @@ def _migracao_0007_luc_rci_rvp_cessionarios(conn: sqlite3.Connection) -> None:
     _garantir_coluna(conn, "cessionarios", "data_atualizacao_rvp", "TEXT")
 
 
+def _migracao_0008_avaliacao_obrigatoria_isentos(conn: sqlite3.Connection) -> None:
+    """
+    Nova pendência automática de avaliação obrigatória (nasce quando um
+    projeto atinge a Rev.01 sem avaliação de checklist registrada, e
+    permanece ativa em revisões seguintes até a avaliação ser feita — ver
+    `gat/alertas_engine.py`). Para não gerar, de uma só vez, um alerta
+    retroativo em todo projeto que já estivesse em revisão >= 1 sem
+    avaliação no momento em que esta regra entrou em vigor, esta migração
+    congela (uma única vez, aqui) a lista desses projetos como isentos —
+    dali em diante, só passam a gerar alerta os projetos (novos ou já
+    existentes) que ainda vierem a atingir a Rev.01 depois desta migração.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS avaliacao_obrigatoria_isentos (
+            modulo TEXT NOT NULL,
+            projeto_id INTEGER NOT NULL,
+            motivo TEXT NOT NULL DEFAULT 'PRE_EXISTENTE_NA_ATIVACAO',
+            criado_em TEXT NOT NULL,
+            PRIMARY KEY (modulo, projeto_id)
+        )
+        """
+    )
+
+    agora = datetime.now().isoformat()
+    for modulo, tabela, tipo_entidade, coluna_nome in (
+        ("prestadores", "prestadores", "PRESTADOR", "prestador"),
+        ("cessionarios", "cessionarios", "CESSIONARIO", "cessionario"),
+    ):
+        avaliados = {
+            ((linha["codigo_entidade"] or linha["nome_entidade"]), (linha["disciplina"] or ""))
+            for linha in conn.execute(
+                "SELECT codigo_entidade, nome_entidade, disciplina FROM avaliacoes_checklist WHERE tipo_entidade = ?",
+                (tipo_entidade,),
+            ).fetchall()
+        }
+        for linha in conn.execute(
+            f"SELECT id, codigo, {coluna_nome} AS nome, disciplina, revisao FROM {tabela} WHERE status_analise != 'CANCELADO'"
+        ).fetchall():
+            try:
+                if int(linha["revisao"] or 0) < 1:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            codigo_projeto = linha["codigo"] or linha["nome"]
+            if (codigo_projeto, linha["disciplina"] or "") in avaliados:
+                continue
+            conn.execute(
+                "INSERT OR IGNORE INTO avaliacao_obrigatoria_isentos (modulo, projeto_id, criado_em) VALUES (?, ?, ?)",
+                (modulo, linha["id"], agora),
+            )
+
+
 _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (1, "Índices de busca por N° AT e nome em Prestadores e Cessionários", _migracao_0001_indices_busca),
     (2, "Índices para avaliações (checklist/analistas), alertas com radar e histórico de atividades", _migracao_0002_indices_avaliacoes_alertas),
@@ -485,6 +538,7 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (5, "Histórico estruturado de repactuações de prazo (data anterior/nova, motivo)", _migracao_0005_repactuacoes_prazo),
     (6, "Vínculo opcional de avaliação de checklist de Prestador com obra/canteiro", _migracao_0006_avaliacao_checklist_obra),
     (7, "Projetos de Cessionários: substitui PEP por LUC, N° RCI, N° RVP e datas de atualização", _migracao_0007_luc_rci_rvp_cessionarios),
+    (8, "Avaliação obrigatória (Rev.01): congela como isentos os projetos já em revisão >= 1 sem avaliação no momento da ativação", _migracao_0008_avaliacao_obrigatoria_isentos),
 ]
 
 
@@ -1903,6 +1957,17 @@ def reabrir_alerta(modulo: str, projeto_id: int, tipo_alerta: str, usuario: str)
 def listar_radar() -> pd.DataFrame:
     with _conectar() as conn:
         return pd.read_sql_query("SELECT * FROM alertas_radar ORDER BY atualizado_em DESC", conn)
+
+
+def listar_avaliacao_obrigatoria_isentos(modulo: str) -> set[int]:
+    """IDs de projeto congelados como isentos do alerta de avaliação
+    obrigatória (já estavam em revisão >= 1 sem avaliação quando a regra
+    entrou em vigor — ver migração 8)."""
+    with _conectar() as conn:
+        linhas = conn.execute(
+            "SELECT projeto_id FROM avaliacao_obrigatoria_isentos WHERE modulo = ?", (modulo,)
+        ).fetchall()
+        return {int(linha["projeto_id"]) for linha in linhas}
 
 
 # ---------------------------------------------------------------------------

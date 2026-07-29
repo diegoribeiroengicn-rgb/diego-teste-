@@ -8,9 +8,9 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from gat.alertas_engine import TIPO_ALERTA_LABELS, montar_alertas_modulo
+from gat.alertas_engine import TIPO_ALERTA_LABELS, TIPO_AVALIACAO_OBRIGATORIA, montar_alertas_modulo
 from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia
-from gat.config import DISCIPLINAS, RESPONSAVEIS
+from gat.config import DISCIPLINAS, PERFIL_ADMIN, PERFIL_GESTOR, RESPONSAVEIS
 from gat.database import (
     STATUS_ALERTA_OPCOES,
     adiar_alerta,
@@ -23,6 +23,7 @@ from gat.database import (
 )
 from gat.permissions import exigir_area, pode_modulo
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
+from gat.ui.modals_avaliacao import dialog_avaliacao_checklist
 
 _LABEL_STATUS = {
     "PENDENTE": "Pendente", "EM_TRATAMENTO": "Em tratamento", "TRATADO": "Tratado",
@@ -35,6 +36,29 @@ def _ou_traco(valor) -> str:
     """`valor or '—'` não protege contra NaN (bool(float('nan')) é True); esta
     função trata None/NaN/vazio uniformemente antes de exibir na tela."""
     return str(valor) if pd.notna(valor) and str(valor).strip() else "—"
+
+
+def _acao_avaliacao_obrigatoria(usuario: dict, alerta: pd.Series, chave_acao: str) -> None:
+    """A avaliação obrigatória não tem tratamento/adiamento/retirada manual
+    — a única forma de encerrar o alerta é realizar a avaliação. Assim que
+    ela for salva, este alerta simplesmente deixa de ser gerado no próximo
+    carregamento (ver `gat/alertas_engine.py`)."""
+    st.warning(
+        f"O analista {_ou_traco(alerta.get('responsavel'))} ainda não realizou a avaliação obrigatória da AT "
+        f"{_ou_traco(alerta.get('num_at'))}.",
+        icon=":material/assignment_late:",
+    )
+    if st.button("Avaliar agora", icon=":material/fact_check:", type="primary", key=f"avaliar_{chave_acao}", use_container_width=True):
+        tipo_entidade = "PRESTADOR" if alerta["modulo"] == "prestadores" else "CESSIONARIO"
+        dialog_avaliacao_checklist(
+            usuario["username"], tipo_entidade,
+            prefill={
+                "nome_entidade": alerta.get("nome"), "codigo_entidade": alerta.get("codigo"),
+                "disciplina": alerta.get("disciplina"), "at_referencia": alerta.get("num_at"),
+                "revisao": alerta.get("revisao"), "analista_responsavel": alerta.get("responsavel"),
+                "projeto_id": alerta.get("projeto_id"),
+            },
+        )
 
 
 def _cartao_alerta(usuario: dict, alerta: pd.Series, sufixo_chave: str) -> None:
@@ -52,6 +76,11 @@ def _cartao_alerta(usuario: dict, alerta: pd.Series, sufixo_chave: str) -> None:
             st.caption(f"Status: **{_LABEL_STATUS.get(alerta['status'], alerta['status'])}**")
 
         chave_acao = f"{alerta['modulo']}_{alerta['projeto_id']}_{alerta['tipo_alerta']}_{sufixo_chave}"
+
+        if alerta["tipo_alerta"] == TIPO_AVALIACAO_OBRIGATORIA:
+            _acao_avaliacao_obrigatoria(usuario, alerta, chave_acao)
+            return
+
         col1, col2, col3, col4 = st.columns(4)
         if col1.button("Iniciar tratamento", key=f"iniciar_{chave_acao}", use_container_width=True, disabled=alerta["status"] == "EM_TRATAMENTO"):
             iniciar_tratamento_alerta(alerta["modulo"], alerta["projeto_id"], alerta["tipo_alerta"], usuario["username"])
@@ -147,9 +176,10 @@ def render(usuario: dict, modulo: str | None = None) -> None:
 
     st.subheader(f":material/notifications_active: {titulo}")
     st.caption(
-        "Projetos com revisão ≥ REV2 sem liberação, atrasados, com avaliação Crítica/Baixa, ou com retorno "
-        "externo fora do SLA de 10 dias úteis. Um alerta retirado do radar sai das sugestões ativas, mas "
-        "permanece no histórico e na auditoria."
+        "Projetos com revisão ≥ REV2 sem liberação, atrasados, com avaliação Crítica/Baixa, com retorno "
+        "externo fora do SLA de 10 dias úteis, ou com avaliação obrigatória (checklist) ainda pendente desde "
+        "a Rev. 01. Um alerta retirado do radar sai das sugestões ativas, mas permanece no histórico e na "
+        "auditoria — a avaliação obrigatória é a única exceção: ela só some quando a avaliação é realizada."
     )
 
     with st.expander("Filtros", icon=":material/filter_list:", expanded=False):
@@ -177,6 +207,15 @@ def render(usuario: dict, modulo: str | None = None) -> None:
             todos_alertas.append(alertas_mod)
 
     alertas = pd.concat(todos_alertas, ignore_index=True) if todos_alertas else pd.DataFrame()
+
+    if not alertas.empty and usuario.get("perfil") not in (PERFIL_ADMIN, PERFIL_GESTOR):
+        # A avaliação obrigatória é a única pendência pessoal do analista —
+        # ele só vê as suas; Gestor e Administrador continuam vendo todas,
+        # como acompanhamento. Os demais tipos de alerta não são afetados.
+        nome_usuario = (usuario.get("nome_completo") or usuario.get("username") or "").strip().casefold()
+        e_avaliacao_obrigatoria = alertas["tipo_alerta"] == TIPO_AVALIACAO_OBRIGATORIA
+        e_do_analista = alertas["responsavel"].fillna("").astype(str).str.strip().str.casefold() == nome_usuario
+        alertas = alertas[~e_avaliacao_obrigatoria | e_do_analista]
 
     if not alertas.empty:
         if f_codigo.strip():

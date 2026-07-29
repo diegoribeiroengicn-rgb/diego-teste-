@@ -1,22 +1,30 @@
 """
-Motor consolidado de alertas: reúne os 4 critérios que sugerem reunião ou
-cobrança —
+Motor consolidado de alertas: reúne os 5 critérios que sugerem reunião,
+cobrança ou pendência de avaliação —
 
 * gargalo de revisão (NÃO LIBERADO com revisão >= REV2);
 * atraso na análise (status de entrega ATRASADO);
 * avaliação (checklist) classificada como Crítica ou Baixa;
 * atraso no reenvio — retorno externo do Prestador/Cessionário acima do
-  SLA de 10 dias úteis entre uma revisão e a seguinte (`gat/revisoes.py`).
+  SLA de 10 dias úteis entre uma revisão e a seguinte (`gat/revisoes.py`);
+* avaliação obrigatória (checklist) ainda não realizada desde a Rev.01 —
+  ao contrário do selo visual de `marcar_avaliacao_obrigatoria` (que só
+  aparece exatamente na REV1), este alerta nasce na REV1 e permanece
+  ativo em qualquer revisão seguinte até a avaliação ser realmente
+  registrada — sem gerar um novo alerta a cada revisão.
 
 Cada alerta carrega seu ciclo de vida (Pendente/Em tratamento/Tratado/
-Adiado/Retirado do radar/Reaberto), armazenado em `alertas_radar`.
+Adiado/Retirado do radar/Reaberto), armazenado em `alertas_radar`. A
+avaliação obrigatória é a única exceção: seu encerramento é sempre
+automático (deixa de ser gerada assim que a avaliação existe), nunca por
+ação manual de tratamento/retirada — ver `views/alertas.py`.
 """
 
 from __future__ import annotations
 
 import pandas as pd
 
-from gat.database import listar_avaliacoes_checklist, listar_radar
+from gat.database import listar_avaliacao_obrigatoria_isentos, listar_avaliacoes_checklist, listar_radar
 from gat.revisoes import calcular_intervalos_revisao
 
 _COLUNAS_RADAR = ["status", "providencia", "responsavel_tratamento", "data_tratamento", "justificativa", "observacao", "adiado_para"]
@@ -25,23 +33,41 @@ TIPO_PENDENTE_REUNIAO = "PENDENTE_REUNIAO"
 TIPO_ATRASO_ANALISE = "ATRASO_ANALISE"
 TIPO_AVALIACAO_CRITICA = "AVALIACAO_CRITICA"
 TIPO_ATRASO_REENVIO = "ATRASO_REENVIO"
+TIPO_AVALIACAO_OBRIGATORIA = "AVALIACAO_OBRIGATORIA"
 
 TIPO_ALERTA_LABELS = {
     TIPO_PENDENTE_REUNIAO: "Revisão ≥ REV2 sem liberação",
     TIPO_ATRASO_ANALISE: "Atraso na análise interna",
     TIPO_AVALIACAO_CRITICA: "Avaliação Crítica/Baixa",
     TIPO_ATRASO_REENVIO: "Atraso no reenvio (retorno externo)",
+    TIPO_AVALIACAO_OBRIGATORIA: "Avaliação obrigatória pendente",
 }
 
 
-def _classificacoes_criticas(tipo_entidade: str) -> set[tuple[str, str]]:
-    df = listar_avaliacoes_checklist(tipo_entidade)
-    if df.empty:
+def _classificacoes_criticas(avaliacoes: pd.DataFrame) -> set[tuple[str, str]]:
+    if avaliacoes.empty:
         return set()
-    df = df.sort_values("data_avaliacao").drop_duplicates(subset=["codigo_entidade", "nome_entidade", "disciplina"], keep="last")
+    df = avaliacoes.sort_values("data_avaliacao").drop_duplicates(subset=["codigo_entidade", "nome_entidade", "disciplina"], keep="last")
     criticos = df[df["classificacao"].isin(["CRÍTICO", "BAIXO"])]
     chave = criticos["codigo_entidade"].fillna(criticos["nome_entidade"])
     return set(zip(chave, criticos["disciplina"].fillna("")))
+
+
+def _chaves_avaliadas(avaliacoes: pd.DataFrame) -> set[tuple[str, str]]:
+    """Toda combinação (código/nome, disciplina) que já possui ao menos uma
+    avaliação de checklist registrada — usada para saber se a avaliação
+    obrigatória nascida na Rev.01 já foi cumprida."""
+    if avaliacoes.empty:
+        return set()
+    chave = avaliacoes["codigo_entidade"].fillna(avaliacoes["nome_entidade"])
+    return set(zip(chave, avaliacoes["disciplina"].fillna("")))
+
+
+def _revisao_alcancou_rev1(revisao) -> bool:
+    try:
+        return int(revisao or 0) >= 1
+    except (TypeError, ValueError):
+        return False
 
 
 def montar_alertas_modulo(df: pd.DataFrame, modulo: str, coluna_nome: str, coluna_codigo: str = "codigo") -> pd.DataFrame:
@@ -51,23 +77,36 @@ def montar_alertas_modulo(df: pd.DataFrame, modulo: str, coluna_nome: str, colun
         return pd.DataFrame()
 
     tipo_entidade = "PRESTADOR" if modulo == "prestadores" else "CESSIONARIO"
-    criticos = _classificacoes_criticas(tipo_entidade)
+    avaliacoes = listar_avaliacoes_checklist(tipo_entidade)
+    criticos = _classificacoes_criticas(avaliacoes)
+    avaliados = _chaves_avaliadas(avaliacoes)
+    isentos = listar_avaliacao_obrigatoria_isentos(modulo)
 
     registros = []
     for _, row in df.iterrows():
         codigo = row.get(coluna_codigo) or row.get(coluna_nome)
+        chave_entidade = (codigo, row.get("disciplina") or "")
         base = {
             "modulo": modulo, "projeto_id": int(row["id"]), "nome": row.get(coluna_nome),
             "codigo": row.get(coluna_codigo), "disciplina": row.get("disciplina"),
             "num_at": row.get("num_at"), "revisao": row.get("revisao"), "responsavel": row.get("responsavel"),
-            "item": row.get("item"),
+            "item": row.get("item"), "data_analise": row.get("data_analise"),
         }
         if row.get("pendente_reuniao"):
             registros.append({**base, "tipo_alerta": TIPO_PENDENTE_REUNIAO, "detalhe": None})
         if row.get("status_entrega_calc") == "ATRASADO":
             registros.append({**base, "tipo_alerta": TIPO_ATRASO_ANALISE, "detalhe": None})
-        if (codigo, row.get("disciplina") or "") in criticos:
+        if chave_entidade in criticos:
             registros.append({**base, "tipo_alerta": TIPO_AVALIACAO_CRITICA, "detalhe": None})
+        if (
+            _revisao_alcancou_rev1(row.get("revisao"))
+            and chave_entidade not in avaliados
+            and int(row["id"]) not in isentos
+        ):
+            registros.append({
+                **base, "tipo_alerta": TIPO_AVALIACAO_OBRIGATORIA,
+                "detalhe": f"Avaliação obrigatória (checklist) ainda não realizada — pendente desde a Rev. 01. Analista: {row.get('responsavel') or '—'}.",
+            })
 
     intervalos = calcular_intervalos_revisao(df, coluna_nome, coluna_codigo)
     if not intervalos.empty:
