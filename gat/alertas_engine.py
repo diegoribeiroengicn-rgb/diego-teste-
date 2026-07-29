@@ -7,11 +7,13 @@ cobrança ou pendência de avaliação —
 * avaliação (checklist) classificada como Crítica ou Baixa;
 * atraso no reenvio — retorno externo do Prestador/Cessionário acima do
   SLA de 10 dias úteis entre uma revisão e a seguinte (`gat/revisoes.py`);
-* avaliação obrigatória (checklist) ainda não realizada desde a Rev.01 —
-  ao contrário do selo visual de `marcar_avaliacao_obrigatoria` (que só
-  aparece exatamente na REV1), este alerta nasce na REV1 e permanece
-  ativo em qualquer revisão seguinte até a avaliação ser realmente
-  registrada — sem gerar um novo alerta a cada revisão.
+* avaliação obrigatória (checklist) ainda não realizada desde que a
+  Rev.01 foi concluída (revisão >= 1 e Data de Conclusão da Análise
+  preenchida) — ao contrário do selo visual de
+  `marcar_avaliacao_obrigatoria` (que só aparece exatamente na REV1),
+  este alerta nasce quando a Rev.01 é concluída e permanece ativo em
+  qualquer revisão seguinte até a avaliação ser realmente registrada —
+  sem gerar um novo alerta a cada revisão.
 
 Cada alerta carrega seu ciclo de vida (Pendente/Em tratamento/Tratado/
 Adiado/Retirado do radar/Reaberto), armazenado em `alertas_radar`. A
@@ -63,11 +65,18 @@ def _chaves_avaliadas(avaliacoes: pd.DataFrame) -> set[tuple[str, str]]:
     return set(zip(chave, avaliacoes["disciplina"].fillna("")))
 
 
-def _revisao_alcancou_rev1(revisao) -> bool:
+def _rev1_concluida(revisao, data_analise) -> bool:
+    """"AT concluiu a Rev.01": revisão >= 1 E a análise já foi concluída
+    (Data de Conclusão da Análise preenchida) — não basta o número da
+    revisão ter avançado enquanto a análise ainda está em andamento. Esta
+    data também é a referência usada para saber a qual competência
+    (mês/ano) a pendência pertence, no fechamento mensal (Fase 2)."""
     try:
-        return int(revisao or 0) >= 1
+        if int(revisao or 0) < 1:
+            return False
     except (TypeError, ValueError):
         return False
+    return bool(data_analise) and pd.notna(data_analise)
 
 
 def montar_alertas_modulo(df: pd.DataFrame, modulo: str, coluna_nome: str, coluna_codigo: str = "codigo") -> pd.DataFrame:
@@ -99,7 +108,7 @@ def montar_alertas_modulo(df: pd.DataFrame, modulo: str, coluna_nome: str, colun
         if chave_entidade in criticos:
             registros.append({**base, "tipo_alerta": TIPO_AVALIACAO_CRITICA, "detalhe": None})
         if (
-            _revisao_alcancou_rev1(row.get("revisao"))
+            _rev1_concluida(row.get("revisao"), row.get("data_analise"))
             and chave_entidade not in avaliados
             and int(row["id"]) not in isentos
         ):

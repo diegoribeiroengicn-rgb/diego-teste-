@@ -168,3 +168,72 @@ def acumulado_ano(df: pd.DataFrame, ano: int) -> dict[str, Any]:
         "concluidos": len(concluidos_df),
         "documentos": int(recebidos_df["num_documentos"].fillna(0).sum()),
     }
+
+
+def avaliacoes_obrigatorias_do_mes(analista: str, mes: int, ano: int) -> dict[str, Any]:
+    """
+    Para um analista e uma competência (mês/ano), quantas avaliações
+    obrigatórias (Prestador + Cessionário) tinham a Rev.01 concluída até o
+    fim dessa competência, e quantas permaneciam pendentes no fechamento
+    (sem avaliação de checklist registrada até essa data) — usado na
+    penalização/bonificação da nota do analista e no relatório gerencial.
+
+    Uma avaliação feita em um mês posterior não "cura" retroativamente a
+    pendência do mês em que ela ficou parada — o que importa é o estado
+    no fechamento daquela competência específica, por isso o cálculo é
+    sempre feito a partir das datas (Data de Conclusão da Análise / Data
+    da Avaliação), nunca do estado "atual" dos alertas.
+
+    Projetos congelados como isentos (migração 8 — já estavam em revisão
+    >= 1 sem avaliação antes desta regra existir) não entram na conta,
+    para não penalizar o analista por uma pendência que nem aparece na
+    Central de Alertas.
+    """
+    from gat.database import listar_avaliacao_obrigatoria_isentos, listar_avaliacoes_checklist, listar_cessionarios, listar_prestadores
+
+    fim_mes = _fim_do_mes(mes, ano)
+    obrigatorias = 0
+    pendentes = 0
+    at_pendentes: list[str] = []
+
+    for modulo, tipo_entidade, coluna_nome, listar_fn in (
+        ("prestadores", "PRESTADOR", "prestador", listar_prestadores),
+        ("cessionarios", "CESSIONARIO", "cessionario", listar_cessionarios),
+    ):
+        df = listar_fn()
+        if df.empty:
+            continue
+        df = df[(df["status_analise"] != STATUS_CANCELADO) & (df["responsavel"] == analista)]
+        if df.empty:
+            continue
+
+        datas_analise = pd.to_datetime(df["data_analise"], errors="coerce")
+        revisao_valida = pd.to_numeric(df["revisao"], errors="coerce").fillna(0) >= 1
+        concluida_ate_fim_mes = revisao_valida & datas_analise.notna() & (datas_analise <= fim_mes)
+        candidatos = df[concluida_ate_fim_mes]
+        if candidatos.empty:
+            continue
+
+        isentos = listar_avaliacao_obrigatoria_isentos(modulo)
+        avaliadas = listar_avaliacoes_checklist(tipo_entidade)
+        avaliadas_ate_fim_mes: set[tuple[str, str]] = set()
+        if not avaliadas.empty:
+            datas_avaliacao = pd.to_datetime(avaliadas["data_avaliacao"], errors="coerce")
+            avaliadas_validas = avaliadas[datas_avaliacao.notna() & (datas_avaliacao <= fim_mes)]
+            chave_avaliada = avaliadas_validas["codigo_entidade"].fillna(avaliadas_validas["nome_entidade"])
+            avaliadas_ate_fim_mes = set(zip(chave_avaliada, avaliadas_validas["disciplina"].fillna("")))
+
+        for _, row in candidatos.iterrows():
+            if int(row["id"]) in isentos:
+                continue
+            codigo = row.get("codigo") or row.get(coluna_nome)
+            chave = (codigo, row.get("disciplina") or "")
+            obrigatorias += 1
+            if chave not in avaliadas_ate_fim_mes:
+                pendentes += 1
+                at_pendentes.append(str(row.get("num_at") or f"Item {row.get('item')}"))
+
+    return {
+        "obrigatorias": obrigatorias, "pendentes": pendentes,
+        "realizadas": obrigatorias - pendentes, "at_pendentes": at_pendentes,
+    }

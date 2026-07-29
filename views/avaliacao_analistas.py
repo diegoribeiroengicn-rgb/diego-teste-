@@ -17,11 +17,19 @@ from gat.database import (
     listar_prestadores,
 )
 from gat.permissions import exigir_area, pode_area
+from gat.relatorios_mensais import avaliacoes_obrigatorias_do_mes
 from gat.ui.kpi_cards import renderizar_kpis
 
 _CHAVES_CRITERIOS = [c for c, _ in CRITERIOS_AVALIACAO_ANALISTA]
 
 PENALIDADE_ETG = 0.5  # redução de 50% aplicada à média quando o analista teve ETG=SIM no período
+
+NOTA_MAXIMA_ANALISTA = 5
+BONUS_AVALIACOES_OBRIGATORIAS = 1  # concedido quando não há nenhuma pendência e havia ao menos 1 obrigatória no mês
+RECOMENDACAO_DESEMPENHO_MAXIMO = (
+    "Analista com desempenho máximo, apto para ministrar treinamentos internos e elegível para "
+    "programas de reconhecimento e premiação."
+)
 
 
 def _media_bruta(row: pd.Series) -> float:
@@ -62,6 +70,52 @@ def _aplicar_penalidade_etg(df: pd.DataFrame) -> pd.DataFrame:
         lambda r: round(r["media_bruta"] * PENALIDADE_ETG, 2) if r["etg_penalizado"] else r["media_bruta"], axis=1
     )
     return df
+
+
+def _aplicar_avaliacoes_obrigatorias(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ordem de processamento: nota-base -> penalidade de ETG (já aplicada em
+    `media_geral`) -> avaliações obrigatórias pendentes/realizadas no mês
+    -> limite máximo da nota. Penalização e bonificação nunca se aplicam
+    juntas: dependem do mesmo número de pendências no fechamento do mês
+    (1 pendência = -1/3; 2 ou mais = -1/2, nunca reduz mais que isso;
+    zero pendências = +1 ponto, se havia ao menos uma avaliação
+    obrigatória naquele mês). A recomendação de reconhecimento é apenas
+    informativa — não gera promoção, prêmio ou permissão automaticamente.
+    """
+    df = df.copy()
+
+    def _linha(r: pd.Series) -> pd.Series:
+        resumo = avaliacoes_obrigatorias_do_mes(r["analista"], int(r["mes"]), int(r["ano"]))
+        pendentes = resumo["pendentes"]
+        base = r["media_geral"]
+
+        if pendentes == 0:
+            penalizacao_fracao = 0.0
+            bonificacao = float(BONUS_AVALIACOES_OBRIGATORIAS) if resumo["obrigatorias"] > 0 else 0.0
+        elif pendentes == 1:
+            penalizacao_fracao = 1 / 3
+            bonificacao = 0.0
+        else:
+            penalizacao_fracao = 0.5
+            bonificacao = 0.0
+
+        nota_antes_limite = base * (1 - penalizacao_fracao) + bonificacao
+        nota_final = min(round(nota_antes_limite, 2), NOTA_MAXIMA_ANALISTA)
+        reconhecimento = RECOMENDACAO_DESEMPENHO_MAXIMO if bonificacao > 0 and nota_final >= NOTA_MAXIMA_ANALISTA else None
+
+        return pd.Series({
+            "avaliacoes_obrigatorias": resumo["obrigatorias"],
+            "avaliacoes_pendentes": pendentes,
+            "avaliacoes_at_pendentes": ", ".join(resumo["at_pendentes"]),
+            "penalizacao_avaliacao_fracao": penalizacao_fracao,
+            "bonificacao_avaliacao": bonificacao,
+            "media_final": nota_final,
+            "reconhecimento": reconhecimento,
+        })
+
+    calculados = df.apply(_linha, axis=1)
+    return pd.concat([df, calculados], axis=1)
 
 
 @st.dialog("Avaliação do Analista", width="large")
@@ -132,6 +186,12 @@ def render(usuario: dict) -> None:
         f"Cessionário) com ETG = SIM na mesma competência da avaliação, a Média Geral é reduzida em "
         f"{int((1 - PENALIDADE_ETG) * 100)}%."
     )
+    st.caption(
+        ":material/fact_check: Avaliações obrigatórias: 1 pendência no fechamento do mês reduz a nota em 1/3; "
+        "2 ou mais reduzem em 1/2 (nunca mais que isso). Zero pendências (havendo ao menos uma obrigatória no "
+        f"mês) soma +{BONUS_AVALIACOES_OBRIGATORIAS} ponto, respeitando o limite máximo da nota "
+        f"({NOTA_MAXIMA_ANALISTA}). Penalização e bonificação nunca se aplicam juntas."
+    )
 
     if pode_area(usuario, "analistas.avaliar"):
         if st.button("Nova Avaliação", icon=":material/add:", type="primary", key="nova_avaliacao_analista"):
@@ -143,6 +203,7 @@ def render(usuario: dict) -> None:
         return
 
     df = _aplicar_penalidade_etg(df)
+    df = _aplicar_avaliacoes_obrigatorias(df)
 
     with st.expander("Filtros", icon=":material/filter_list:", expanded=False):
         col1, col2, col3 = st.columns(3)
@@ -170,18 +231,36 @@ def render(usuario: dict) -> None:
     medias_criterio = {rotulo: round(df_filtrado[chave].mean(), 2) for chave, rotulo in CRITERIOS_AVALIACAO_ANALISTA if chave in df_filtrado.columns}
     renderizar_kpis([(rotulo, str(valor), None) for rotulo, valor in list(medias_criterio.items())[:6]])
 
-    st.markdown("##### Evolução mensal (média geral)")
-    evolucao = df_filtrado.groupby(["ano", "mes"])["media_geral"].mean().reset_index()
+    st.markdown("##### Evolução mensal (nota final)")
+    evolucao = df_filtrado.groupby(["ano", "mes"])["media_final"].mean().reset_index()
     evolucao["competencia"] = evolucao.apply(lambda r: f"{MESES_PT[int(r['mes']) - 1][:3]}/{str(int(r['ano']))[2:]}", axis=1)
-    st.line_chart(evolucao.set_index("competencia")["media_geral"])
+    st.line_chart(evolucao.set_index("competencia")["media_final"])
+
+    reconhecidos = df_filtrado[df_filtrado["reconhecimento"].notna()]
+    if not reconhecidos.empty:
+        st.markdown("##### Reconhecimento")
+        for analista_nome in sorted(reconhecidos["analista"].unique()):
+            st.success(f"**{analista_nome}**: {RECOMENDACAO_DESEMPENHO_MAXIMO}", icon=":material/military_tech:")
+        st.caption(
+            "Recomendação gerencial apenas — não gera promoção, aumento salarial, prêmio ou novas permissões "
+            "automaticamente."
+        )
 
     st.markdown("##### Avaliações registradas")
     df_filtrado["etg_rotulo"] = df_filtrado["etg_penalizado"].map({True: f"Sim (-{int((1 - PENALIDADE_ETG) * 100)}%)", False: "—"})
-    colunas_tabela = ["analista", "avaliador", "mes", "ano", "media_bruta", "etg_rotulo", "media_geral", "justificativa"]
+    df_filtrado["penalizacao_rotulo"] = df_filtrado["penalizacao_avaliacao_fracao"].map({0.0: "—", 1 / 3: "-1/3", 0.5: "-1/2"})
+    df_filtrado["bonificacao_rotulo"] = df_filtrado["bonificacao_avaliacao"].apply(lambda v: f"+{v:g}" if v else "—")
+    colunas_tabela = [
+        "analista", "avaliador", "mes", "ano", "media_bruta", "etg_rotulo", "media_geral",
+        "avaliacoes_obrigatorias", "avaliacoes_pendentes", "avaliacoes_at_pendentes",
+        "penalizacao_rotulo", "bonificacao_rotulo", "media_final", "justificativa",
+    ]
     rotulos = {
         "analista": "Analista", "avaliador": "Avaliador", "mes": "Mês", "ano": "Ano",
-        "media_bruta": "Média (critérios)", "etg_rotulo": "Penalidade ETG", "media_geral": "Média Geral (final)",
-        "justificativa": "Justificativa",
+        "media_bruta": "Média (critérios)", "etg_rotulo": "Penalidade ETG", "media_geral": "Média (pós-ETG)",
+        "avaliacoes_obrigatorias": "Avaliações Obrigatórias", "avaliacoes_pendentes": "Pendentes",
+        "avaliacoes_at_pendentes": "ATs Pendentes", "penalizacao_rotulo": "Penalização (Avaliação)",
+        "bonificacao_rotulo": "Bonificação", "media_final": "Nota Final", "justificativa": "Justificativa",
     }
     df_exibicao = df_filtrado[colunas_tabela].copy()
     df_exibicao["mes"] = df_exibicao["mes"].apply(lambda m: MESES_PT[int(m) - 1])
