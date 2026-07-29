@@ -530,6 +530,45 @@ def _migracao_0008_avaliacao_obrigatoria_isentos(conn: sqlite3.Connection) -> No
             )
 
 
+def _migracao_0009_fechamento_avaliacao_analista(conn: sqlite3.Connection) -> None:
+    """
+    Fechamento mensal da nota do analista (persistente e auditável): uma
+    vez fechada uma competência, a nota final fica congelada — deixa de
+    ser recalculada automaticamente mesmo que dados usados no cálculo
+    mudem depois (ex.: uma avaliação obrigatória feita fora de prazo).
+    Qualquer recálculo de um mês já fechado é uma ação explícita,
+    restrita ao Administrador, e sobrescreve o mesmo registro (mantendo
+    o histórico da mudança em `historico_edicoes`, nunca duplicando).
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS fechamentos_avaliacao_analista (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            avaliacao_analista_id INTEGER REFERENCES avaliacoes_analistas(id) ON DELETE SET NULL,
+            analista TEXT NOT NULL,
+            mes INTEGER NOT NULL,
+            ano INTEGER NOT NULL,
+            nota_original REAL NOT NULL,
+            avaliacoes_obrigatorias INTEGER NOT NULL DEFAULT 0,
+            avaliacoes_pendentes INTEGER NOT NULL DEFAULT 0,
+            ats_pendentes TEXT,
+            penalizacao_fracao REAL NOT NULL DEFAULT 0,
+            bonificacao REAL NOT NULL DEFAULT 0,
+            nota_final REAL NOT NULL,
+            justificativa_automatica TEXT NOT NULL,
+            recomendacao_gerencial TEXT,
+            data_fechamento TEXT NOT NULL,
+            usuario_fechamento TEXT NOT NULL,
+            UNIQUE(analista, mes, ano)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_fechamentos_avaliacao_analista_competencia "
+        "ON fechamentos_avaliacao_analista(mes, ano)"
+    )
+
+
 _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (1, "Índices de busca por N° AT e nome em Prestadores e Cessionários", _migracao_0001_indices_busca),
     (2, "Índices para avaliações (checklist/analistas), alertas com radar e histórico de atividades", _migracao_0002_indices_avaliacoes_alertas),
@@ -539,6 +578,7 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (6, "Vínculo opcional de avaliação de checklist de Prestador com obra/canteiro", _migracao_0006_avaliacao_checklist_obra),
     (7, "Projetos de Cessionários: substitui PEP por LUC, N° RCI, N° RVP e datas de atualização", _migracao_0007_luc_rci_rvp_cessionarios),
     (8, "Avaliação obrigatória (Rev.01): congela como isentos os projetos já em revisão >= 1 sem avaliação no momento da ativação", _migracao_0008_avaliacao_obrigatoria_isentos),
+    (9, "Fechamento mensal persistente e auditável da nota do analista", _migracao_0009_fechamento_avaliacao_analista),
 ]
 
 
@@ -1883,6 +1923,91 @@ def listar_avaliacoes_analistas(analista: str | None = None) -> pd.DataFrame:
                 conn, params=(analista,),
             )
         return pd.read_sql_query("SELECT * FROM avaliacoes_analistas ORDER BY ano DESC, mes DESC", conn)
+
+
+# ---------------------------------------------------------------------------
+# Fechamento mensal da nota do analista (persistente e imutável)
+# ---------------------------------------------------------------------------
+
+COLUNAS_FECHAMENTO_AVALIACAO_ANALISTA = [
+    "avaliacao_analista_id", "analista", "mes", "ano", "nota_original",
+    "avaliacoes_obrigatorias", "avaliacoes_pendentes", "ats_pendentes",
+    "penalizacao_fracao", "bonificacao", "nota_final",
+    "justificativa_automatica", "recomendacao_gerencial",
+]
+
+
+def obter_fechamento_avaliacao_analista(analista: str, mes: int, ano: int) -> dict[str, Any] | None:
+    with _conectar() as conn:
+        linha = conn.execute(
+            "SELECT * FROM fechamentos_avaliacao_analista WHERE analista = ? AND mes = ? AND ano = ?",
+            (analista, mes, ano),
+        ).fetchone()
+        return dict(linha) if linha else None
+
+
+def listar_fechamentos_avaliacao_analista(mes: int | None = None, ano: int | None = None) -> pd.DataFrame:
+    query = "SELECT * FROM fechamentos_avaliacao_analista WHERE 1=1"
+    params: list[Any] = []
+    if mes is not None:
+        query += " AND mes = ?"
+        params.append(mes)
+    if ano is not None:
+        query += " AND ano = ?"
+        params.append(ano)
+    with _conectar() as conn:
+        return pd.read_sql_query(query + " ORDER BY ano DESC, mes DESC, analista", conn, params=params)
+
+
+def fechar_avaliacao_analista(dados: dict[str, Any], usuario: str) -> int:
+    """
+    Congela a nota final calculada para um analista/competência — a
+    partir daqui, essa nota não é mais recalculada automaticamente (ver
+    `views/avaliacao_analistas.py`). Falha se a competência já estiver
+    fechada (`UNIQUE(analista, mes, ano)`); nesse caso, use
+    `recalcular_fechamento_avaliacao_analista`, restrito ao Administrador.
+    """
+    agora = datetime.now().isoformat()
+    with _conectar() as conn:
+        campos = {c: dados.get(c) for c in COLUNAS_FECHAMENTO_AVALIACAO_ANALISTA}
+        cursor = conn.execute(
+            "INSERT INTO fechamentos_avaliacao_analista ("
+            + ", ".join(campos)
+            + ", data_fechamento, usuario_fechamento) VALUES ("
+            + ", ".join(["?"] * len(campos))
+            + ", ?, ?)",
+            (*campos.values(), agora, usuario),
+        )
+        _registrar_evento_seguranca(
+            conn, "FECHAMENTO_AVALIACAO_ANALISTA", dados["analista"], usuario,
+            f"Competência {dados['mes']:02d}/{dados['ano']} fechada com nota final {dados['nota_final']}.",
+        )
+        return cursor.lastrowid
+
+
+def recalcular_fechamento_avaliacao_analista(analista: str, mes: int, ano: int, dados: dict[str, Any], usuario_admin: str) -> None:
+    """Sobrescreve um fechamento já existente — ação restrita ao
+    Administrador (`gat/permissions.py`/perfil), sempre registrada como
+    evento de segurança com a nota anterior e a nova, para auditoria."""
+    with _conectar() as conn:
+        anterior = conn.execute(
+            "SELECT * FROM fechamentos_avaliacao_analista WHERE analista = ? AND mes = ? AND ano = ?",
+            (analista, mes, ano),
+        ).fetchone()
+        if anterior is None:
+            raise ValueError("Não existe fechamento anterior para recalcular — use fechar_avaliacao_analista.")
+
+        campos = {c: dados.get(c) for c in COLUNAS_FECHAMENTO_AVALIACAO_ANALISTA}
+        set_clause = ", ".join(f"{c} = ?" for c in campos)
+        conn.execute(
+            f"UPDATE fechamentos_avaliacao_analista SET {set_clause}, data_fechamento = ?, usuario_fechamento = ? "
+            "WHERE analista = ? AND mes = ? AND ano = ?",
+            (*campos.values(), datetime.now().isoformat(), usuario_admin, analista, mes, ano),
+        )
+        _registrar_evento_seguranca(
+            conn, "RECALCULO_AVALIACAO_ANALISTA", analista, usuario_admin,
+            f"Competência {mes:02d}/{ano} recalculada: nota final {anterior['nota_final']} -> {dados['nota_final']}.",
+        )
 
 
 # ---------------------------------------------------------------------------

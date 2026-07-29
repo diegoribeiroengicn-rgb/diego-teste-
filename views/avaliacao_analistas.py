@@ -7,17 +7,21 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from gat.config import CRITERIOS_AVALIACAO_ANALISTA, ESCALA_AVALIACAO_ANALISTA, MESES_PT, RESPONSAVEIS
-from gat.business_rules import filtrar_por_competencia
+from gat.config import CRITERIOS_AVALIACAO_ANALISTA, ESCALA_AVALIACAO_ANALISTA, MESES_PT, PERFIL_ADMIN, RESPONSAVEIS
+from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia
 from gat.database import (
     atualizar_avaliacao_analista,
+    fechar_avaliacao_analista,
     inserir_avaliacao_analista,
     listar_avaliacoes_analistas,
     listar_cessionarios,
+    listar_fechamentos_avaliacao_analista,
     listar_prestadores,
+    recalcular_fechamento_avaliacao_analista,
+    registrar_atividade,
 )
 from gat.permissions import exigir_area, pode_area
-from gat.relatorios_mensais import avaliacoes_obrigatorias_do_mes
+from gat.relatorios_mensais import avaliacoes_obrigatorias_do_mes, produtividade_analistas
 from gat.ui.kpi_cards import renderizar_kpis
 
 _CHAVES_CRITERIOS = [c for c, _ in CRITERIOS_AVALIACAO_ANALISTA]
@@ -104,6 +108,24 @@ def _aplicar_avaliacoes_obrigatorias(df: pd.DataFrame) -> pd.DataFrame:
         nota_final = min(round(nota_antes_limite, 2), NOTA_MAXIMA_ANALISTA)
         reconhecimento = RECOMENDACAO_DESEMPENHO_MAXIMO if bonificacao > 0 and nota_final >= NOTA_MAXIMA_ANALISTA else None
 
+        if pendentes == 0 and resumo["obrigatorias"] > 0:
+            justificativa_automatica = (
+                f"Nota base {base:.2f}: nenhuma pendência entre {resumo['obrigatorias']} avaliação(ões) "
+                f"obrigatória(s) do mês — bonificação de +{BONUS_AVALIACOES_OBRIGATORIAS} ponto aplicada."
+            )
+        elif pendentes == 0:
+            justificativa_automatica = f"Nota base {base:.2f}: nenhuma avaliação obrigatória no mês — sem ajuste."
+        elif pendentes == 1:
+            justificativa_automatica = (
+                f"Nota base {base:.2f}: 1 avaliação obrigatória pendente (AT {resumo['at_pendentes'][0]}) — "
+                "penalização de 1/3 aplicada."
+            )
+        else:
+            justificativa_automatica = (
+                f"Nota base {base:.2f}: {pendentes} avaliações obrigatórias pendentes "
+                f"({', '.join(resumo['at_pendentes'])}) — penalização de 1/2 aplicada (nunca mais que isso)."
+            )
+
         return pd.Series({
             "avaliacoes_obrigatorias": resumo["obrigatorias"],
             "avaliacoes_pendentes": pendentes,
@@ -112,10 +134,81 @@ def _aplicar_avaliacoes_obrigatorias(df: pd.DataFrame) -> pd.DataFrame:
             "bonificacao_avaliacao": bonificacao,
             "media_final": nota_final,
             "reconhecimento": reconhecimento,
+            "justificativa_automatica": justificativa_automatica,
         })
 
     calculados = df.apply(_linha, axis=1)
     return pd.concat([df, calculados], axis=1)
+
+
+def _aplicar_fechamentos(df: pd.DataFrame) -> pd.DataFrame:
+    """Sobrepõe, quando existir, o fechamento persistente da competência —
+    a partir do fechamento, os valores exibidos deixam de ser a prévia ao
+    vivo e passam a ser os congelados em `fechamentos_avaliacao_analista`
+    (não mudam mais automaticamente, mesmo que dados usados no cálculo
+    mudem depois — ex.: uma avaliação obrigatória feita fora de prazo)."""
+    df = df.copy()
+    df["fechado"] = False
+    df["data_fechamento"] = None
+    df["usuario_fechamento"] = None
+
+    fechamentos = listar_fechamentos_avaliacao_analista()
+    if fechamentos.empty:
+        return df
+
+    mapa = {(f["analista"], int(f["mes"]), int(f["ano"])): f for _, f in fechamentos.iterrows()}
+    for idx, row in df.iterrows():
+        f = mapa.get((row["analista"], int(row["mes"]), int(row["ano"])))
+        if f is None:
+            continue
+        df.at[idx, "fechado"] = True
+        df.at[idx, "avaliacoes_obrigatorias"] = int(f["avaliacoes_obrigatorias"])
+        df.at[idx, "avaliacoes_pendentes"] = int(f["avaliacoes_pendentes"])
+        df.at[idx, "avaliacoes_at_pendentes"] = f["ats_pendentes"] or ""
+        df.at[idx, "penalizacao_avaliacao_fracao"] = f["penalizacao_fracao"]
+        df.at[idx, "bonificacao_avaliacao"] = f["bonificacao"]
+        df.at[idx, "media_final"] = f["nota_final"]
+        df.at[idx, "justificativa_automatica"] = f["justificativa_automatica"]
+        df.at[idx, "reconhecimento"] = f["recomendacao_gerencial"]
+        df.at[idx, "data_fechamento"] = f["data_fechamento"]
+        df.at[idx, "usuario_fechamento"] = f["usuario_fechamento"]
+    return df
+
+
+def _dados_fechamento(linha: pd.Series, analista: str, mes: int, ano: int) -> dict:
+    return {
+        "avaliacao_analista_id": int(linha["id"]),
+        "analista": analista, "mes": mes, "ano": ano,
+        "nota_original": float(linha["media_geral"]),
+        "avaliacoes_obrigatorias": int(linha["avaliacoes_obrigatorias"]),
+        "avaliacoes_pendentes": int(linha["avaliacoes_pendentes"]),
+        "ats_pendentes": linha["avaliacoes_at_pendentes"],
+        "penalizacao_fracao": float(linha["penalizacao_avaliacao_fracao"]),
+        "bonificacao": float(linha["bonificacao_avaliacao"]),
+        "nota_final": float(linha["media_final"]),
+        "justificativa_automatica": linha["justificativa_automatica"],
+        "recomendacao_gerencial": linha["reconhecimento"],
+    }
+
+
+@st.dialog("Recalcular fechamento — restrito ao Administrador")
+def _dialog_confirmar_recalculo(usuario: dict, linha: pd.Series, analista: str, mes: int, ano: int) -> None:
+    st.warning(
+        f"A competência {MESES_PT[mes - 1]}/{ano} de **{analista}** já está fechada. Recalcular substitui a "
+        "nota final congelada pela prévia atual — esta ação é registrada permanentemente na auditoria e não "
+        "pode ser desfeita pela interface.",
+        icon=":material/warning:",
+    )
+    col1, col2 = st.columns(2)
+    if col1.button("Cancelar", use_container_width=True, key="aa_cancelar_recalculo"):
+        st.session_state.pop("aa_confirmar_recalculo", None)
+        st.rerun()
+    if col2.button("Confirmar recálculo", type="primary", use_container_width=True, key="aa_confirmar_recalculo_botao"):
+        recalcular_fechamento_avaliacao_analista(analista, mes, ano, _dados_fechamento(linha, analista, mes, ano), usuario["username"])
+        registrar_atividade(usuario["username"], usuario.get("perfil"), "RECALCULO_AVALIACAO_ANALISTA", modulo="analistas", detalhe=f"{analista} — {mes:02d}/{ano}")
+        st.session_state.pop("aa_confirmar_recalculo", None)
+        st.toast("Fechamento recalculado.", icon=":material/check_circle:")
+        st.rerun()
 
 
 @st.dialog("Avaliação do Analista", width="large")
@@ -204,6 +297,7 @@ def render(usuario: dict) -> None:
 
     df = _aplicar_penalidade_etg(df)
     df = _aplicar_avaliacoes_obrigatorias(df)
+    df = _aplicar_fechamentos(df)
 
     with st.expander("Filtros", icon=":material/filter_list:", expanded=False):
         col1, col2, col3 = st.columns(3)
@@ -246,21 +340,68 @@ def render(usuario: dict) -> None:
             "automaticamente."
         )
 
+    st.markdown("##### Fechamento mensal")
+    st.caption(
+        "Ao fechar uma competência, a nota final fica congelada — deixa de ser recalculada automaticamente "
+        "mesmo que dados usados no cálculo mudem depois. Recalcular uma competência já fechada é uma ação "
+        "restrita ao Administrador e fica registrada permanentemente na auditoria."
+    )
+    combinacoes = df_filtrado[["analista", "mes", "ano"]].drop_duplicates().sort_values(["ano", "mes", "analista"], ascending=False)
+    rotulos_combinacao = {
+        f"{r['analista']} — {MESES_PT[int(r['mes']) - 1]}/{int(r['ano'])}": (r["analista"], int(r["mes"]), int(r["ano"]))
+        for _, r in combinacoes.iterrows()
+    }
+    if pode_area(usuario, "analistas.avaliar") and rotulos_combinacao:
+        escolha = st.selectbox("Selecionar competência", list(rotulos_combinacao.keys()), key="aa_fechamento_escolha")
+        analista_sel, mes_sel, ano_sel = rotulos_combinacao[escolha]
+        linha_ref = df_filtrado[
+            (df_filtrado["analista"] == analista_sel) & (df_filtrado["mes"] == mes_sel) & (df_filtrado["ano"] == ano_sel)
+        ].iloc[0]
+
+        col_p1, col_p2, col_p3 = st.columns(3)
+        col_p1.metric("Nota base (pós-ETG)", linha_ref["media_geral"])
+        col_p2.metric("Pendências", int(linha_ref["avaliacoes_pendentes"]))
+        col_p3.metric("Nota final" + (" (fechada)" if linha_ref["fechado"] else " (prévia)"), linha_ref["media_final"])
+        st.caption(linha_ref["justificativa_automatica"])
+
+        if linha_ref["fechado"]:
+            st.info(
+                f":material/lock: Competência fechada em {str(linha_ref['data_fechamento'])[:16].replace('T', ' ')} "
+                f"por {linha_ref['usuario_fechamento']}.",
+                icon=":material/lock:",
+            )
+            if usuario.get("perfil") == PERFIL_ADMIN:
+                if st.button("Recalcular (sobrescreve o fechamento atual)", icon=":material/restart_alt:", key="aa_recalcular_botao"):
+                    st.session_state["aa_confirmar_recalculo"] = True
+            else:
+                st.caption("Recalcular uma competência fechada requer autorização do Administrador.")
+        else:
+            if st.button("Fechar competência", icon=":material/lock:", type="primary", key="aa_fechar_botao"):
+                fechar_avaliacao_analista(_dados_fechamento(linha_ref, analista_sel, mes_sel, ano_sel), usuario["username"])
+                registrar_atividade(usuario["username"], usuario.get("perfil"), "FECHAMENTO_AVALIACAO_ANALISTA", modulo="analistas", detalhe=f"{analista_sel} — {mes_sel:02d}/{ano_sel}")
+                st.toast("Competência fechada com sucesso.", icon=":material/check_circle:")
+                st.rerun()
+
+        if st.session_state.get("aa_confirmar_recalculo"):
+            _dialog_confirmar_recalculo(usuario, linha_ref, analista_sel, mes_sel, ano_sel)
+
     st.markdown("##### Avaliações registradas")
     df_filtrado["etg_rotulo"] = df_filtrado["etg_penalizado"].map({True: f"Sim (-{int((1 - PENALIDADE_ETG) * 100)}%)", False: "—"})
     df_filtrado["penalizacao_rotulo"] = df_filtrado["penalizacao_avaliacao_fracao"].map({0.0: "—", 1 / 3: "-1/3", 0.5: "-1/2"})
     df_filtrado["bonificacao_rotulo"] = df_filtrado["bonificacao_avaliacao"].apply(lambda v: f"+{v:g}" if v else "—")
+    df_filtrado["fechado_rotulo"] = df_filtrado["fechado"].map({True: "Fechada", False: "Prévia (não fechada)"})
     colunas_tabela = [
         "analista", "avaliador", "mes", "ano", "media_bruta", "etg_rotulo", "media_geral",
         "avaliacoes_obrigatorias", "avaliacoes_pendentes", "avaliacoes_at_pendentes",
-        "penalizacao_rotulo", "bonificacao_rotulo", "media_final", "justificativa",
+        "penalizacao_rotulo", "bonificacao_rotulo", "media_final", "fechado_rotulo", "justificativa",
     ]
     rotulos = {
         "analista": "Analista", "avaliador": "Avaliador", "mes": "Mês", "ano": "Ano",
         "media_bruta": "Média (critérios)", "etg_rotulo": "Penalidade ETG", "media_geral": "Média (pós-ETG)",
         "avaliacoes_obrigatorias": "Avaliações Obrigatórias", "avaliacoes_pendentes": "Pendentes",
         "avaliacoes_at_pendentes": "ATs Pendentes", "penalizacao_rotulo": "Penalização (Avaliação)",
-        "bonificacao_rotulo": "Bonificação", "media_final": "Nota Final", "justificativa": "Justificativa",
+        "bonificacao_rotulo": "Bonificação", "media_final": "Nota Final", "fechado_rotulo": "Situação",
+        "justificativa": "Justificativa",
     }
     df_exibicao = df_filtrado[colunas_tabela].copy()
     df_exibicao["mes"] = df_exibicao["mes"].apply(lambda m: MESES_PT[int(m) - 1])
@@ -269,3 +410,46 @@ def render(usuario: dict) -> None:
 
     if pode_area(usuario, "analistas.avaliar"):
         st.caption("Para editar uma avaliação existente, informe o ID (visível na auditoria) ao suporte técnico — edição em lote pela tabela será adicionada em uma próxima etapa.")
+
+    if pode_area(usuario, "analistas.relatorios"):
+        _renderizar_relatorio_gerencial(df_filtrado)
+
+
+def _renderizar_relatorio_gerencial(df_filtrado: pd.DataFrame) -> None:
+    """Relatório gerencial por analista/competência (item 14): análises
+    realizadas, avaliações obrigatórias/realizadas/pendentes, ATs
+    pendentes, nota original, penalização, bonificação, nota final,
+    justificativa automática e recomendação gerencial."""
+    st.markdown("##### Relatório Gerencial")
+    df_prest = enriquecer_prestadores(filtrar_ativos(listar_prestadores()))
+    df_cess = enriquecer_cessionarios(filtrar_ativos(listar_cessionarios()))
+
+    linhas_relatorio = []
+    combinacoes = df_filtrado[["analista", "mes", "ano"]].drop_duplicates()
+    for _, comb in combinacoes.iterrows():
+        analista, mes, ano = comb["analista"], int(comb["mes"]), int(comb["ano"])
+        linha_calculo = df_filtrado[
+            (df_filtrado["analista"] == analista) & (df_filtrado["mes"] == mes) & (df_filtrado["ano"] == ano)
+        ].iloc[0]
+        prod_p = produtividade_analistas(df_prest, mes, ano, analista=analista)
+        prod_c = produtividade_analistas(df_cess, mes, ano, analista=analista)
+        analises_realizadas = int(prod_p["concluidos"].sum() if not prod_p.empty else 0) + int(prod_c["concluidos"].sum() if not prod_c.empty else 0)
+
+        linhas_relatorio.append({
+            "Analista": analista, "Mês": MESES_PT[mes - 1], "Ano": ano,
+            "Análises Realizadas": analises_realizadas,
+            "Avaliações Obrigatórias": int(linha_calculo["avaliacoes_obrigatorias"]),
+            "Avaliações Realizadas": int(linha_calculo["avaliacoes_obrigatorias"]) - int(linha_calculo["avaliacoes_pendentes"]),
+            "Avaliações Pendentes": int(linha_calculo["avaliacoes_pendentes"]),
+            "ATs Pendentes": linha_calculo["avaliacoes_at_pendentes"] or "—",
+            "Nota Original": linha_calculo["media_geral"],
+            "Penalização": {0.0: "—", 1 / 3: "-1/3", 0.5: "-1/2"}.get(linha_calculo["penalizacao_avaliacao_fracao"], "—"),
+            "Bonificação": f"+{linha_calculo['bonificacao_avaliacao']:g}" if linha_calculo["bonificacao_avaliacao"] else "—",
+            "Nota Final": linha_calculo["media_final"],
+            "Situação": "Fechada" if linha_calculo["fechado"] else "Prévia (não fechada)",
+            "Justificativa Automática": linha_calculo["justificativa_automatica"],
+            "Recomendação Gerencial": linha_calculo["reconhecimento"] or "—",
+        })
+
+    df_relatorio = pd.DataFrame(linhas_relatorio).sort_values(["Ano", "Mês", "Analista"], ascending=[False, False, True]).reset_index(drop=True)
+    st.dataframe(df_relatorio, use_container_width=True, hide_index=True)
