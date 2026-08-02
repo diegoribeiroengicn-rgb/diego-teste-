@@ -5,24 +5,31 @@ crítica/baixa e atraso no reenvio (retorno externo fora do SLA)."""
 
 from __future__ import annotations
 
+from datetime import date
+
 import pandas as pd
 import streamlit as st
 
 from gat.alertas_engine import TIPO_ALERTA_LABELS, TIPO_AVALIACAO_OBRIGATORIA, montar_alertas_modulo
-from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia
+from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia, situacao_prazo
+from gat.calendario import dias_uteis_entre
 from gat.config import DISCIPLINAS, PERFIL_ADMIN, PERFIL_GESTOR, RESPONSAVEIS
 from gat.database import (
     STATUS_ALERTA_OPCOES,
     adiar_alerta,
     iniciar_tratamento_alerta,
+    listar_alertas_manuais,
     listar_cessionarios,
+    listar_historico,
     listar_prestadores,
     marcar_tratado_alerta,
     reabrir_alerta,
+    reabrir_alerta_manual,
     retirar_do_radar,
 )
-from gat.permissions import exigir_area, pode_modulo
+from gat.permissions import exigir_area, pode_area, pode_modulo
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
+from gat.ui.modals_alerta_manual import dialog_alerta_manual, dialog_encerrar_alerta_manual
 from gat.ui.modals_avaliacao import dialog_avaliacao_checklist
 
 _LABEL_STATUS = {
@@ -163,6 +170,85 @@ def _historico_alerta(alerta: pd.Series) -> None:
         st.write("\n\n".join(detalhes) if detalhes else "Sem histórico registrado ainda.")
 
 
+_ICONE_PRIORIDADE = {"Baixa": "🔵", "Média": "🟡", "Alta": "🟠", "Urgente": "🔴"}
+
+
+def _cartao_alerta_manual(usuario: dict, alerta: pd.Series, pode_gerenciar: bool) -> None:
+    with st.container(border=True):
+        col_info, col_prio = st.columns([4, 1])
+        with col_info:
+            st.markdown(f"**{alerta['titulo']}** — {_ou_traco(alerta.get('nome_entidade'))} ({_ou_traco(alerta.get('disciplina'))})")
+            if alerta.get("descricao"):
+                st.caption(alerta["descricao"])
+            st.caption(
+                f"N° AT {_ou_traco(alerta.get('num_at'))} · Código {_ou_traco(alerta.get('codigo_projeto'))} · "
+                f"Revisão {_ou_traco(alerta.get('revisao'))} · Especialista: {_ou_traco(alerta.get('especialista'))} · "
+                f"Criado por {alerta.get('criado_por')} em {_ou_traco(alerta.get('criado_em'))[:10]}"
+            )
+            if alerta.get("destinatarios"):
+                st.caption(f"Destinatários: {alerta['destinatarios']}")
+            if alerta.get("observacoes"):
+                st.caption(f"Observações: {alerta['observacoes']}")
+        with col_prio:
+            st.caption(f"{_ICONE_PRIORIDADE.get(alerta.get('prioridade'), '')} Prioridade: **{_ou_traco(alerta.get('prioridade'))}**")
+            if alerta.get("vencimento"):
+                dias = dias_uteis_entre(date.today(), alerta["vencimento"])
+                chave = situacao_prazo(dias)
+                st.caption(f"{_ICONE_SITUACAO_PRAZO_MANUAL.get(chave, '')} Vence em {alerta['vencimento'][:10]}")
+
+        if pode_gerenciar:
+            col1, col2 = st.columns(2)
+            if col1.button("Editar", key=f"am_editar_{alerta['id']}", use_container_width=True):
+                dialog_alerta_manual(usuario, alerta["modulo"], registro=alerta.to_dict())
+            if col2.button("Encerrar", key=f"am_encerrar_{alerta['id']}", use_container_width=True):
+                dialog_encerrar_alerta_manual(usuario, alerta.to_dict())
+
+
+_ICONE_SITUACAO_PRAZO_MANUAL = {
+    "DENTRO DO PRAZO": "🟢", "VENCE EM BREVE": "🟡", "VENCE HOJE": "🟠", "ATRASADO": "🔴",
+}
+
+
+def _secao_alertas_manuais(usuario: dict, modulos_incluidos: list[str], modulo_criacao: str | None) -> None:
+    pode_gerenciar = pode_area(usuario, "alertas.manual")
+
+    with st.expander("Alertas manuais", icon=":material/campaign:", expanded=False):
+        if pode_gerenciar and modulo_criacao:
+            if st.button("Novo alerta manual", icon=":material/add_alert:", type="primary", key=f"am_novo_{modulo_criacao}"):
+                dialog_alerta_manual(usuario, modulo_criacao)
+        elif pode_gerenciar and not modulo_criacao:
+            st.caption("Para criar um novo alerta manual, acesse a Central de Alertas de Prestadores ou Cessionários.")
+
+        manuais = pd.concat(
+            [listar_alertas_manuais(mod) for mod in modulos_incluidos], ignore_index=True
+        ) if modulos_incluidos else pd.DataFrame()
+
+        if manuais.empty:
+            st.caption("Nenhum alerta manual cadastrado.")
+            return
+
+        abertos = manuais[manuais["status"] == "ABERTO"]
+        encerrados = manuais[manuais["status"] == "ENCERRADO"]
+
+        st.caption(f"{len(abertos)} aberto(s) · {len(encerrados)} encerrado(s)")
+        for _, alerta in abertos.iterrows():
+            _cartao_alerta_manual(usuario, alerta, pode_gerenciar)
+
+        if not encerrados.empty:
+            with st.expander(f"Encerrados ({len(encerrados)})", icon=":material/history:"):
+                for _, alerta in encerrados.iterrows():
+                    st.markdown(f"**{alerta['titulo']}** — {_ou_traco(alerta.get('nome_entidade'))} · *Encerrado em {_ou_traco(alerta.get('encerrado_em'))[:10]} por {alerta.get('encerrado_por')}*")
+                    if alerta.get("motivo_encerramento"):
+                        st.caption(f"Motivo: {alerta['motivo_encerramento']}")
+                    historico = listar_historico("alertas_manuais", int(alerta["id"]))
+                    if not historico.empty:
+                        st.dataframe(historico[["campo", "valor_anterior", "valor_novo", "usuario", "data_hora"]], hide_index=True, use_container_width=True)
+                    if pode_gerenciar and st.button("Reabrir", key=f"am_reabrir_{alerta['id']}"):
+                        reabrir_alerta_manual(alerta["id"], usuario["username"])
+                        st.toast("Alerta manual reaberto.", icon=":material/check_circle:")
+                        st.rerun()
+
+
 def render(usuario: dict, modulo: str | None = None) -> None:
     """`modulo` = 'prestadores' | 'cessionarios' | None (consolidado, apenas
     usuários autorizados)."""
@@ -182,6 +268,8 @@ def render(usuario: dict, modulo: str | None = None) -> None:
         "a Rev. 01. Um alerta retirado do radar sai das sugestões ativas, mas permanece no histórico e na "
         "auditoria — a avaliação obrigatória é a única exceção: ela só some quando a avaliação é realizada."
     )
+
+    _secao_alertas_manuais(usuario, modulos_incluidos, modulo)
 
     with st.expander("Filtros", icon=":material/filter_list:", expanded=False):
         col1, col2, col3 = st.columns(3)

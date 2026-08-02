@@ -642,6 +642,48 @@ def _migracao_0011_remover_isencao_retroativa(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM avaliacao_obrigatoria_isentos")
 
 
+def _migracao_0012_alertas_manuais(conn: sqlite3.Connection) -> None:
+    """
+    Alertas manuais (item 1 do módulo de SLA/Prioridades): alertas criados
+    livremente por um usuário para um projeto de Prestador ou Cessionário,
+    independentes dos alertas automáticos do motor de gargalo/atraso. O
+    histórico completo de criação/edição/encerramento/reabertura é gravado
+    em `historico_edicoes` (tabela já existente e auditável), reaproveitando
+    o mesmo mecanismo usado pelo resto do sistema.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS alertas_manuais (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            modulo TEXT NOT NULL,
+            projeto_id INTEGER,
+            titulo TEXT NOT NULL,
+            descricao TEXT,
+            num_at TEXT,
+            codigo_projeto TEXT,
+            nome_entidade TEXT,
+            disciplina TEXT,
+            revisao INTEGER,
+            especialista TEXT,
+            prioridade TEXT NOT NULL DEFAULT 'Média',
+            vencimento TEXT,
+            observacoes TEXT,
+            destinatarios TEXT,
+            status TEXT NOT NULL DEFAULT 'ABERTO',
+            criado_por TEXT NOT NULL,
+            criado_em TEXT NOT NULL,
+            atualizado_por TEXT,
+            atualizado_em TEXT,
+            encerrado_por TEXT,
+            encerrado_em TEXT,
+            motivo_encerramento TEXT
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_alertas_manuais_modulo ON alertas_manuais(modulo)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_alertas_manuais_status ON alertas_manuais(status)")
+
+
 _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (1, "Índices de busca por N° AT e nome em Prestadores e Cessionários", _migracao_0001_indices_busca),
     (2, "Índices para avaliações (checklist/analistas), alertas com radar e histórico de atividades", _migracao_0002_indices_avaliacoes_alertas),
@@ -654,6 +696,7 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (9, "Fechamento mensal persistente e auditável da nota do analista", _migracao_0009_fechamento_avaliacao_analista),
     (10, "SLA/prioridades: colunas de SLA original/atual, redução manual, nível de prioridade e justificativa", _migracao_0010_sla_prioridades),
     (11, "Remove a isenção retroativa da avaliação obrigatória (aplica de fato a remoção decidida anteriormente)", _migracao_0011_remover_isencao_retroativa),
+    (12, "Alertas manuais: tabela alertas_manuais (criação/edição/encerramento com histórico em historico_edicoes)", _migracao_0012_alertas_manuais),
 ]
 
 
@@ -2180,6 +2223,87 @@ def reabrir_alerta(modulo: str, projeto_id: int, tipo_alerta: str, usuario: str)
 def listar_radar() -> pd.DataFrame:
     with _conectar() as conn:
         return pd.read_sql_query("SELECT * FROM alertas_radar ORDER BY atualizado_em DESC", conn)
+
+
+# ---------------------------------------------------------------------------
+# Alertas manuais (item 1 do módulo de SLA/Prioridades)
+# ---------------------------------------------------------------------------
+
+PRIORIDADE_ALERTA_MANUAL_OPCOES = ["Baixa", "Média", "Alta", "Urgente"]
+STATUS_ALERTA_MANUAL_OPCOES = ["ABERTO", "ENCERRADO"]
+
+_CAMPOS_ALERTA_MANUAL = [
+    "modulo", "projeto_id", "titulo", "descricao", "num_at", "codigo_projeto",
+    "nome_entidade", "disciplina", "revisao", "especialista", "prioridade",
+    "vencimento", "observacoes", "destinatarios",
+]
+
+
+def criar_alerta_manual(dados: dict[str, Any], usuario: str) -> int:
+    agora = datetime.now().isoformat()
+    campos = {chave: dados.get(chave) for chave in _CAMPOS_ALERTA_MANUAL}
+    with _conectar() as conn:
+        cursor = conn.execute(
+            f"INSERT INTO alertas_manuais ({', '.join(campos.keys())}, status, criado_por, criado_em) "
+            f"VALUES ({', '.join(['?'] * len(campos))}, 'ABERTO', ?, ?)",
+            (*campos.values(), usuario, agora),
+        )
+        alerta_id = cursor.lastrowid
+        _registrar_historico(conn, "alertas_manuais", alerta_id, {}, {"status": "ABERTO", **campos}, usuario)
+        return alerta_id
+
+
+def obter_alerta_manual(alerta_id: int) -> dict[str, Any] | None:
+    with _conectar() as conn:
+        linha = conn.execute("SELECT * FROM alertas_manuais WHERE id = ?", (alerta_id,)).fetchone()
+        return dict(linha) if linha else None
+
+
+def atualizar_alerta_manual(alerta_id: int, dados: dict[str, Any], usuario: str) -> None:
+    anterior = obter_alerta_manual(alerta_id)
+    if anterior is None:
+        return
+    agora = datetime.now().isoformat()
+    campos = {chave: dados.get(chave) for chave in _CAMPOS_ALERTA_MANUAL}
+    with _conectar() as conn:
+        conn.execute(
+            f"UPDATE alertas_manuais SET {', '.join(f'{c} = ?' for c in campos)}, atualizado_por = ?, atualizado_em = ? "
+            "WHERE id = ?",
+            (*campos.values(), usuario, agora, alerta_id),
+        )
+        _registrar_historico(conn, "alertas_manuais", alerta_id, anterior, campos, usuario)
+
+
+def encerrar_alerta_manual(alerta_id: int, motivo: str, usuario: str) -> None:
+    agora = datetime.now().isoformat()
+    with _conectar() as conn:
+        conn.execute(
+            "UPDATE alertas_manuais SET status = 'ENCERRADO', motivo_encerramento = ?, "
+            "encerrado_por = ?, encerrado_em = ? WHERE id = ?",
+            (motivo, usuario, agora, alerta_id),
+        )
+        _registrar_historico(conn, "alertas_manuais", alerta_id, {"status": "ABERTO"}, {"status": "ENCERRADO", "motivo_encerramento": motivo}, usuario)
+
+
+def reabrir_alerta_manual(alerta_id: int, usuario: str) -> None:
+    with _conectar() as conn:
+        conn.execute(
+            "UPDATE alertas_manuais SET status = 'ABERTO', motivo_encerramento = NULL, "
+            "encerrado_por = NULL, encerrado_em = NULL WHERE id = ?",
+            (alerta_id,),
+        )
+        _registrar_historico(conn, "alertas_manuais", alerta_id, {"status": "ENCERRADO"}, {"status": "ABERTO"}, usuario)
+
+
+def listar_alertas_manuais(modulo: str | None = None) -> pd.DataFrame:
+    query = "SELECT * FROM alertas_manuais"
+    params: list[Any] = []
+    if modulo:
+        query += " WHERE modulo = ?"
+        params.append(modulo)
+    query += " ORDER BY criado_em DESC"
+    with _conectar() as conn:
+        return pd.read_sql_query(query, conn, params=params)
 
 
 def listar_avaliacao_obrigatoria_isentos(modulo: str) -> set[int]:
