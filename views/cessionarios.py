@@ -59,11 +59,11 @@ def render(usuario: dict) -> None:
         col_novo, _ = st.columns([1, 4])
         with col_novo:
             if st.button("Novo Cadastro", icon=":material/add:", type="primary", key="novo_cessionario", use_container_width=True):
-                dialog_cessionario(usuario["username"])
+                dialog_cessionario(usuario["username"], pode_definir_prioridade=pode_area(usuario, "prioridades.definir"))
 
     if st.session_state.pop("abrir_novo_cessionario", False):
         exigir_area(usuario, "cessionarios.cadastrar")
-        dialog_cessionario(usuario["username"])
+        dialog_cessionario(usuario["username"], pode_definir_prioridade=pode_area(usuario, "prioridades.definir"))
 
     df = listar_cessionarios()
     if df.empty:
@@ -145,7 +145,7 @@ def render(usuario: dict) -> None:
 
     def _abrir_edicao(registro: dict) -> None:
         exigir_area(usuario, "cessionarios.editar")
-        dialog_cessionario(usuario["username"], registro)
+        dialog_cessionario(usuario["username"], registro, pode_definir_prioridade=pode_area(usuario, "prioridades.definir"))
 
     tabela_com_edicao(
         df_exibicao,

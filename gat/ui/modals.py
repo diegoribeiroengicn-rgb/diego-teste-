@@ -322,7 +322,7 @@ def _renderizar_confirmacao_prioridade(pendencia: dict[str, Any], chave_confirma
 
 
 @st.dialog("Análise de Prestadores", width="large")
-def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> None:
+def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_definir_prioridade: bool = True) -> None:
     editando = registro is not None
     sufixo = f"edit_{registro['id']}" if editando else "novo"
 
@@ -411,7 +411,11 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
     with col_p1:
         opcoes_nivel = ["Nenhum"] + [NIVEIS_PRIORIDADE_LABELS[n] for n in (3, 2, 1)]
         rotulo_nivel_atual = NIVEIS_PRIORIDADE_LABELS.get(registro.get("nivel_prioridade")) if editando else None
-        rotulo_nivel = st.selectbox("Nível de prioridade", opcoes_nivel, index=_idx(opcoes_nivel, rotulo_nivel_atual or "Nenhum"), key=f"pr_nivel_{sufixo}")
+        rotulo_nivel = st.selectbox(
+            "Nível de prioridade", opcoes_nivel, index=_idx(opcoes_nivel, rotulo_nivel_atual or "Nenhum"), key=f"pr_nivel_{sufixo}",
+            disabled=not pode_definir_prioridade,
+            help=None if pode_definir_prioridade else "Somente Administradores/Gestores podem definir o nível de prioridade.",
+        )
         nivel_prioridade = next((n for n, r in NIVEIS_PRIORIDADE_LABELS.items() if r == rotulo_nivel), None)
         dias_nivel1 = None
         if nivel_prioridade == 1:
@@ -423,8 +427,9 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
     with col_p2:
         sla_reduzido = st.checkbox(
             "SLA reduzido (personalizado)", value=bool(registro.get("sla_reduzido")) if editando else False,
-            key=f"pr_slareduzido_{sufixo}", disabled=nivel_prioridade is not None,
-            help="Desabilitado quando um nível de prioridade está selecionado — escolha um ou outro.",
+            key=f"pr_slareduzido_{sufixo}", disabled=(nivel_prioridade is not None) or not pode_definir_prioridade,
+            help="Desabilitado quando um nível de prioridade está selecionado — escolha um ou outro." if pode_definir_prioridade
+            else "Somente Administradores/Gestores podem definir o SLA reduzido.",
         )
         dias_reduzidos = None
         if sla_reduzido:
@@ -610,7 +615,7 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
 
 
 @st.dialog("Análise de Cessionários", width="large")
-def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> None:
+def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pode_definir_prioridade: bool = True) -> None:
     editando = registro is not None
     sufixo = f"edit_{registro['id']}" if editando else "novo"
 
@@ -700,6 +705,8 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
     with col_p1:
         sla_reduzido = st.checkbox(
             "SLA reduzido", value=bool(registro.get("sla_reduzido")) if editando else False, key=f"ce_slareduzido_{sufixo}",
+            disabled=not pode_definir_prioridade,
+            help=None if pode_definir_prioridade else "Somente Administradores/Gestores podem definir o SLA reduzido.",
         )
         dias_reduzidos = None
         if sla_reduzido:

@@ -61,11 +61,11 @@ def render(usuario: dict) -> None:
         col_novo, _ = st.columns([1, 4])
         with col_novo:
             if st.button("Novo Cadastro", icon=":material/add:", type="primary", key="novo_prestador", use_container_width=True):
-                dialog_prestador(usuario["username"])
+                dialog_prestador(usuario["username"], pode_definir_prioridade=pode_area(usuario, "prioridades.definir"))
 
     if st.session_state.pop("abrir_novo_prestador", False):
         exigir_area(usuario, "prestadores.cadastrar")
-        dialog_prestador(usuario["username"])
+        dialog_prestador(usuario["username"], pode_definir_prioridade=pode_area(usuario, "prioridades.definir"))
 
     df = listar_prestadores()
     if df.empty:
@@ -150,7 +150,7 @@ def render(usuario: dict) -> None:
 
     def _abrir_edicao(registro: dict) -> None:
         exigir_area(usuario, "prestadores.editar")
-        dialog_prestador(usuario["username"], registro)
+        dialog_prestador(usuario["username"], registro, pode_definir_prioridade=pode_area(usuario, "prioridades.definir"))
 
     tabela_com_edicao(
         df_exibicao,

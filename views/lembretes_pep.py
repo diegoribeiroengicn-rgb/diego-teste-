@@ -14,7 +14,7 @@ from gat.business_rules import (
 )
 from gat.config import CORES, RESPONSAVEIS
 from gat.database import listar_prestadores, obter_prestador
-from gat.permissions import exigir_area
+from gat.permissions import exigir_area, pode_area
 from gat.ui.kpi_cards import renderizar_kpis
 from gat.ui.modals import dialog_prestador
 
@@ -126,5 +126,5 @@ def render(usuario: dict) -> None:
         with col_acao:
             if st.button("Abrir projeto", icon=":material/open_in_new:", key=f"abrir_lembrete_{linha['modulo']}_{linha['id']}", use_container_width=True):
                 exigir_area(usuario, "prestadores.editar")
-                dialog_prestador(usuario["username"], obter_prestador(int(linha["id"])))
+                dialog_prestador(usuario["username"], obter_prestador(int(linha["id"])), pode_definir_prioridade=pode_area(usuario, "prioridades.definir"))
         st.divider()
