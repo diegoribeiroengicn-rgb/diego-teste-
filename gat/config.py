@@ -405,6 +405,7 @@ AREAS_RESTRITAS_PADRAO_BLOQUEADO = [
     "analistas.notas", "analistas.avaliar", "analistas.relatorios",
     "avaliacoes.editar", "avaliacoes.relatorios",
     "opr.exportar", "historico_atividades", "alertas.consolidado",
+    "manual_sistema.administrar",
 ]
 
 # Templates padrão de permissão por perfil — usados apenas como ponto de
