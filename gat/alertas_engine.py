@@ -9,11 +9,13 @@ cobrança ou pendência de avaliação —
   SLA de 10 dias úteis entre uma revisão e a seguinte (`gat/revisoes.py`);
 * avaliação obrigatória (checklist) ainda não realizada desde que a
   Rev.01 foi concluída (revisão >= 1 e Data de Conclusão da Análise
-  preenchida) — ao contrário do selo visual de
-  `marcar_avaliacao_obrigatoria` (que só aparece exatamente na REV1),
-  este alerta nasce quando a Rev.01 é concluída e permanece ativo em
-  qualquer revisão seguinte até a avaliação ser realmente registrada —
-  sem gerar um novo alerta a cada revisão.
+  preenchida) — nasce quando a Rev.01 é concluída e permanece ativo em
+  qualquer revisão seguinte até a avaliação ser realmente registrada,
+  sem gerar um novo alerta a cada revisão. O mesmo critério (`rev1_concluida`
+  + `chaves_avaliadas_obrigatoria`) também alimenta o selo visual de
+  pendência em Projetos (`gat/business_rules.py::status_avaliacao_obrigatoria`)
+  e a lista de pendências na área de Avaliações (`pendencias_avaliacao_obrigatoria`
+  abaixo), garantindo que as três telas nunca divirjam sobre o que está pendente.
 
 Cada alerta carrega seu ciclo de vida (Pendente/Em tratamento/Tratado/
 Adiado/Retirado do radar/Reaberto), armazenado em `alertas_radar`. A
@@ -55,17 +57,19 @@ def _classificacoes_criticas(avaliacoes: pd.DataFrame) -> set[tuple[str, str]]:
     return set(zip(chave, criticos["disciplina"].fillna("")))
 
 
-def _chaves_avaliadas(avaliacoes: pd.DataFrame) -> set[tuple[str, str]]:
+def chaves_avaliadas_obrigatoria(avaliacoes: pd.DataFrame) -> set[tuple[str, str]]:
     """Toda combinação (código/nome, disciplina) que já possui ao menos uma
     avaliação de checklist registrada — usada para saber se a avaliação
-    obrigatória nascida na Rev.01 já foi cumprida."""
+    obrigatória nascida na Rev.01 já foi cumprida. Pública porque também é
+    consultada fora deste módulo (selo visual em Projetos, lista de
+    pendências na área de Avaliações — ver `gat/business_rules.py`)."""
     if avaliacoes.empty:
         return set()
     chave = avaliacoes["codigo_entidade"].fillna(avaliacoes["nome_entidade"])
     return set(zip(chave, avaliacoes["disciplina"].fillna("")))
 
 
-def _rev1_concluida(revisao, data_analise) -> bool:
+def rev1_concluida(revisao, data_analise) -> bool:
     """"AT concluiu a Rev.01": revisão >= 1 E a análise já foi concluída
     (Data de Conclusão da Análise preenchida) — não basta o número da
     revisão ter avançado enquanto a análise ainda está em andamento. Esta
@@ -88,7 +92,7 @@ def montar_alertas_modulo(df: pd.DataFrame, modulo: str, coluna_nome: str, colun
     tipo_entidade = "PRESTADOR" if modulo == "prestadores" else "CESSIONARIO"
     avaliacoes = listar_avaliacoes_checklist(tipo_entidade)
     criticos = _classificacoes_criticas(avaliacoes)
-    avaliados = _chaves_avaliadas(avaliacoes)
+    avaliados = chaves_avaliadas_obrigatoria(avaliacoes)
     isentos = listar_avaliacao_obrigatoria_isentos(modulo)
 
     registros = []
@@ -108,13 +112,14 @@ def montar_alertas_modulo(df: pd.DataFrame, modulo: str, coluna_nome: str, colun
         if chave_entidade in criticos:
             registros.append({**base, "tipo_alerta": TIPO_AVALIACAO_CRITICA, "detalhe": None})
         if (
-            _rev1_concluida(row.get("revisao"), row.get("data_analise"))
+            rev1_concluida(row.get("revisao"), row.get("data_analise"))
             and chave_entidade not in avaliados
             and int(row["id"]) not in isentos
         ):
+            rotulo_avaliacao = "avaliação de prestador" if tipo_entidade == "PRESTADOR" else "avaliação do projetista do cessionário"
             registros.append({
                 **base, "tipo_alerta": TIPO_AVALIACAO_OBRIGATORIA,
-                "detalhe": f"Avaliação obrigatória (checklist) ainda não realizada — pendente desde a Rev. 01. Analista: {row.get('responsavel') or '—'}.",
+                "detalhe": f"Existe uma {rotulo_avaliacao} pendente para a AT {row.get('num_at') or '—'}.",
             })
 
     intervalos = calcular_intervalos_revisao(df, coluna_nome, coluna_codigo)
@@ -146,3 +151,27 @@ def montar_alertas_modulo(df: pd.DataFrame, modulo: str, coluna_nome: str, colun
             alertas[coluna] = None
     alertas["status"] = alertas["status"].fillna("PENDENTE")
     return alertas
+
+
+def pendencias_avaliacao_obrigatoria(df: pd.DataFrame, modulo: str, coluna_nome: str, coluna_codigo: str = "codigo") -> pd.DataFrame:
+    """Subconjunto de `df` (uma linha por projeto/disciplina) cuja avaliação
+    obrigatória da Rev.01 está pendente — usado pela lista de tarefas da
+    área de Avaliações (`views/avaliacao_prestadores.py`). Mesmo critério
+    de `montar_alertas_modulo`, isolado aqui para reaproveitamento sem
+    precisar montar todos os demais tipos de alerta."""
+    if df.empty:
+        return df
+
+    tipo_entidade = "PRESTADOR" if modulo == "prestadores" else "CESSIONARIO"
+    avaliados = chaves_avaliadas_obrigatoria(listar_avaliacoes_checklist(tipo_entidade))
+    isentos = listar_avaliacao_obrigatoria_isentos(modulo)
+
+    def _pendente(row: pd.Series) -> bool:
+        chave = (row.get(coluna_codigo) or row.get(coluna_nome), row.get("disciplina") or "")
+        return (
+            rev1_concluida(row.get("revisao"), row.get("data_analise"))
+            and chave not in avaliados
+            and int(row["id"]) not in isentos
+        )
+
+    return df[df.apply(_pendente, axis=1)]

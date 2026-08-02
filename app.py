@@ -210,6 +210,11 @@ with st.sidebar:
         )
     if st.button("Sair", icon=":material/logout:", use_container_width=True):
         logout()
+    st.markdown(
+        '<div style="text-align:center;margin-top:28px;opacity:0.22;font-size:0.62rem;line-height:1;">'
+        "Feito e desenvolvido por Ki-suCode</div>",
+        unsafe_allow_html=True,
+    )
 
 # ---------------------------------------------------------------------------
 # Cabeçalho institucional + conteúdo da página selecionada

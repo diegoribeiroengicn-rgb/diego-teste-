@@ -43,11 +43,12 @@ def _acao_avaliacao_obrigatoria(usuario: dict, alerta: pd.Series, chave_acao: st
     — a única forma de encerrar o alerta é realizar a avaliação. Assim que
     ela for salva, este alerta simplesmente deixa de ser gerado no próximo
     carregamento (ver `gat/alertas_engine.py`)."""
+    rotulo_avaliacao = "avaliação de prestador" if alerta["modulo"] == "prestadores" else "avaliação do projetista do cessionário"
     st.warning(
-        f"O analista {_ou_traco(alerta.get('responsavel'))} ainda não realizou a avaliação obrigatória da AT "
-        f"{_ou_traco(alerta.get('num_at'))}.",
+        f"Existe uma {rotulo_avaliacao} pendente para a AT {_ou_traco(alerta.get('num_at'))}.",
         icon=":material/assignment_late:",
     )
+    st.caption(f"Analista responsável: {_ou_traco(alerta.get('responsavel'))}")
     if st.button("Avaliar agora", icon=":material/fact_check:", type="primary", key=f"avaliar_{chave_acao}", use_container_width=True):
         tipo_entidade = "PRESTADOR" if alerta["modulo"] == "prestadores" else "CESSIONARIO"
         dialog_avaliacao_checklist(

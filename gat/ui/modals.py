@@ -16,6 +16,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from gat.alertas_engine import chaves_avaliadas_obrigatoria, rev1_concluida
 from gat.business_rules import (
     calcular_sla_cessionario,
     classificar_nota,
@@ -39,6 +40,8 @@ from gat.database import (
     inserir_avaliacao,
     inserir_cessionario,
     inserir_prestador,
+    listar_avaliacao_obrigatoria_isentos,
+    listar_avaliacoes_checklist,
     listar_cadastro_cessionarios,
     listar_cadastro_prestadores,
     listar_obras_prestador,
@@ -184,6 +187,51 @@ def _confirmar_descarte(chave_confirmacao: str, houve_alteracoes: bool, cancelar
     return st.session_state.pop(chave_confirmado, False)
 
 
+def _detectar_pendencia_avaliacao(tipo_entidade: str, modulo: str, dados: dict[str, Any], projeto_id: int, coluna_nome: str) -> dict[str, Any] | None:
+    """Verifica, logo após salvar uma análise técnica (Prestador ou
+    Cessionário), se ela deixa uma avaliação obrigatória da Rev.01
+    pendente — mesmo critério do alerta/selo (`rev1_concluida` +
+    `chaves_avaliadas_obrigatoria`), para que as três telas nunca
+    divirjam sobre o que está pendente."""
+    if not rev1_concluida(dados.get("revisao"), dados.get("data_analise")):
+        return None
+    if int(projeto_id) in listar_avaliacao_obrigatoria_isentos(modulo):
+        return None
+    nome_entidade = dados.get(coluna_nome)
+    chave = (dados.get("codigo") or nome_entidade, dados.get("disciplina") or "")
+    if chave in chaves_avaliadas_obrigatoria(listar_avaliacoes_checklist(tipo_entidade)):
+        return None
+    return {
+        "tipo_entidade": tipo_entidade, "nome_entidade": nome_entidade, "codigo_entidade": dados.get("codigo"),
+        "disciplina": dados.get("disciplina"), "at_referencia": dados.get("num_at"),
+        "revisao": dados.get("revisao"), "analista_responsavel": dados.get("responsavel"),
+        "projeto_id": int(projeto_id),
+    }
+
+
+def _renderizar_confirmacao_avaliacao(pendencia: dict[str, Any], chave_confirmacao: str) -> None:
+    """Pergunta obrigatória do item 5/6 da alteração de alertas de
+    avaliação: ao salvar uma análise que deixa a avaliação obrigatória
+    pendente, oferece realizá-la imediatamente (redireciona para a área de
+    Avaliações com os dados já preenchidos) ou deixá-la na lista de
+    pendências/Central de Alertas para depois."""
+    rotulo = "de prestador" if pendencia["tipo_entidade"] == "PRESTADOR" else "do projetista do cessionário"
+    st.success("Análise salva com sucesso.", icon=":material/check_circle:")
+    st.warning(f"Esta análise possui uma avaliação {rotulo} pendente. Deseja realizá-la agora?", icon=":material/assignment_late:")
+    col_sim, col_nao = st.columns(2)
+    if col_sim.button("Sim", type="primary", use_container_width=True, key=f"{chave_confirmacao}_sim"):
+        st.session_state.pop(chave_confirmacao, None)
+        st.session_state["_gat_avaliacao_auto_abrir"] = pendencia
+        pagina = st.session_state.get("_gat_paginas", {}).get("prestadores_avaliacao")
+        if pagina is not None:
+            st.switch_page(pagina)
+        else:
+            st.rerun()
+    if col_nao.button("Não", use_container_width=True, key=f"{chave_confirmacao}_nao"):
+        st.session_state.pop(chave_confirmacao, None)
+        st.rerun()
+
+
 # ---------------------------------------------------------------------------
 # Modal de Prestadores (Aba A)
 # ---------------------------------------------------------------------------
@@ -193,6 +241,13 @@ def _confirmar_descarte(chave_confirmacao: str, houve_alteracoes: bool, cancelar
 def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> None:
     editando = registro is not None
     sufixo = f"edit_{registro['id']}" if editando else "novo"
+
+    chave_confirmacao_avaliacao = f"pr_confirmar_avaliacao_{sufixo}"
+    pendencia_avaliacao = st.session_state.get(chave_confirmacao_avaliacao)
+    if pendencia_avaliacao:
+        _renderizar_confirmacao_avaliacao(pendencia_avaliacao, chave_confirmacao_avaliacao)
+        return
+
     st.caption("Edite os campos e clique em **Salvar**. A data limite sugerida e o prazo são calculados automaticamente pelo calendário oficial de feriados do RJ." if editando else
                "Preencha os dados da análise. A data limite sugerida e o prazo são calculados automaticamente pelo calendário oficial de feriados do RJ.")
 
@@ -387,13 +442,20 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
                 )
             registrar_atividade(usuario, None, "PROJETO_EDITADO", modulo="prestadores", detalhe=prestador)
             st.toast("Registro de prestador atualizado com sucesso.", icon=":material/check_circle:")
+            projeto_id_salvo = registro["id"]
         else:
-            inserir_prestador(dados, usuario)
+            projeto_id_salvo = inserir_prestador(dados, usuario)
             registrar_atividade(usuario, None, "PROJETO_CRIADO", modulo="prestadores", detalhe=prestador)
             st.toast("Novo registro de prestador cadastrado com sucesso.", icon=":material/check_circle:")
         st.session_state[chave_tentativa] = False
         st.session_state.pop(f"pr_snapshot_{sufixo}", None)
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
+
+        pendencia_avaliacao = _detectar_pendencia_avaliacao("PRESTADOR", "prestadores", dados, projeto_id_salvo, "prestador")
+        if pendencia_avaliacao:
+            st.session_state[chave_confirmacao_avaliacao] = pendencia_avaliacao
+            _renderizar_confirmacao_avaliacao(pendencia_avaliacao, chave_confirmacao_avaliacao)
+            return
         st.rerun()
 
 
@@ -406,6 +468,13 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
 def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> None:
     editando = registro is not None
     sufixo = f"edit_{registro['id']}" if editando else "novo"
+
+    chave_confirmacao_avaliacao = f"ce_confirmar_avaliacao_{sufixo}"
+    pendencia_avaliacao = st.session_state.get(chave_confirmacao_avaliacao)
+    if pendencia_avaliacao:
+        _renderizar_confirmacao_avaliacao(pendencia_avaliacao, chave_confirmacao_avaliacao)
+        return
+
     st.caption("Edite os campos e clique em **Salvar**. O saldo de dias úteis é calculado automaticamente pelo calendário oficial de feriados do RJ." if editando else
                "Preencha os dados da análise. O saldo de dias úteis é calculado automaticamente pelo calendário oficial de feriados do RJ.")
 
@@ -607,13 +676,20 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
                 )
             registrar_atividade(usuario, None, "PROJETO_EDITADO", modulo="cessionarios", detalhe=cessionario)
             st.toast("Registro de cessionário atualizado com sucesso.", icon=":material/check_circle:")
+            projeto_id_salvo = registro["id"]
         else:
-            inserir_cessionario(dados, usuario)
+            projeto_id_salvo = inserir_cessionario(dados, usuario)
             registrar_atividade(usuario, None, "PROJETO_CRIADO", modulo="cessionarios", detalhe=cessionario)
             st.toast("Novo registro de cessionário cadastrado com sucesso.", icon=":material/check_circle:")
         st.session_state[chave_tentativa] = False
         st.session_state.pop(f"ce_snapshot_{sufixo}", None)
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
+
+        pendencia_avaliacao = _detectar_pendencia_avaliacao("CESSIONARIO", "cessionarios", dados, projeto_id_salvo, "cessionario")
+        if pendencia_avaliacao:
+            st.session_state[chave_confirmacao_avaliacao] = pendencia_avaliacao
+            _renderizar_confirmacao_avaliacao(pendencia_avaliacao, chave_confirmacao_avaliacao)
+            return
         st.rerun()
 
 

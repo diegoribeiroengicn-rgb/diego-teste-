@@ -21,6 +21,7 @@ from gat.database import (
     inserir_avaliacao_checklist,
     listar_obras_prestador,
     nome_exibicao_obra,
+    obter_avaliacao_checklist_por_revisao,
     obter_cadastro_prestador_por_codigo,
     registrar_atividade,
 )
@@ -193,8 +194,17 @@ def dialog_avaliacao_checklist(
             registrar_atividade(usuario, None, "AVALIACAO_EDITADA", modulo=tipo_entidade, detalhe=nome_entidade)
             st.toast("Avaliação atualizada com sucesso.", icon=":material/check_circle:")
         else:
-            inserir_avaliacao_checklist(dados, usuario)
-            registrar_atividade(usuario, None, "AVALIACAO_REALIZADA", modulo=tipo_entidade, detalhe=nome_entidade)
-            st.toast("Avaliação registrada com sucesso.", icon=":material/check_circle:")
+            existente = obter_avaliacao_checklist_por_revisao(tipo_entidade, at_referencia, disciplina, int(revisao), analista_responsavel)
+            if existente:
+                atualizar_avaliacao_checklist(existente["id"], dados, usuario)
+                registrar_atividade(usuario, None, "AVALIACAO_EDITADA", modulo=tipo_entidade, detalhe=nome_entidade)
+                st.toast(
+                    f"Já existia uma avaliação para a AT {at_referencia} — Revisão {int(revisao)}: o registro existente foi atualizado (nenhuma duplicidade criada).",
+                    icon=":material/info:",
+                )
+            else:
+                inserir_avaliacao_checklist(dados, usuario)
+                registrar_atividade(usuario, None, "AVALIACAO_REALIZADA", modulo=tipo_entidade, detalhe=nome_entidade)
+                st.toast("Avaliação registrada com sucesso.", icon=":material/check_circle:")
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
         st.rerun()

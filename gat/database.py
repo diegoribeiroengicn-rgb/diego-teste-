@@ -1883,6 +1883,28 @@ def obter_avaliacao_checklist(avaliacao_id: int) -> dict[str, Any] | None:
         return dict(linha) if linha else None
 
 
+def obter_avaliacao_checklist_por_revisao(
+    tipo_entidade: str, at_referencia: str | None, disciplina: str | None, revisao: int, analista_responsavel: str | None
+) -> dict[str, Any] | None:
+    """Localiza uma avaliação já existente para a mesma AT + disciplina +
+    revisão + analista responsável — usado para impedir duplicidade
+    (item 7 da alteração de alertas/avaliações): cada revisão pode ter sua
+    própria avaliação (Rev.01, Rev.02, Rev.03...), mas duas avaliações para
+    a MESMA revisão da MESMA AT devem ser tratadas como o mesmo registro
+    (atualiza o existente em vez de criar um novo). Sem AT informada, não
+    há chave confiável para checar — retorna None (não impede o cadastro)."""
+    if not at_referencia or not str(at_referencia).strip():
+        return None
+    with _conectar() as conn:
+        linha = conn.execute(
+            "SELECT * FROM avaliacoes_checklist WHERE tipo_entidade = ? AND at_referencia = ? AND revisao = ? "
+            "AND COALESCE(disciplina, '') = COALESCE(?, '') AND COALESCE(analista_responsavel, '') = COALESCE(?, '') "
+            "LIMIT 1",
+            (tipo_entidade, str(at_referencia).strip(), int(revisao), disciplina, analista_responsavel),
+        ).fetchone()
+        return dict(linha) if linha else None
+
+
 def existe_avaliacao_checklist(tipo_entidade: str, codigo_entidade: str | None, nome_entidade: str, disciplina: str | None) -> bool:
     """Usado para o indicador de avaliação obrigatória na REV1: True se já existe
     ao menos uma avaliação para esta combinação entidade + disciplina."""

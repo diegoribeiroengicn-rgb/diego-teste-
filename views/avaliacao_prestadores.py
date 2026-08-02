@@ -6,12 +6,15 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from gat.business_rules import classificar_nota, filtrar_por_competencia
+from gat.alertas_engine import pendencias_avaliacao_obrigatoria
+from gat.business_rules import classificar_nota, filtrar_ativos, filtrar_por_competencia
 from gat.config import COLUNAS_EXIBICAO_AVALIACOES, CORES_CLASSIFICACAO_AVALIACAO, RESPONSAVEIS
 from gat.database import (
     listar_avaliacoes,
     listar_avaliacoes_checklist,
+    listar_cessionarios,
     listar_obras_prestador,
+    listar_prestadores,
     nome_exibicao_obra,
     obter_avaliacao,
     registrar_atividade,
@@ -57,6 +60,46 @@ def _renderizar_backup(usuario: dict, tipo_label: str, tipo_entidade: str) -> No
             registrar_atividade(usuario["username"], usuario.get("perfil"), "BACKUP_AVALIACOES", modulo=tipo_entidade, detalhe=formato)
 
 
+def _prefill_pendencia(row: pd.Series, coluna_nome: str) -> dict:
+    return {
+        "nome_entidade": row.get(coluna_nome), "codigo_entidade": row.get("codigo"),
+        "disciplina": row.get("disciplina"), "at_referencia": row.get("num_at"),
+        "revisao": row.get("revisao"), "analista_responsavel": row.get("responsavel"),
+        "projeto_id": int(row["id"]),
+    }
+
+
+def _renderizar_pendencias(usuario: dict, tipo_label: str, tipo_entidade: str) -> None:
+    """Lista de tarefas com as disciplinas/ATs cuja avaliação obrigatória da
+    Rev.01 ainda está pendente — não exibe avaliações já concluídas,
+    canceladas, dispensadas (isentas) ou que ainda não atingiram a Rev.01."""
+    if tipo_entidade == "PRESTADOR":
+        df, modulo, coluna_nome = listar_prestadores(), "prestadores", "prestador"
+        rotulo_avaliacao = "Avaliação do Prestador"
+    else:
+        df, modulo, coluna_nome = listar_cessionarios(), "cessionarios", "cessionario"
+        rotulo_avaliacao = "Avaliação do Projetista do Cessionário"
+
+    df = filtrar_ativos(df)
+    pendentes = pendencias_avaliacao_obrigatoria(df, modulo, coluna_nome, "codigo")
+
+    st.markdown(f"##### Pendências — {rotulo_avaliacao} (Rev.01)")
+    if pendentes.empty:
+        st.success("Nenhuma avaliação obrigatória pendente no momento.", icon=":material/check_circle:")
+        return
+
+    st.caption(f"{len(pendentes)} disciplina(s)/AT(s) aguardando {rotulo_avaliacao.lower()}.")
+    for _, row in pendentes.iterrows():
+        with st.container(border=True):
+            col_info, col_botao = st.columns([4, 1])
+            with col_info:
+                st.markdown(f"**{row.get(coluna_nome) or '—'}** ({row.get('disciplina') or '—'}) — AT {row.get('num_at') or '—'}")
+                st.caption(f"Responsável: {row.get('responsavel') or '—'} · Revisão atual: {row.get('revisao')}")
+            with col_botao:
+                if st.button("Avaliar", icon=":material/fact_check:", type="primary", key=f"pendencia_avaliar_{tipo_entidade}_{int(row['id'])}", use_container_width=True):
+                    dialog_avaliacao_checklist(usuario["username"], tipo_entidade, prefill=_prefill_pendencia(row, coluna_nome))
+
+
 def _tab_checklist(usuario: dict) -> None:
     opcoes_tipo = []
     if pode_modulo(usuario, "prestadores"):
@@ -67,8 +110,18 @@ def _tab_checklist(usuario: dict) -> None:
         st.info("Nenhum módulo (Prestadores/Cessionários) liberado para este usuário.")
         return
 
+    auto_abrir = st.session_state.get("_gat_avaliacao_auto_abrir")
+    if auto_abrir:
+        st.session_state["aval_checklist_tipo"] = "Prestador" if auto_abrir.get("tipo_entidade") == "PRESTADOR" else "Cessionário"
+
     tipo_label = st.selectbox("Tipo", opcoes_tipo, key="aval_checklist_tipo")
     tipo_entidade = "PRESTADOR" if tipo_label == "Prestador" else "CESSIONARIO"
+
+    if auto_abrir and auto_abrir.get("tipo_entidade") == tipo_entidade:
+        st.session_state.pop("_gat_avaliacao_auto_abrir", None)
+        dialog_avaliacao_checklist(usuario["username"], tipo_entidade, prefill=auto_abrir)
+
+    _renderizar_pendencias(usuario, tipo_label, tipo_entidade)
 
     _renderizar_backup(usuario, tipo_label, tipo_entidade)
 

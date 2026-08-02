@@ -61,41 +61,41 @@ def pontuar_checklist(respostas: dict[str, dict[str, str]]) -> int:
     return sum(1 for r in respostas.values() if r.get("resposta") == "SIM")
 
 
-def marcar_avaliacao_obrigatoria(
-    df: pd.DataFrame, tipo_entidade: str, coluna_nome: str, coluna_codigo: str
+def status_avaliacao_obrigatoria(
+    df: pd.DataFrame, tipo_entidade: str, coluna_nome: str, coluna_codigo: str, modulo: str
 ) -> pd.Series:
     """
-    Indica, por linha, se a avaliação (checklist) daquele projeto é
-    obrigatória e ainda está pendente: a regra de negócio é que a avaliação
-    deve acontecer exatamente na Revisão 1 (não antes, não depois — a
-    partir da REV2 o sinalizador não é mais exibido, mesmo que a avaliação
-    continue ausente) e é específica por disciplina (um mesmo prestador/
-    cessionário pode ter disciplinas diferentes, cada uma com sua própria
-    necessidade de avaliação).
+    Indica, por linha, a situação da avaliação (checklist) obrigatória da
+    Rev.01: "PENDENTE" enquanto ela não for realizada, "CONCLUIDA" assim
+    que for (o selo muda de vermelho para verde automaticamente, sem ação
+    manual), ou "" quando a obrigatoriedade ainda não nasceu (Rev.01 não
+    concluída) ou o projeto está na lista de isentos (grandfathering —
+    ver `listar_avaliacao_obrigatoria_isentos`).
+
+    Usa exatamente o mesmo critério do alerta em `gat/alertas_engine.py`
+    (`rev1_concluida` + `chaves_avaliadas_obrigatoria`) — antes deste selo
+    usava uma regra própria, mais restrita (só marcava exatamente na
+    Rev.01), o que deixava o indicador "sumir" a partir da Rev.02 mesmo com
+    a avaliação obrigatória ainda pendente, divergindo da Central de Alertas.
     """
-    from gat.database import listar_avaliacoes_checklist
+    from gat.alertas_engine import chaves_avaliadas_obrigatoria, rev1_concluida
+    from gat.database import listar_avaliacao_obrigatoria_isentos, listar_avaliacoes_checklist
 
     if df.empty:
-        return pd.Series(dtype=bool)
-    avaliadas = listar_avaliacoes_checklist(tipo_entidade)
-    if avaliadas.empty:
-        chaves_avaliadas: set[tuple[str, str]] = set()
-    else:
-        chave_entidade = avaliadas["codigo_entidade"].fillna(avaliadas["nome_entidade"])
-        chaves_avaliadas = set(zip(chave_entidade, avaliadas["disciplina"].fillna("")))
+        return pd.Series(dtype=str)
 
-    def _pendente(row: pd.Series) -> bool:
-        try:
-            if int(row.get("revisao") or 0) != 1:
-                return False
-        except (TypeError, ValueError):
-            return False
+    avaliados = chaves_avaliadas_obrigatoria(listar_avaliacoes_checklist(tipo_entidade))
+    isentos = listar_avaliacao_obrigatoria_isentos(modulo)
+
+    def _situacao(row: pd.Series) -> str:
+        if int(row["id"]) in isentos or not rev1_concluida(row.get("revisao"), row.get("data_analise")):
+            return ""
         codigo = row.get(coluna_codigo)
         nome = row.get(coluna_nome)
         chave = (codigo if codigo else nome, row.get("disciplina") or "")
-        return chave not in chaves_avaliadas
+        return "CONCLUIDA" if chave in avaliados else "PENDENTE"
 
-    return df.apply(_pendente, axis=1)
+    return df.apply(_situacao, axis=1)
 
 
 def calcular_sla_cessionario(tipo: str, revisao: int) -> int:
