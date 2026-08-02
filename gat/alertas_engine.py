@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from gat.business_rules import dias_restantes_prioridade, em_lista_prioridades, limites_alerta_vencimento
 from gat.database import listar_avaliacao_obrigatoria_isentos, listar_avaliacoes_checklist, listar_radar
 from gat.revisoes import calcular_intervalos_revisao
 
@@ -38,6 +39,7 @@ TIPO_ATRASO_ANALISE = "ATRASO_ANALISE"
 TIPO_AVALIACAO_CRITICA = "AVALIACAO_CRITICA"
 TIPO_ATRASO_REENVIO = "ATRASO_REENVIO"
 TIPO_AVALIACAO_OBRIGATORIA = "AVALIACAO_OBRIGATORIA"
+TIPO_PRAZO_PRIORITARIO = "PRAZO_PRIORITARIO"
 
 TIPO_ALERTA_LABELS = {
     TIPO_PENDENTE_REUNIAO: "Revisão ≥ REV2 sem liberação",
@@ -45,6 +47,7 @@ TIPO_ALERTA_LABELS = {
     TIPO_AVALIACAO_CRITICA: "Avaliação Crítica/Baixa",
     TIPO_ATRASO_REENVIO: "Atraso no reenvio (retorno externo)",
     TIPO_AVALIACAO_OBRIGATORIA: "Avaliação obrigatória pendente",
+    TIPO_PRAZO_PRIORITARIO: "Prazo prioritário próximo do vencimento",
 }
 
 
@@ -121,6 +124,15 @@ def montar_alertas_modulo(df: pd.DataFrame, modulo: str, coluna_nome: str, colun
                 **base, "tipo_alerta": TIPO_AVALIACAO_OBRIGATORIA,
                 "detalhe": f"Existe uma {rotulo_avaliacao} pendente para a AT {row.get('num_at') or '—'}.",
             })
+        if em_lista_prioridades(row):
+            dias_restantes = dias_restantes_prioridade(row, modulo)
+            if dias_restantes is not None:
+                limite5, limite3, limite1 = limites_alerta_vencimento(int(row.get("sla_dias") or 10))
+                if dias_restantes <= limite5:
+                    registros.append({
+                        **base, "tipo_alerta": TIPO_PRAZO_PRIORITARIO,
+                        "detalhe": f"Prazo prioritário: restam {dias_restantes} dia(s) útil(eis) (limites de alerta: {limite5}/{limite3}/{limite1}).",
+                    })
 
     intervalos = calcular_intervalos_revisao(df, coluna_nome, coluna_codigo)
     if not intervalos.empty:

@@ -48,6 +48,7 @@ from views import (
     inicio,
     lembretes_pep,
     linha_tempo,
+    lista_prioridades,
     meu_perfil,
     painel_analistas,
     planos_acao,
@@ -154,6 +155,8 @@ if pode_area(usuario, "alertas"):
         grupo_gestao.append(_pagina(lambda: alertas_cessionarios.render(usuario), "Alertas — Cessionários", ":material/notifications_active:", "gestao_alertas_cessionarios"))
     if pode_area(usuario, "alertas.consolidado"):
         grupo_gestao.append(_pagina(lambda: alertas.render(usuario, modulo=None), "Alertas — Consolidado", ":material/notifications_active:", "gestao_alertas_consolidado"))
+if pode_area(usuario, "lista_prioridades"):
+    grupo_gestao.append(_pagina(lambda: lista_prioridades.render(usuario), "Lista de Prioridades", ":material/priority_high:", "gestao_lista_prioridades"))
 if pode_area(usuario, "lembretes"):
     grupo_gestao.append(_pagina(lambda: lembretes_pep.render(usuario), "Lembretes (Sem PEP)", ":material/pending_actions:", "gestao_lembretes"))
 if pode_area(usuario, "reunioes"):

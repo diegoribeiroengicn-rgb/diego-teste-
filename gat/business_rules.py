@@ -201,6 +201,108 @@ def situacao_prazo(dias_restantes: int | None) -> str:
     return "DENTRO DO PRAZO"
 
 
+STATUS_CONCLUIDOS_PRIORIDADE = {"LIBERADO", "LIBERADO C/ REST.", "NÃO LIBERADO", "OBSOLETO", "CANCELADO"}
+
+
+def em_lista_prioridades(row: pd.Series) -> bool:
+    """
+    Regra automática de entrada/saída da Lista de Prioridades (item 8):
+    entra quando há nível de prioridade (Prestadores) ou SLA reduzido
+    (Prestadores/Cessionários) em vigor E a análise ainda está em
+    andamento; sai automaticamente assim que a análise é concluída
+    (liberada, não liberada, obsoleta ou cancelada) — a urgência de prazo
+    deixa de existir.
+    """
+    prioritario = bool(row.get("sla_reduzido")) or pd.notna(row.get("nivel_prioridade"))
+    if not prioritario:
+        return False
+    status = str(row.get("status_analise") or "").strip().upper()
+    return status not in STATUS_CONCLUIDOS_PRIORIDADE
+
+
+def dias_restantes_prioridade(row: pd.Series, modulo: str) -> int | None:
+    """Dias úteis restantes até o prazo vigente, unificado entre os dois
+    módulos (Prestadores usa `dias_uteis_decorridos`, Cessionários já
+    calcula o `saldo_dias_uteis` diretamente)."""
+    if modulo == "prestadores":
+        sla = int(row.get("sla_dias") or SLA_PRESTADORES_DIAS_UTEIS)
+        decorridos = row.get("dias_uteis_decorridos")
+        return int(sla - decorridos) if pd.notna(decorridos) else None
+    saldo = row.get("saldo_dias_uteis")
+    return int(saldo) if pd.notna(saldo) else None
+
+
+def limites_alerta_vencimento(sla_dias: int) -> tuple[int, int, int]:
+    """
+    Limiares (em dias úteis restantes) do alerta automático de vencimento
+    próximo (item 10): 5/3/1 dias para SLAs normais, adaptados
+    proporcionalmente para SLAs curtos (Nível 1/2 de prioridade ou SLA
+    reduzido a poucos dias), onde 5/3/1 não fariam sentido.
+    """
+    if sla_dias >= 10:
+        return 5, 3, 1
+    if sla_dias >= 5:
+        return 3, 2, 1
+    return 2, 1, 1
+
+
+def cor_mapa_calor(row: pd.Series, dias_restantes: int | None) -> str:
+    """
+    Cor do mapa de calor de prazos (item 9): roxo tem prioridade sobre as
+    demais e sinaliza reforço — SLA reduzido manualmente ou Nível 1 de
+    prioridade (o mais crítico) — independentemente dos dias restantes;
+    as demais situações seguem o esquema padrão de 4 cores por proximidade
+    do prazo (`situacao_prazo`).
+    """
+    if bool(row.get("sla_reduzido")) or row.get("nivel_prioridade") == 1:
+        return "roxo"
+    mapa = {"DENTRO DO PRAZO": "verde", "VENCE EM BREVE": "amarelo", "VENCE HOJE": "laranja", "ATRASADO": "vermelho"}
+    return mapa[situacao_prazo(dias_restantes)]
+
+
+def montar_lista_prioridades(df_prestadores: pd.DataFrame, df_cessionarios: pd.DataFrame) -> pd.DataFrame:
+    """
+    Lista de Prioridades (item 7) — único lugar do sistema em que
+    Prestadores e Cessionários aparecem juntos: reúne apenas os projetos
+    atualmente prioritários (nível de prioridade ou SLA reduzido, ainda em
+    andamento), com prazo, situação e cor do mapa de calor já calculados.
+    """
+    linhas = []
+    for df, modulo, coluna_nome, rotulo_tipo in (
+        (df_prestadores, "prestadores", "prestador", "Prestador"),
+        (df_cessionarios, "cessionarios", "cessionario", "Cessionário"),
+    ):
+        if df.empty:
+            continue
+        for _, row in df.iterrows():
+            if not em_lista_prioridades(row):
+                continue
+            dias_restantes = dias_restantes_prioridade(row, modulo)
+            origem_prioridade = (
+                NIVEIS_PRIORIDADE_LABELS.get(int(row["nivel_prioridade"]), "—")
+                if pd.notna(row.get("nivel_prioridade")) else "SLA reduzido"
+            )
+            linhas.append({
+                "tipo": rotulo_tipo, "modulo": modulo, "id": row.get("id"),
+                "nome_entidade": row.get(coluna_nome), "codigo": row.get("codigo"),
+                "num_at": row.get("num_at"), "disciplina": row.get("disciplina"),
+                "revisao": row.get("revisao"), "responsavel": row.get("responsavel"),
+                "origem_prioridade": origem_prioridade, "nivel_prioridade": row.get("nivel_prioridade"),
+                "sla_reduzido": bool(row.get("sla_reduzido")), "sla_dias": row.get("sla_dias"),
+                "sla_original": row.get("sla_original"), "data_solicitacao": row.get("data_solicitacao"),
+                "justificativa_sla": row.get("justificativa_sla"),
+                "dias_restantes": dias_restantes, "situacao_prazo": situacao_prazo(dias_restantes),
+                "cor_mapa_calor": cor_mapa_calor(row, dias_restantes),
+                "status_analise": row.get("status_analise"),
+                "sla_alterado_por": row.get("sla_alterado_por"), "sla_alterado_em": row.get("sla_alterado_em"),
+            })
+
+    if not linhas:
+        return pd.DataFrame()
+    resultado = pd.DataFrame(linhas)
+    return resultado.sort_values("dias_restantes", na_position="last").reset_index(drop=True)
+
+
 def acima_da_meta_revisao(revisao: int | None) -> bool:
     """True quando a revisão do projeto já ultrapassou a meta corporativa
     (acima da REV2) — usado para o destaque visual específico."""
@@ -322,7 +424,7 @@ def enriquecer_prestadores(df: pd.DataFrame) -> pd.DataFrame:
 
     def _linha(linha):
         hold = calcular_hold_dias(linha.get("hold_inicio"), linha.get("hold_fim"))
-        sla_vigente = int(linha.get("sla_dias")) if linha.get("sla_dias") else SLA_PRESTADORES_DIAS_UTEIS
+        sla_vigente = int(linha.get("sla_dias")) if pd.notna(linha.get("sla_dias")) else SLA_PRESTADORES_DIAS_UTEIS
         status, decorridos = status_entrega_prestador(linha.get("data_solicitacao"), linha.get("data_analise"), hold, sla_vigente)
         return pd.Series({"hold_dias": hold, "dias_uteis_decorridos": decorridos, "status_entrega_calc": status})
 
@@ -453,7 +555,7 @@ def enriquecer_cessionarios(df: pd.DataFrame) -> pd.DataFrame:
 
     def _linha(linha):
         hold = calcular_hold_dias(linha.get("hold_inicio"), linha.get("hold_fim"))
-        sla = linha.get("sla_dias") or calcular_sla_cessionario(linha.get("tipo"), linha.get("revisao") or 0)
+        sla = int(linha.get("sla_dias")) if pd.notna(linha.get("sla_dias")) else calcular_sla_cessionario(linha.get("tipo"), linha.get("revisao") or 0)
         status, saldo = status_entrega_cessionario(linha.get("data_solicitacao"), linha.get("data_analise"), hold, sla)
         return pd.Series({"hold_dias": hold, "saldo_dias_uteis": saldo, "status_entrega_calc": status})
 
