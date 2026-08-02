@@ -54,6 +54,8 @@ from views import (
     meu_perfil,
     painel_analistas,
     planos_acao,
+    pmo_portfolio,
+    pmo_projeto,
     prestadores,
     prestadores_dashboard,
     relatorios_mensais,
@@ -149,6 +151,12 @@ if pode_modulo(usuario, "consolidado"):
     if pode_area(usuario, "linha_tempo"):
         grupo_consolidado.append(_pagina(lambda: linha_tempo.render(usuario), "Linha do Tempo", ":material/timeline:", "linha_tempo"))
     paginas["Consolidado"] = grupo_consolidado
+
+if pode_area(usuario, "pmo"):
+    paginas["PMO"] = [
+        _pagina(lambda: pmo_portfolio.render(usuario), "Portfólio de Projetos", ":material/dashboard_customize:", "pmo_portfolio"),
+        _pagina(lambda: pmo_projeto.render(usuario), "Projeto", ":material/folder_open:", "pmo_projeto"),
+    ]
 
 grupo_gestao = []
 if pode_area(usuario, "alertas"):

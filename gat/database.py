@@ -58,6 +58,19 @@ def _conectar() -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+def conectar() -> Iterator[sqlite3.Connection]:
+    """
+    Conexão pública ao mesmo arquivo de banco de dados e com a mesma
+    persistência automática pós-gravação usada pelo GAT — para uso por
+    módulos independentes que compartilham a mesma plataforma/banco de
+    dados sem compartilhar regras de negócio (ex.: `gat/pmo_database.py`).
+    Não altera nenhum comportamento existente: é apenas a versão pública
+    de `_conectar`, para não haver necessidade de outro módulo importar um
+    nome privado.
+    """
+    return _conectar()
+
+
 # Colunas editáveis de cada tabela de projeto (usadas no cadastro/edição e
 # no cálculo de diffs para o histórico de auditoria).
 COLUNAS_PRESTADORES = [
@@ -671,6 +684,243 @@ def _migracao_0015_vinculo_analista_usuario(conn: sqlite3.Connection) -> None:
     _garantir_coluna(conn, "usuarios", "analista_vinculado", "TEXT")
 
 
+def _migracao_0016_pmo_schema(conn: sqlite3.Connection) -> None:
+    """
+    Módulo PMO (Project Management Office): schema inicial, totalmente
+    independente do GAT — nenhuma tabela do GAT é alterada estruturalmente
+    por esta migração, além de duas colunas aditivas (com DEFAULT que
+    preserva o comportamento atual) nos três módulos que passam a ser
+    compartilhados entre PMO e GAT: Reuniões, Planos de Ação e Alertas.
+
+    Compartilhamento com identificação de origem:
+    * `reuniao_projetos.modulo` já era um campo livre (usado hoje com
+      'prestadores'/'cessionarios') — projetos PMO usam modulo='pmo' com o
+      mesmo mecanismo de vínculo M:N, sem exigir nenhuma mudança nele;
+    * `alertas_manuais.modulo`/`projeto_id` idem — alertas do PMO usam
+      modulo='pmo', aparecendo pela mesma tabela/funções já existentes;
+    * `reunioes` e `planos_acao` ganham a coluna aditiva `origem` (GAT por
+      padrão, preservando 100% do comportamento e das telas atuais do GAT,
+      que nunca informam esse campo) para que também um registro sem
+      vínculo a um projeto específico carregue sua origem de forma
+      explícita, como exigido pela especificação do PMO.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pmo_projetos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            cliente TEXT,
+            contratada TEXT,
+            gerente TEXT,
+            data_inicio TEXT,
+            data_prevista_termino TEXT,
+            valor_contratual REAL,
+            tipo_contrato TEXT,
+            observacoes TEXT,
+            status TEXT NOT NULL DEFAULT 'EM ANDAMENTO',
+            saude TEXT NOT NULL DEFAULT 'VERDE',
+            percentual_execucao REAL NOT NULL DEFAULT 0,
+            proximo_marco TEXT,
+            proximo_marco_data TEXT,
+            criado_em TEXT NOT NULL,
+            criado_por TEXT NOT NULL,
+            atualizado_em TEXT,
+            atualizado_por TEXT
+        )
+        """
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pmo_projeto_kpis (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            projeto_id INTEGER NOT NULL REFERENCES pmo_projetos(id) ON DELETE CASCADE,
+            kpi_chave TEXT NOT NULL,
+            habilitado INTEGER NOT NULL DEFAULT 1,
+            habilitado_em TEXT,
+            desabilitado_em TEXT,
+            UNIQUE(projeto_id, kpi_chave)
+        )
+        """
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pmo_cronograma_arquivos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            projeto_id INTEGER NOT NULL REFERENCES pmo_projetos(id) ON DELETE CASCADE,
+            nome_arquivo TEXT NOT NULL,
+            formato TEXT NOT NULL,
+            conteudo BLOB NOT NULL,
+            interpretado INTEGER NOT NULL DEFAULT 0,
+            ativo INTEGER NOT NULL DEFAULT 1,
+            enviado_por TEXT NOT NULL,
+            enviado_em TEXT NOT NULL,
+            removido_por TEXT,
+            removido_em TEXT
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pmo_cronograma_arquivos_projeto ON pmo_cronograma_arquivos(projeto_id)")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pmo_cronograma_atividades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            arquivo_id INTEGER NOT NULL REFERENCES pmo_cronograma_arquivos(id) ON DELETE CASCADE,
+            projeto_id INTEGER NOT NULL REFERENCES pmo_projetos(id) ON DELETE CASCADE,
+            identificador_origem TEXT,
+            nome TEXT NOT NULL,
+            data_inicio TEXT,
+            data_fim TEXT,
+            duracao_dias REAL,
+            percentual_concluido REAL NOT NULL DEFAULT 0,
+            e_marco INTEGER NOT NULL DEFAULT 0,
+            predecessoras TEXT,
+            caminho_critico INTEGER NOT NULL DEFAULT 0,
+            folga_dias REAL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pmo_cronograma_atividades_arquivo ON pmo_cronograma_atividades(arquivo_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pmo_cronograma_atividades_projeto ON pmo_cronograma_atividades(projeto_id)")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pmo_medicoes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            projeto_id INTEGER NOT NULL REFERENCES pmo_projetos(id) ON DELETE CASCADE,
+            competencia_mes INTEGER NOT NULL,
+            competencia_ano INTEGER NOT NULL,
+            percentual REAL,
+            valor_medido REAL,
+            situacao TEXT NOT NULL DEFAULT 'EM ANÁLISE',
+            valor_aprovado REAL,
+            data_aprovacao TEXT,
+            valor_pago REAL,
+            data_pagamento TEXT,
+            valor_glosado REAL NOT NULL DEFAULT 0,
+            criado_por TEXT NOT NULL,
+            criado_em TEXT NOT NULL,
+            atualizado_em TEXT,
+            atualizado_por TEXT
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pmo_medicoes_projeto ON pmo_medicoes(projeto_id)")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pmo_entregaveis (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            projeto_id INTEGER NOT NULL REFERENCES pmo_projetos(id) ON DELETE CASCADE,
+            nome TEXT NOT NULL,
+            previsto INTEGER NOT NULL DEFAULT 1,
+            entregue INTEGER NOT NULL DEFAULT 0,
+            data_prevista TEXT,
+            data_entrega TEXT,
+            percentual_documental REAL NOT NULL DEFAULT 0,
+            observacoes TEXT,
+            criado_em TEXT NOT NULL,
+            criado_por TEXT NOT NULL,
+            atualizado_em TEXT,
+            atualizado_por TEXT
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pmo_entregaveis_projeto ON pmo_entregaveis(projeto_id)")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pmo_riscos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            projeto_id INTEGER NOT NULL REFERENCES pmo_projetos(id) ON DELETE CASCADE,
+            descricao TEXT NOT NULL,
+            probabilidade INTEGER NOT NULL,
+            impacto INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'ABERTO',
+            responsavel TEXT,
+            plano_mitigacao TEXT,
+            criado_em TEXT NOT NULL,
+            criado_por TEXT NOT NULL,
+            atualizado_em TEXT,
+            atualizado_por TEXT
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pmo_riscos_projeto ON pmo_riscos(projeto_id)")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pmo_comunicacoes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            projeto_id INTEGER NOT NULL REFERENCES pmo_projetos(id) ON DELETE CASCADE,
+            data TEXT NOT NULL,
+            tipo TEXT,
+            descricao TEXT NOT NULL,
+            responsavel TEXT,
+            criado_em TEXT NOT NULL,
+            criado_por TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pmo_comunicacoes_projeto ON pmo_comunicacoes(projeto_id)")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pmo_alertas_cronograma (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            projeto_id INTEGER NOT NULL UNIQUE REFERENCES pmo_projetos(id) ON DELETE CASCADE,
+            alerta_manual_id INTEGER REFERENCES alertas_manuais(id),
+            status TEXT NOT NULL DEFAULT 'ATIVO',
+            criado_em TEXT NOT NULL,
+            qtd_lembretes INTEGER NOT NULL DEFAULT 0,
+            ultimo_lembrete_em TEXT,
+            proximo_lembrete_em TEXT,
+            encerrado_em TEXT,
+            anexado_por TEXT,
+            anexado_em TEXT
+        )
+        """
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pmo_cronograma_lembretes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            projeto_id INTEGER NOT NULL REFERENCES pmo_projetos(id) ON DELETE CASCADE,
+            enviado_em TEXT NOT NULL,
+            mensagem TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pmo_cronograma_lembretes_projeto ON pmo_cronograma_lembretes(projeto_id)")
+
+    _garantir_coluna(conn, "reunioes", "origem", "TEXT NOT NULL DEFAULT 'GAT'")
+    _garantir_coluna(conn, "planos_acao", "origem", "TEXT NOT NULL DEFAULT 'GAT'")
+    _garantir_coluna(conn, "planos_acao", "pmo_projeto_id", "INTEGER REFERENCES pmo_projetos(id)")
+
+
+def _migracao_0017_manual_pmo(conn: sqlite3.Connection) -> None:
+    """
+    Atualiza automaticamente o Manual do Sistema com os dois capítulos do
+    módulo PMO — acrescentados ao final da lista já existente, sem alterar
+    nenhum capítulo do GAT.
+    """
+    from gat.pmo_manual_conteudo import CAPITULOS_PMO
+
+    agora = datetime.now().isoformat()
+    maior_ordem = conn.execute("SELECT COALESCE(MAX(ordem), 0) FROM manual_capitulos").fetchone()[0]
+    for indice, (titulo, conteudo) in enumerate(CAPITULOS_PMO, start=1):
+        existe = conn.execute("SELECT id FROM manual_capitulos WHERE titulo = ?", (titulo,)).fetchone()
+        if existe:
+            continue
+        conn.execute(
+            "INSERT INTO manual_capitulos (ordem, titulo, conteudo, perfis_visiveis, criado_em) VALUES (?, ?, ?, NULL, ?)",
+            (maior_ordem + indice, titulo, conteudo, agora),
+        )
+
+
 def _migracao_0013_manual_sistema(conn: sqlite3.Connection) -> None:
     """
     Novo módulo Manual do Sistema: capítulos organizados por versão
@@ -804,6 +1054,8 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (13, "Manual do Sistema: capítulos, versões publicadas, confirmação de leitura e anexos, semeado com os 28 capítulos iniciais", _migracao_0013_manual_sistema),
     (14, "Cálculo automático de data prevista: coluna de ajuste manual (data_limite_ajustada_manualmente) em Prestadores/Cessionários", _migracao_0014_data_prevista_automatica),
     (15, "KPIs de prazo dos analistas: vínculo usuários.analista_vinculado com a lista RESPONSAVEIS", _migracao_0015_vinculo_analista_usuario),
+    (16, "Módulo PMO: schema inicial (projetos, KPIs habilitados, cronograma, medições, entregáveis, riscos, comunicações, alerta automático de cronograma) + origem em Reuniões/Planos de Ação", _migracao_0016_pmo_schema),
+    (17, "Módulo PMO: capítulos 'PMO – Gestão de Projetos' e 'Biblioteca de Indicadores (PMO)' no Manual do Sistema", _migracao_0017_manual_pmo),
 ]
 
 
@@ -1429,6 +1681,13 @@ def _registrar_historico(conn: sqlite3.Connection, tabela: str, registro_id: int
             )
 
 
+def registrar_historico(conn: sqlite3.Connection, tabela: str, registro_id: int, antigo: dict, novo: dict, usuario: str) -> None:
+    """Versão pública de `_registrar_historico`, para módulos independentes
+    (ex.: PMO) reaproveitarem o mesmo mecanismo de auditoria por campo já
+    usado pelo GAT, sem depender de um nome privado."""
+    _registrar_historico(conn, tabela, registro_id, antigo, novo, usuario)
+
+
 def listar_historico(tabela: str | None = None, registro_id: int | None = None) -> pd.DataFrame:
     query = "SELECT * FROM historico_edicoes WHERE 1=1"
     params: list[Any] = []
@@ -1851,6 +2110,13 @@ def listar_configuracoes() -> dict[str, str]:
 
 COLUNAS_REUNIAO = ["titulo", "pauta", "data_prevista", "data_realizada", "ata", "decisoes"]
 
+# Coluna aditiva (item "Reuniões" do módulo PMO): identifica se a reunião
+# pertence ao GAT ou ao PMO. GAT nunca informa este campo em `dados` — por
+# isso o valor é sempre resolvido explicitamente para 'GAT' aqui, nunca
+# deixado para o DEFAULT da coluna (que não se aplica a um INSERT/UPDATE
+# que já lista a coluna com um parâmetro).
+_ORIGEM_PADRAO = "GAT"
+
 
 def _nome_projeto(conn: sqlite3.Connection, modulo: str, projeto_id: int) -> str | None:
     if modulo == "prestadores":
@@ -1865,6 +2131,7 @@ def _nome_projeto(conn: sqlite3.Connection, modulo: str, projeto_id: int) -> str
 def inserir_reuniao(dados: dict[str, Any], projetos: list[tuple[str, int]], participantes: list[str], usuario: str) -> int:
     agora = datetime.now().isoformat()
     campos = {c: dados.get(c) for c in COLUNAS_REUNIAO}
+    campos["origem"] = dados.get("origem") or _ORIGEM_PADRAO
     with _conectar() as conn:
         cursor = conn.execute(
             f"INSERT INTO reunioes ({', '.join(campos.keys())}, criado_em, criado_por, atualizado_em, atualizado_por) "
@@ -1892,6 +2159,7 @@ def atualizar_reuniao(reuniao_id: int, dados: dict[str, Any], projetos: list[tup
         antigo = conn.execute("SELECT * FROM reunioes WHERE id = ?", (reuniao_id,)).fetchone()
         antigo_dict = dict(antigo) if antigo else {}
         campos = {c: dados.get(c) for c in COLUNAS_REUNIAO}
+        campos["origem"] = dados.get("origem") or (antigo_dict.get("origem") or _ORIGEM_PADRAO)
         agora = datetime.now().isoformat()
         set_clause = ", ".join(f"{c} = ?" for c in campos)
         conn.execute(
@@ -1953,12 +2221,13 @@ def listar_planos_da_reuniao(reuniao_id: int) -> pd.DataFrame:
 # Planos de Ação (Central de Gestão)
 # ---------------------------------------------------------------------------
 
-COLUNAS_PLANO_ACAO = ["reuniao_id", "descricao", "responsavel", "prazo", "status"]
+COLUNAS_PLANO_ACAO = ["reuniao_id", "descricao", "responsavel", "prazo", "status", "pmo_projeto_id"]
 
 
 def inserir_plano_acao(dados: dict[str, Any], usuario: str) -> int:
     agora = datetime.now().isoformat()
     campos = {c: dados.get(c) for c in COLUNAS_PLANO_ACAO}
+    campos["origem"] = dados.get("origem") or _ORIGEM_PADRAO
     with _conectar() as conn:
         cursor = conn.execute(
             f"INSERT INTO planos_acao ({', '.join(campos.keys())}, criado_em, criado_por) "
@@ -1975,6 +2244,7 @@ def atualizar_plano_acao(plano_id: int, dados: dict[str, Any], usuario: str) -> 
         antigo = conn.execute("SELECT * FROM planos_acao WHERE id = ?", (plano_id,)).fetchone()
         antigo_dict = dict(antigo) if antigo else {}
         campos = {c: dados.get(c) for c in COLUNAS_PLANO_ACAO}
+        campos["origem"] = dados.get("origem") or (antigo_dict.get("origem") or _ORIGEM_PADRAO)
         set_clause = ", ".join(f"{c} = ?" for c in campos)
         conclusao = {}
         if campos.get("status") == "CONCLUÍDO" and antigo_dict.get("status") != "CONCLUÍDO":
