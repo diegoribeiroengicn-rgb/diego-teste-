@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import streamlit as st
 
+from gat.business_rules import filtrar_por_competencia
 from gat.database import listar_planos_da_reuniao, listar_reunioes, obter_reuniao
 from gat.permissions import exigir_area
+from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.kpi_cards import renderizar_kpis
 from gat.ui.modals_gestao import dialog_plano_acao, dialog_reuniao
 
@@ -26,8 +28,19 @@ def render(usuario: dict) -> None:
         st.info("Nenhuma reunião registrada ainda. Utilize o botão acima para iniciar.")
         return
 
-    total = len(df)
-    realizadas = int(df["data_realizada"].notna().sum())
+    with st.expander("Filtros", icon=":material/filter_list:", expanded=False):
+        mes, ano = seletor_competencia("reunioes_comp", "Competência (Data Prevista)")
+
+    df_filtrado = filtrar_por_competencia(df, "data_prevista", mes, ano)
+    if df_filtrado.empty:
+        st.warning(
+            f"Nenhuma reunião encontrada em {rotulo_competencia(mes, ano)}.",
+            icon=":material/search_off:",
+        )
+        return
+
+    total = len(df_filtrado)
+    realizadas = int(df_filtrado["data_realizada"].notna().sum())
     previstas = total - realizadas
     renderizar_kpis([
         ("Total de Reuniões", str(total), None),
@@ -37,7 +50,7 @@ def render(usuario: dict) -> None:
 
     st.markdown("#####")
 
-    for _, linha in df.iterrows():
+    for _, linha in df_filtrado.iterrows():
         status_txt = "Realizada" if linha["data_realizada"] else "Prevista"
         with st.expander(f"{linha['titulo']} — {status_txt} ({linha['data_prevista'] or 's/ data'})", icon=":material/event:"):
             reuniao = obter_reuniao(int(linha["id"]))

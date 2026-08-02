@@ -5,8 +5,10 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from gat.business_rules import filtrar_por_competencia
 from gat.database import listar_historico
 from gat.permissions import exigir_area
+from gat.ui.filtros import rotulo_competencia, seletor_competencia
 
 
 def render(usuario: dict) -> None:
@@ -16,6 +18,7 @@ def render(usuario: dict) -> None:
     st.caption("Auditoria de todas as movimentações de Reuniões e Planos de Ação: criação, edição e conclusão.")
 
     filtro_tabela = st.selectbox("Tipo", ["Todos", "Reuniões", "Planos de Ação"])
+    mes, ano = seletor_competencia("gestao_hist_comp", "Competência")
 
     if filtro_tabela == "Reuniões":
         df_hist = listar_historico("reunioes")
@@ -28,6 +31,14 @@ def render(usuario: dict) -> None:
 
     if df_hist.empty:
         st.info("Nenhuma movimentação registrada ainda.")
+        return
+
+    df_hist = filtrar_por_competencia(df_hist, "data_hora", mes, ano)
+    if df_hist.empty:
+        st.warning(
+            f"Nenhuma movimentação encontrada em {rotulo_competencia(mes, ano)}.",
+            icon=":material/search_off:",
+        )
         return
 
     st.dataframe(
