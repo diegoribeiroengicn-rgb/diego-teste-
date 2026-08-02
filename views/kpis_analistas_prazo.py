@@ -14,13 +14,14 @@ from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, 
 from gat.config import (
     CORES,
     DISCIPLINAS,
+    MESES_PT,
     PERFIL_ADMIN,
     PERFIL_GESTOR,
     RESPONSAVEIS,
     STATUS_ANALISE_OPCOES,
     TIPO_CESSIONARIO_OPCOES,
 )
-from gat.database import listar_cessionarios, listar_prestadores, registrar_atividade
+from gat.database import listar_cessionarios, listar_fechamentos_avaliacao_analista, listar_prestadores, registrar_atividade
 from gat.kpis_analistas_prazo import (
     aplicar_filtros_prazo,
     calcular_kpis_prazo_analista,
@@ -30,6 +31,7 @@ from gat.kpis_analistas_prazo import (
 )
 from gat.permissions import exigir_area, pode_area
 from gat.relatorios_kpis_prazo import gerar_relatorio_individual_word, nome_arquivo_kpis_prazo
+from gat.ui.charts import gauge_sla, grafico_atrasados_por_analista, grafico_classificacao_prazo, grafico_ranking_cumprimento_prazo
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.formatos import formatar_datas_df
 
@@ -94,6 +96,38 @@ def _renderizar_filtros(df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
     return df_filtrado, rotulo_periodo
 
 
+def _ultima_nota_fechada_por_analista() -> dict[str, dict]:
+    """Nota Final da competência mais recente já fechada de cada analista
+    (módulo Avaliação de Analistas) — uma vez fechada, a nota fica
+    congelada e só o Administrador pode recalculá-la; o Gestor não pode
+    alterá-la, apenas visualizá-la (mesma permissão `analistas.notas` já
+    usada em Avaliação de Analistas)."""
+    fechamentos = listar_fechamentos_avaliacao_analista()
+    if fechamentos.empty:
+        return {}
+    mais_recentes = fechamentos.sort_values(["ano", "mes"], ascending=False).drop_duplicates("analista")
+    return {linha["analista"]: linha.to_dict() for _, linha in mais_recentes.iterrows()}
+
+
+def _renderizar_nota_avaliacao(analista: str, usuario: dict, notas_fechadas: dict[str, dict]) -> None:
+    if not pode_area(usuario, "analistas.notas"):
+        return
+    fechamento = notas_fechadas.get(analista)
+    if not fechamento:
+        return
+    competencia = f"{MESES_PT[int(fechamento['mes']) - 1]}/{int(fechamento['ano'])}"
+    st.markdown(
+        f"""<div style="border:1px solid {CORES['borda_forte']};border-radius:10px;padding:12px 14px;margin-bottom:14px;">
+            <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:{CORES['texto_fraco']};">
+                🔒 Nota Final de Avaliação (fechada) — {competencia}</div>
+            <div style="font-size:1.9rem;font-weight:800;color:{CORES['navy']};">{fechamento['nota_final']}</div>
+            <div style="font-size:0.78rem;color:{CORES['texto_fraco']};">
+                Nota bloqueada — alteração requer autorização do Administrador (o Gestor não pode recalculá-la).</div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+
+
 def _renderizar_cards(kpis: dict, analista: str) -> None:
     st.markdown("##### Cards do analista")
     col1, col2, col3, col4 = st.columns(4)
@@ -146,6 +180,18 @@ def _renderizar_cards(kpis: dict, analista: str) -> None:
     col7.metric("Média dias úteis de atraso", kpis["media_dias_atraso"])
 
 
+def _renderizar_grafico_individual(df: pd.DataFrame, analista: str, kpis: dict) -> None:
+    st.markdown("##### Gráficos")
+    col_donut, col_gauge = st.columns(2)
+    with col_donut:
+        st.plotly_chart(
+            grafico_classificacao_prazo(df[df["responsavel"] == analista], "Classificação das Entregas"),
+            use_container_width=True,
+        )
+    with col_gauge:
+        st.plotly_chart(gauge_sla(kpis["pct_cumprimento_prazo"], "% Cumprimento do Prazo"), use_container_width=True)
+
+
 def _renderizar_relatorio_individual(df: pd.DataFrame, analista: str, rotulo_periodo: str, usuario: dict) -> None:
     st.markdown("##### Relatório individual")
     relacao = relacao_analises_analista(df, analista)
@@ -175,7 +221,7 @@ def _renderizar_relatorio_individual(df: pd.DataFrame, analista: str, rotulo_per
         registrar_atividade(usuario["username"], usuario.get("perfil"), "RELATORIO_KPI_PRAZO_ANALISTA", modulo="analistas", detalhe=analista)
 
 
-def _renderizar_consolidado(df: pd.DataFrame, usuario: dict) -> None:
+def _renderizar_consolidado(df: pd.DataFrame, usuario: dict, notas_fechadas: dict[str, dict]) -> None:
     st.markdown("##### Indicadores consolidados da equipe")
     st.caption("Visão restrita a Gestor/Administrador — nunca exibida a analistas comuns (item 20).")
     tabela = tabela_consolidada_por_analista(df, RESPONSAVEIS)
@@ -199,6 +245,14 @@ def _renderizar_consolidado(df: pd.DataFrame, usuario: dict) -> None:
     col5.metric("Média dias úteis de atraso (equipe)", media_atraso_geral)
     col6.metric("Média dias úteis de antecipação (equipe)", media_antecip_geral)
 
+    st.markdown("##### Gráficos")
+    col_donut, col_ranking = st.columns(2)
+    with col_donut:
+        st.plotly_chart(grafico_classificacao_prazo(df, "Classificação das Entregas — Equipe"), use_container_width=True)
+    with col_ranking:
+        st.plotly_chart(grafico_ranking_cumprimento_prazo(tabela), use_container_width=True)
+    st.plotly_chart(grafico_atrasados_por_analista(tabela), use_container_width=True)
+
     st.markdown("###### Por disciplina")
     if "disciplina" in df.columns and not df.empty:
         por_disciplina = df.groupby("disciplina").size().reset_index(name="Projetos").rename(columns={"disciplina": "Disciplina"})
@@ -212,6 +266,10 @@ def _renderizar_consolidado(df: pd.DataFrame, usuario: dict) -> None:
         "media_dias_antecipacao": "Média Antecipação (dias úteis)", "media_dias_atraso": "Média Atraso (dias úteis)",
         "atrasados_em_analise": "Atrasados em Análise", "vencem_2_dias_uteis": "Vencem em 2 Dias Úteis",
     })
+    if pode_area(usuario, "analistas.notas"):
+        tabela_exibicao["Nota Final (fechada) 🔒"] = tabela_exibicao["Analista"].map(
+            lambda a: notas_fechadas[a]["nota_final"] if a in notas_fechadas else "—"
+        )
     st.dataframe(tabela_exibicao, use_container_width=True, hide_index=True)
 
 
@@ -253,11 +311,16 @@ def render(usuario: dict) -> None:
         analista_alvo = analista_vinculado
         st.caption(f"Exibindo apenas os indicadores de **{analista_alvo}** — você só pode ver os seus próprios indicadores de prazo.")
 
+    notas_fechadas = _ultima_nota_fechada_por_analista()
+
     if analista_alvo is None:
-        _renderizar_consolidado(df_filtrado, usuario)
+        _renderizar_consolidado(df_filtrado, usuario, notas_fechadas)
         return
 
+    _renderizar_nota_avaliacao(analista_alvo, usuario, notas_fechadas)
     kpis = calcular_kpis_prazo_analista(df_filtrado, analista_alvo)
     _renderizar_cards(kpis, analista_alvo)
+    st.divider()
+    _renderizar_grafico_individual(df_filtrado, analista_alvo, kpis)
     st.divider()
     _renderizar_relatorio_individual(df_filtrado, analista_alvo, rotulo_periodo, usuario)

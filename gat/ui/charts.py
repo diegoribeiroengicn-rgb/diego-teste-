@@ -276,6 +276,62 @@ def grafico_linha_tempo_projeto(intervalos_projeto: pd.DataFrame) -> go.Figure:
     return _aplicar_layout(fig, titulo)
 
 
+_LABEL_CLASSIFICACAO_PRAZO = {
+    "ANTES_DO_PRAZO": "Antes do prazo", "NO_DIA": "No dia", "COM_ATRASO": "Com atraso",
+}
+_CORES_CLASSIFICACAO_PRAZO = {
+    "Antes do prazo": CORES["verde"], "No dia": CORES["ceu"], "Com atraso": CORES["vermelho"],
+}
+
+
+def grafico_classificacao_prazo(df: pd.DataFrame, titulo: str = "Classificação das Entregas") -> go.Figure:
+    """Rosca com a distribuição das entregas já concluídas entre antes do
+    prazo, no dia e com atraso — usada nos KPIs de Prazo dos Analistas."""
+    if df.empty or "_classificacao_entrega" not in df.columns:
+        return _aplicar_layout(go.Figure(), titulo)
+    concluidas = df[df["_classificacao_entrega"].notna()].copy()
+    if concluidas.empty:
+        return _aplicar_layout(go.Figure(), titulo)
+    concluidas["_classificacao_label"] = concluidas["_classificacao_entrega"].map(_LABEL_CLASSIFICACAO_PRAZO)
+    return grafico_status_donut(concluidas, "_classificacao_label", titulo, _CORES_CLASSIFICACAO_PRAZO)
+
+
+def grafico_ranking_cumprimento_prazo(tabela: pd.DataFrame, top_n: int = 15) -> go.Figure:
+    """Ranking dos analistas por % de cumprimento do prazo (antes do prazo
+    + no dia), colorido por faixa de governança (mesma escala do gauge de
+    SLA) — usado na visão consolidada dos KPIs de Prazo dos Analistas."""
+    titulo = "% Cumprimento do Prazo por Analista"
+    if tabela.empty or "pct_cumprimento_prazo" not in tabela.columns:
+        return _aplicar_layout(go.Figure(), titulo)
+    ordenado = tabela.sort_values("pct_cumprimento_prazo", ascending=True).tail(top_n)
+    cores = [
+        CORES["verde"] if v >= 80 else CORES["dourado"] if v >= 60 else CORES["vermelho"]
+        for v in ordenado["pct_cumprimento_prazo"]
+    ]
+    fig = go.Figure(go.Bar(
+        x=ordenado["pct_cumprimento_prazo"], y=ordenado["Analista"], orientation="h", marker_color=cores,
+        text=ordenado["pct_cumprimento_prazo"].map(lambda v: f"{v}%"), textposition="outside",
+    ))
+    fig.update_xaxes(range=[0, 105])
+    return _aplicar_layout(fig, titulo)
+
+
+def grafico_atrasados_por_analista(tabela: pd.DataFrame, top_n: int = 15) -> go.Figure:
+    """Ranking dos analistas com mais análises ativas atualmente atrasadas
+    — indicador operacional dos KPIs de Prazo dos Analistas."""
+    titulo = "Análises Ativas Atrasadas por Analista"
+    if tabela.empty or "atrasados_em_analise" not in tabela.columns:
+        return _aplicar_layout(go.Figure(), titulo)
+    com_atraso = tabela[tabela["atrasados_em_analise"] > 0].sort_values("atrasados_em_analise", ascending=True).tail(top_n)
+    if com_atraso.empty:
+        return _aplicar_layout(go.Figure(), titulo)
+    fig = go.Figure(go.Bar(
+        x=com_atraso["atrasados_em_analise"], y=com_atraso["Analista"], orientation="h", marker_color=CORES["vermelho"],
+        text=com_atraso["atrasados_em_analise"], textposition="outside",
+    ))
+    return _aplicar_layout(fig, titulo)
+
+
 def grafico_disciplina(df: pd.DataFrame, coluna_disciplina: str = "disciplina") -> go.Figure:
     """Distribuição de projetos por disciplina técnica."""
     if df.empty or coluna_disciplina not in df.columns:
