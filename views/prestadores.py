@@ -202,6 +202,9 @@ def render(usuario: dict) -> None:
         chave="prestadores",
         abrir_dialog_edicao=_abrir_edicao,
         obter_registro=obter_prestador,
+        tabela_arquivo="prestadores",
+        usuario=usuario,
+        descricao_arquivo=lambda r: f"{r.get('codigo')} — {r.get('prestador')} (AT {r.get('num_at')})",
     )
 
     if pode_area(usuario, "prestadores.exportar"):

@@ -33,6 +33,7 @@ from gat.styles import cabecalho_institucional, injetar_css_global, logo_base64
 from views import (
     administracao,
     alertas,
+    arquivo,
     alertas_cessionarios,
     alertas_prestadores,
     avaliacao_analistas,
@@ -156,6 +157,11 @@ if pode_area(usuario, "pmo"):
     paginas["PMO"] = [
         _pagina(lambda: pmo_portfolio.render(usuario), "Portfólio de Projetos", ":material/dashboard_customize:", "pmo_portfolio"),
         _pagina(lambda: pmo_projeto.render(usuario), "Projeto", ":material/folder_open:", "pmo_projeto"),
+    ]
+
+if pode_area(usuario, "arquivo"):
+    paginas["Arquivo"] = [
+        _pagina(lambda: arquivo.render(usuario), "Arquivo", ":material/inventory_2:", "arquivo"),
     ]
 
 grupo_gestao = []

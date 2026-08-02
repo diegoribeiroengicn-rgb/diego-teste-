@@ -8,6 +8,7 @@ import streamlit as st
 from datetime import datetime
 
 from gat import backup_externo
+from gat.arquivo_business_rules import perfil_pode_arquivar_e_restaurar
 from gat.config import MAX_BACKUPS, PERFIS_OPCOES, RESPONSAVEIS
 from gat.database import (
     criar_backup,
@@ -25,6 +26,7 @@ from gat.database import (
 )
 from gat.permissions import exigir_area, pode_area
 from gat.ui.formatos import formatar_datahora_br, formatar_datahoras_df
+from gat.ui.modals_arquivo import dialog_arquivar
 from gat.ui.modals_usuarios import renderizar_editor_usuario
 
 _TIPOS_HISTORICO = ["Todas", "prestadores", "cessionarios", "reunioes", "planos_acao", "seguranca"]
@@ -117,8 +119,17 @@ def _renderizar_usuarios(usuario: dict) -> None:
     alvo_username = st.selectbox("Selecionar usuário", options=lista_usuarios, key="admin_selecionar_usuario")
     linha_alvo = df_usuarios[df_usuarios["username"] == alvo_username].iloc[0].to_dict()
 
-    if st.button("Editar usuário selecionado", icon=":material/manage_accounts:", type="primary", key="abrir_editar_usuario"):
+    col_editar, col_arquivar = st.columns(2)
+    if col_editar.button("Editar usuário selecionado", icon=":material/manage_accounts:", type="primary", key="abrir_editar_usuario"):
         st.session_state["admin_usuario_editando"] = alvo_username
+
+    if perfil_pode_arquivar_e_restaurar(usuario.get("perfil")):
+        if alvo_username == usuario["username"]:
+            col_arquivar.caption("Não é possível arquivar o próprio usuário logado.")
+        elif col_arquivar.button("Arquivar usuário (Analista)", icon=":material/archive:", key="admin_arquivar_usuario"):
+            dialog_arquivar(
+                "usuarios", int(linha_alvo["id"]), f"{linha_alvo['username']} — {linha_alvo.get('nome_completo') or ''}", usuario["username"]
+            )
 
     if st.session_state.get("admin_usuario_editando") == alvo_username:
         renderizar_editor_usuario(usuario, linha_alvo)

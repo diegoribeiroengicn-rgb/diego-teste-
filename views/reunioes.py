@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import streamlit as st
 
+from gat.arquivo_business_rules import perfil_pode_arquivar_e_restaurar
 from gat.business_rules import filtrar_por_competencia
 from gat.database import listar_planos_da_reuniao, listar_reunioes, obter_reuniao
 from gat.permissions import exigir_area
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.formatos import formatar_data_br, formatar_datas_df
 from gat.ui.kpi_cards import renderizar_kpis
+from gat.ui.modals_arquivo import dialog_arquivar
 from gat.ui.modals_gestao import dialog_plano_acao, dialog_reuniao
 
 
@@ -94,10 +96,15 @@ def render(usuario: dict) -> None:
                     hide_index=True,
                 )
 
-            col_editar, col_novo_plano = st.columns(2)
+            col_editar, col_novo_plano, col_arquivar = st.columns(3)
             with col_editar:
                 if st.button("Editar reunião", icon=":material/edit:", key=f"editar_reuniao_{linha['id']}", use_container_width=True):
                     dialog_reuniao(usuario["username"], reuniao)
             with col_novo_plano:
                 if st.button("Novo plano de ação", icon=":material/add_task:", key=f"novo_plano_{linha['id']}", use_container_width=True):
                     dialog_plano_acao(usuario["username"], reuniao_id_padrao=int(linha["id"]))
+            with col_arquivar:
+                if perfil_pode_arquivar_e_restaurar(usuario.get("perfil")) and st.button(
+                    "Arquivar reunião", icon=":material/archive:", key=f"arquivar_reuniao_{linha['id']}", use_container_width=True
+                ):
+                    dialog_arquivar("reunioes", int(linha["id"]), linha["titulo"], usuario["username"])

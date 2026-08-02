@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import streamlit as st
 
+from gat.arquivo_business_rules import perfil_pode_arquivar_e_restaurar
 from gat.database import listar_cadastro_cessionarios, listar_cessionarios, obter_cadastro_cessionario
 from gat.permissions import exigir_area, exigir_modulo, pode_area
 from gat.ui.formatos import formatar_datas_df
+from gat.ui.modals_arquivo import dialog_arquivar
 from gat.ui.modals_cadastro import dialog_cadastro_cessionario, dialog_status_cadastro_cessionario
 from gat.ui.tables import tabela_com_edicao
 
@@ -82,7 +84,7 @@ def render(usuario: dict) -> None:
         st.caption(f"LUC: {registro['luc']}")
 
     if pode_editar:
-        col_btn1, col_btn2 = st.columns(2)
+        col_btn1, col_btn2, col_btn3 = st.columns(3)
         if col_btn1.button("Editar cadastro", icon=":material/edit:", use_container_width=True, key="cadc_editar_detalhe"):
             exigir_area(usuario, "cessionarios.cadastro_mestre")
             dialog_cadastro_cessionario(usuario["username"], registro)
@@ -90,6 +92,10 @@ def render(usuario: dict) -> None:
         if col_btn2.button(rotulo_status, icon=":material/block:", use_container_width=True, key="cadc_status_detalhe"):
             exigir_area(usuario, "cessionarios.cadastro_mestre")
             dialog_status_cadastro_cessionario(usuario["username"], registro)
+        if perfil_pode_arquivar_e_restaurar(usuario.get("perfil")) and col_btn3.button(
+            "Arquivar", icon=":material/archive:", use_container_width=True, key="cadc_arquivar_detalhe"
+        ):
+            dialog_arquivar("cadastro_cessionarios", registro["id"], f"{registro['codigo']} — {registro['nome_empresa']}", usuario["username"])
 
     st.markdown("###### Projetos vinculados a este cadastro")
     df_projetos = listar_cessionarios()

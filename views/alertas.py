@@ -11,6 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from gat.alertas_engine import TIPO_ALERTA_LABELS, TIPO_ALERTA_MAXIMO, TIPO_AVALIACAO_OBRIGATORIA, montar_alertas_modulo
+from gat.arquivo_business_rules import perfil_pode_arquivar_e_restaurar
 from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia, situacao_prazo
 from gat.calendario import dias_uteis_entre
 from gat.config import DISCIPLINAS, PERFIL_ADMIN, PERFIL_GESTOR, RESPONSAVEIS
@@ -31,6 +32,7 @@ from gat.permissions import exigir_area, pode_area, pode_modulo
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.formatos import formatar_data_br, formatar_datahora_br, formatar_datahoras_df
 from gat.ui.modals_alerta_manual import dialog_alerta_manual, dialog_encerrar_alerta_manual
+from gat.ui.modals_arquivo import dialog_arquivar
 from gat.ui.modals_avaliacao import dialog_avaliacao_checklist
 
 _LABEL_STATUS = {
@@ -253,10 +255,15 @@ def _secao_alertas_manuais(usuario: dict, modulos_incluidos: list[str], modulo_c
                             formatar_datahoras_df(historico, ["data_hora"])[["campo", "valor_anterior", "valor_novo", "usuario", "data_hora"]],
                             hide_index=True, use_container_width=True,
                         )
-                    if pode_gerenciar and st.button("Reabrir", key=f"am_reabrir_{alerta['id']}"):
+                    col_reabrir, col_arquivar = st.columns(2)
+                    if pode_gerenciar and col_reabrir.button("Reabrir", key=f"am_reabrir_{alerta['id']}", use_container_width=True):
                         reabrir_alerta_manual(alerta["id"], usuario["username"])
                         st.toast("Alerta manual reaberto.", icon=":material/check_circle:")
                         st.rerun()
+                    if perfil_pode_arquivar_e_restaurar(usuario.get("perfil")) and col_arquivar.button(
+                        "Arquivar", icon=":material/archive:", key=f"am_arquivar_{alerta['id']}", use_container_width=True
+                    ):
+                        dialog_arquivar("alertas_manuais", int(alerta["id"]), alerta["titulo"], usuario["username"])
 
 
 def render(usuario: dict, modulo: str | None = None) -> None:

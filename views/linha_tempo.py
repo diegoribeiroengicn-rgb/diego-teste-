@@ -12,6 +12,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from gat.arquivo_business_rules import perfil_pode_arquivar_e_restaurar
 from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia
 from gat.calendario import calcular_hold_dias, dias_uteis_entre
 from gat.config import DISCIPLINAS, RESPONSAVEIS
@@ -28,6 +29,7 @@ from gat.ui.charts import (
 )
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.formatos import formatar_data_br, formatar_datas_df
+from gat.ui.modals_arquivo import dialog_arquivar_projeto_gat
 
 _MODULOS_VISIVEIS = {"Prestadores": "prestadores", "Cessionários": "cessionarios"}
 
@@ -259,6 +261,11 @@ def render(usuario: dict) -> None:
             f":material/warning: {int(resumo_entidade['qtd_inconsistentes'])} intervalo(s) com data de revisão "
             "inconsistente — verifique as datas de entrada das revisões deste código na sequência abaixo."
         )
+
+    codigo_entidade = resumo_entidade.get("codigo")
+    if codigo_entidade and perfil_pode_arquivar_e_restaurar(usuario.get("perfil")):
+        if st.button("Arquivar Projeto (todas as análises deste código)", icon=":material/archive:", key=f"lt_arquivar_projeto_{chave_entidade}"):
+            dialog_arquivar_projeto_gat(codigo_entidade, usuario["username"])
 
     projetos_entidade = projetos_por_entidade(df, coluna_nome)
     projetos_entidade = projetos_entidade[projetos_entidade["chave_entidade"] == chave_entidade]

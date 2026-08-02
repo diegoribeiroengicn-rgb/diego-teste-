@@ -14,6 +14,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import gat.pmo_database as pmodb
+from gat.arquivo_business_rules import perfil_pode_arquivar_e_restaurar
 from gat.config import CORES
 from gat.permissions import exigir_area
 from gat.pmo_business_rules import (
@@ -32,6 +33,7 @@ from gat.pmo_business_rules import (
 from gat.pmo_cronograma_import import FORMATOS_INTERPRETAVEIS, detectar_formato, interpretar_cronograma
 from gat.pmo_relatorios import TITULOS_RELATORIO, gerar_opr_pmo, gerar_relatorio_pmo, nome_arquivo_relatorio_pmo
 from gat.ui.formatos import formatar_data_br, formatar_datas_df
+from gat.ui.modals_arquivo import dialog_arquivar
 from gat.ui.modals_pmo import dialog_configurar_kpis, dialog_editar_projeto
 
 _CHAVE_PAGINA_PORTFOLIO = "pmo_portfolio"
@@ -265,6 +267,18 @@ def _tab_cronograma(projeto: dict, usuario: dict) -> None:
                 formatar_datas_df(lembretes, ["enviado_em"])[["enviado_em", "mensagem"]].rename(columns={"enviado_em": "Enviado em", "mensagem": "Mensagem"}),
                 use_container_width=True, hide_index=True,
             )
+
+    arquivos = pmodb.listar_arquivos_cronograma(projeto_id)
+    if not arquivos.empty:
+        with st.expander(f"Documentos de cronograma anexados ({len(arquivos)})", icon=":material/folder_open:"):
+            for _, arq in arquivos.iterrows():
+                col_nome, col_arquivar = st.columns([4, 1])
+                situacao = "ativo" if arq["ativo"] else "removido"
+                col_nome.write(f"**{arq['nome_arquivo']}** ({arq['formato']}) — {situacao}, enviado por {arq['enviado_por']}")
+                if perfil_pode_arquivar_e_restaurar(usuario.get("perfil")) and col_arquivar.button(
+                    "Arquivar", icon=":material/archive:", key=f"pmo_arquivar_doc_{arq['id']}", use_container_width=True
+                ):
+                    dialog_arquivar("pmo_cronograma_arquivos", int(arq["id"]), arq["nome_arquivo"], usuario["username"])
 
 
 # ---------------------------------------------------------------------------
@@ -611,13 +625,18 @@ _STATUS_PROJETO = ["EM ANDAMENTO", "PAUSADO", "CONCLUÍDO", "CANCELADO"]
 
 
 def _tab_configuracao(projeto: dict, habilitados: set[str], usuario: dict) -> None:
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("Editar dados do projeto", icon=":material/edit:", use_container_width=True):
             dialog_editar_projeto(usuario["username"], projeto)
     with col2:
         if st.button("Configurar Indicadores", icon=":material/tune:", use_container_width=True):
             dialog_configurar_kpis(usuario["username"], projeto["id"])
+    with col3:
+        if perfil_pode_arquivar_e_restaurar(usuario.get("perfil")) and st.button(
+            "Arquivar Projeto", icon=":material/archive:", use_container_width=True
+        ):
+            dialog_arquivar("pmo_projetos", projeto["id"], projeto["nome"], usuario["username"], ao_concluir=_voltar_portfolio)
 
     st.markdown("###### Status do projeto")
     novo_status = st.selectbox(

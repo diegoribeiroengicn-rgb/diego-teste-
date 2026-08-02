@@ -400,6 +400,7 @@ AREAS_PERMISSAO = {
     "visao_gestor": "Visão do Gestor — Painel executivo diário da equipe (Gestor/Administrador)",
     "pmo": "PMO — Acessar Portfólio de Projetos e páginas de projeto",
     "pmo.cadastrar": "PMO — Cadastrar novo projeto",
+    "arquivo": "Arquivo — Acessar o módulo de arquivamento/restauração de registros",
 }
 
 # Áreas sensíveis que, para usuários já existentes (sem uma escolha explícita
@@ -465,6 +466,7 @@ PERFIS_PADRAO: dict[str, dict[str, dict[str, bool]]] = {
             "visao_gestor": False,
             "pmo": False,
             "pmo.cadastrar": False,
+            "arquivo": True,
             "avaliacoes.editar": False,
             "avaliacoes.relatorios": False,
             "opr.prestadores": True,
@@ -517,6 +519,7 @@ PERFIS_PADRAO: dict[str, dict[str, dict[str, bool]]] = {
             "visao_gestor": False,
             "pmo": False,
             "pmo.cadastrar": False,
+            "arquivo": False,
             "avaliacoes.editar": False,
             "avaliacoes.relatorios": False,
             "opr.prestadores": True,

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from gat.arquivo_business_rules import perfil_pode_arquivar_e_restaurar
 from gat.database import (
     listar_cadastro_prestadores,
     listar_obras_prestador,
@@ -17,6 +18,7 @@ from gat.database import (
 )
 from gat.permissions import exigir_area, exigir_modulo, pode_area
 from gat.ui.formatos import formatar_datas_df
+from gat.ui.modals_arquivo import dialog_arquivar
 from gat.ui.modals_cadastro import (
     dialog_cadastro_prestador,
     dialog_obra_prestador,
@@ -95,7 +97,7 @@ def render(usuario: dict) -> None:
     col_c.metric("N° PEP", registro.get("numero_pep") or "—")
 
     if pode_editar:
-        col_btn1, col_btn2 = st.columns(2)
+        col_btn1, col_btn2, col_btn3 = st.columns(3)
         if col_btn1.button("Editar cadastro", icon=":material/edit:", use_container_width=True, key="cadp_editar_detalhe"):
             exigir_area(usuario, "prestadores.cadastro_mestre")
             dialog_cadastro_prestador(usuario["username"], registro)
@@ -103,6 +105,10 @@ def render(usuario: dict) -> None:
         if col_btn2.button(rotulo_status, icon=":material/block:", use_container_width=True, key="cadp_status_detalhe"):
             exigir_area(usuario, "prestadores.cadastro_mestre")
             dialog_status_cadastro_prestador(usuario["username"], registro)
+        if perfil_pode_arquivar_e_restaurar(usuario.get("perfil")) and col_btn3.button(
+            "Arquivar", icon=":material/archive:", use_container_width=True, key="cadp_arquivar_detalhe"
+        ):
+            dialog_arquivar("cadastro_prestadores", registro["id"], f"{registro['codigo']} — {registro['nome_empresa']}", usuario["username"])
 
     st.markdown("###### Obras / Áreas Vinculadas")
     obras = listar_obras_prestador(prestador_id)

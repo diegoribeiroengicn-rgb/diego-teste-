@@ -81,4 +81,7 @@ def render(usuario: dict) -> None:
         chave="planos_acao",
         abrir_dialog_edicao=lambda registro: dialog_plano_acao(usuario["username"], registro),
         obter_registro=obter_plano_acao,
+        tabela_arquivo="planos_acao",
+        usuario=usuario,
+        descricao_arquivo=lambda r: r.get("descricao") or f"Plano de ação #{r.get('id')}",
     )

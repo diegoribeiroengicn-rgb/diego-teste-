@@ -197,6 +197,9 @@ def render(usuario: dict) -> None:
         chave="cessionarios",
         abrir_dialog_edicao=_abrir_edicao,
         obter_registro=obter_cessionario,
+        tabela_arquivo="cessionarios",
+        usuario=usuario,
+        descricao_arquivo=lambda r: f"{r.get('codigo')} — {r.get('cessionario')} (AT {r.get('num_at')})",
     )
 
     if pode_area(usuario, "cessionarios.exportar"):

@@ -30,6 +30,7 @@ from gat.config import (
     MAX_BACKUPS,
     MODULOS_CONTROLADOS,
     PERFIL_ADMIN,
+    PERFIL_CONSULTA,
     PERFIS_PADRAO,
     SEED_DB_PATH,
 )
@@ -1038,6 +1039,94 @@ def _migracao_0012_alertas_manuais(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_alertas_manuais_status ON alertas_manuais(status)")
 
 
+def _migracao_0018_arquivo_schema(conn: sqlite3.Connection) -> None:
+    """
+    Módulo Arquivo: arquivamento lógico (nunca exclusão) para os registros
+    operacionais do GAT e do PMO, mais a exclusão definitiva controlada.
+
+    Cada tabela participante ganha 4 colunas aditivas — nenhuma linha
+    existente é tocada, apenas os novos campos ficam NULL/0 (equivalente a
+    "ativo"):
+    * `arquivado_em` / `arquivado_por` / `motivo_arquivamento`: preenchidos
+      apenas quando o registro é arquivado; voltam a NULL ao ser restaurado.
+    * `arquivado_teste`: marca registros de teste (área "Testes" do módulo
+      Arquivo), independente das demais categorias.
+
+    `arquivo_auditoria` registra toda operação de arquivamento, restauração
+    e exclusão definitiva (quem, quando, o quê, justificativa) — é o
+    registro que alimenta os relatórios de Arquivamentos/Exclusões/
+    Restaurações e nunca é apagado, nem quando o próprio registro de
+    origem é excluído definitivamente.
+    """
+    tabelas_arquivaveis = [
+        "pmo_projetos", "prestadores", "cessionarios", "cadastro_prestadores",
+        "cadastro_cessionarios", "usuarios", "reunioes", "planos_acao",
+        "alertas_manuais", "pmo_cronograma_arquivos",
+    ]
+    for tabela in tabelas_arquivaveis:
+        _garantir_coluna(conn, tabela, "arquivado_em", "TEXT")
+        _garantir_coluna(conn, tabela, "arquivado_por", "TEXT")
+        _garantir_coluna(conn, tabela, "motivo_arquivamento", "TEXT")
+        _garantir_coluna(conn, tabela, "arquivado_teste", "INTEGER NOT NULL DEFAULT 0")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS arquivo_auditoria (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tabela TEXT NOT NULL,
+            registro_id INTEGER NOT NULL,
+            tipo_operacao TEXT NOT NULL,
+            usuario TEXT NOT NULL,
+            data_hora TEXT NOT NULL,
+            justificativa TEXT,
+            descricao_registro TEXT,
+            origem TEXT
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_arquivo_auditoria_tabela ON arquivo_auditoria(tabela, registro_id)")
+
+
+def _migracao_0019_arquivo_permissao_consulta(conn: sqlite3.Connection) -> None:
+    """
+    Ajuste pontual de permissões do módulo Arquivo: todos os perfis podem
+    arquivar/restaurar, exceto o perfil Consulta. Como "arquivo" é uma área
+    nova, o fallback padrão (`.get(area, True)`) liberaria acesso a todo
+    mundo por omissão — para usuários Consulta já existentes, bloqueia
+    explicitamente, do mesmo jeito que o Administrador poderia autorizar
+    manualmente depois. Usuários novos já nascem corretos via
+    `PERFIS_PADRAO`; isto é só o backfill dos que já existiam.
+    """
+    for linha in conn.execute("SELECT id FROM usuarios WHERE perfil = ?", (PERFIL_CONSULTA,)).fetchall():
+        ja_definida = conn.execute(
+            "SELECT 1 FROM permissoes_area WHERE usuario_id = ? AND area = 'arquivo'", (linha["id"],)
+        ).fetchone()
+        if not ja_definida:
+            conn.execute(
+                "INSERT INTO permissoes_area (usuario_id, area, permitido) VALUES (?, 'arquivo', 0)", (linha["id"],)
+            )
+
+
+def _migracao_0020_manual_arquivo(conn: sqlite3.Connection) -> None:
+    """
+    Atualiza automaticamente o Manual do Sistema com o capítulo do módulo
+    Arquivo — acrescentado ao final da lista já existente, sem alterar
+    nenhum capítulo do GAT ou do PMO.
+    """
+    from gat.arquivo_manual_conteudo import CAPITULOS_ARQUIVO
+
+    agora = datetime.now().isoformat()
+    maior_ordem = conn.execute("SELECT COALESCE(MAX(ordem), 0) FROM manual_capitulos").fetchone()[0]
+    for indice, (titulo, conteudo) in enumerate(CAPITULOS_ARQUIVO, start=1):
+        existe = conn.execute("SELECT id FROM manual_capitulos WHERE titulo = ?", (titulo,)).fetchone()
+        if existe:
+            continue
+        conn.execute(
+            "INSERT INTO manual_capitulos (ordem, titulo, conteudo, perfis_visiveis, criado_em) VALUES (?, ?, ?, NULL, ?)",
+            (maior_ordem + indice, titulo, conteudo, agora),
+        )
+
+
 _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (1, "Índices de busca por N° AT e nome em Prestadores e Cessionários", _migracao_0001_indices_busca),
     (2, "Índices para avaliações (checklist/analistas), alertas com radar e histórico de atividades", _migracao_0002_indices_avaliacoes_alertas),
@@ -1056,6 +1145,9 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (15, "KPIs de prazo dos analistas: vínculo usuários.analista_vinculado com a lista RESPONSAVEIS", _migracao_0015_vinculo_analista_usuario),
     (16, "Módulo PMO: schema inicial (projetos, KPIs habilitados, cronograma, medições, entregáveis, riscos, comunicações, alerta automático de cronograma) + origem em Reuniões/Planos de Ação", _migracao_0016_pmo_schema),
     (17, "Módulo PMO: capítulos 'PMO – Gestão de Projetos' e 'Biblioteca de Indicadores (PMO)' no Manual do Sistema", _migracao_0017_manual_pmo),
+    (18, "Módulo Arquivo: arquivamento lógico (arquivado_em/por/motivo/teste) em pmo_projetos, prestadores, cessionarios, cadastro_prestadores, cadastro_cessionarios, usuarios, reunioes, planos_acao, alertas_manuais, pmo_cronograma_arquivos + tabela arquivo_auditoria", _migracao_0018_arquivo_schema),
+    (19, "Módulo Arquivo: bloqueia por padrão o acesso do perfil Consulta (todos os demais perfis mantêm acesso)", _migracao_0019_arquivo_permissao_consulta),
+    (20, "Módulo Arquivo: capítulo 'Módulo Arquivo' no Manual do Sistema", _migracao_0020_manual_arquivo),
 ]
 
 
@@ -1447,10 +1539,14 @@ def criar_usuario(username: str, senha: str, nome_completo: str, perfil: str, ex
 
 
 def listar_usuarios() -> pd.DataFrame:
+    """Só usuários ativos (não arquivados) — os arquivados pelo módulo
+    Arquivo ficam disponíveis exclusivamente em `gat.arquivo_database`.
+    Arquivar um analista não bloqueia o login por si só: isso continua
+    sendo controlado pelo campo `ativo` já existente."""
     with _conectar() as conn:
         return pd.read_sql_query(
             "SELECT id, username, nome_completo, perfil, ativo, deve_trocar_senha, ultimo_acesso, criado_em, analista_vinculado "
-            "FROM usuarios ORDER BY username",
+            "FROM usuarios WHERE arquivado_em IS NULL ORDER BY username",
             conn,
         )
 
@@ -1762,8 +1858,10 @@ def excluir_prestador(registro_id: int) -> None:
 
 
 def listar_prestadores() -> pd.DataFrame:
+    """Só análises ativas — as arquivadas pelo módulo Arquivo ficam
+    disponíveis exclusivamente em `gat.arquivo_database`."""
     with _conectar() as conn:
-        return pd.read_sql_query("SELECT * FROM prestadores ORDER BY item, id", conn)
+        return pd.read_sql_query("SELECT * FROM prestadores WHERE arquivado_em IS NULL ORDER BY item, id", conn)
 
 
 def obter_prestador(registro_id: int) -> dict[str, Any] | None:
@@ -1814,8 +1912,10 @@ def excluir_cessionario(registro_id: int) -> None:
 
 
 def listar_cessionarios() -> pd.DataFrame:
+    """Só análises ativas — as arquivadas pelo módulo Arquivo ficam
+    disponíveis exclusivamente em `gat.arquivo_database`."""
     with _conectar() as conn:
-        return pd.read_sql_query("SELECT * FROM cessionarios ORDER BY item, id", conn)
+        return pd.read_sql_query("SELECT * FROM cessionarios WHERE arquivado_em IS NULL ORDER BY item, id", conn)
 
 
 def obter_cessionario(registro_id: int) -> dict[str, Any] | None:
@@ -1874,8 +1974,10 @@ def atualizar_cadastro_prestador(registro_id: int, dados: dict[str, Any], usuari
 
 
 def listar_cadastro_prestadores() -> pd.DataFrame:
+    """Só prestadores ativos — os arquivados pelo módulo Arquivo ficam
+    disponíveis exclusivamente em `gat.arquivo_database`."""
     with _conectar() as conn:
-        return pd.read_sql_query("SELECT * FROM cadastro_prestadores ORDER BY codigo", conn)
+        return pd.read_sql_query("SELECT * FROM cadastro_prestadores WHERE arquivado_em IS NULL ORDER BY codigo", conn)
 
 
 def obter_cadastro_prestador(registro_id: int) -> dict[str, Any] | None:
@@ -2013,8 +2115,10 @@ def atualizar_cadastro_cessionario(registro_id: int, dados: dict[str, Any], usua
 
 
 def listar_cadastro_cessionarios() -> pd.DataFrame:
+    """Só cessionários ativos — os arquivados pelo módulo Arquivo ficam
+    disponíveis exclusivamente em `gat.arquivo_database`."""
     with _conectar() as conn:
-        return pd.read_sql_query("SELECT * FROM cadastro_cessionarios ORDER BY codigo", conn)
+        return pd.read_sql_query("SELECT * FROM cadastro_cessionarios WHERE arquivado_em IS NULL ORDER BY codigo", conn)
 
 
 def obter_cadastro_cessionario(registro_id: int) -> dict[str, Any] | None:
@@ -2188,8 +2292,12 @@ def excluir_reuniao(reuniao_id: int) -> None:
 
 
 def listar_reunioes() -> pd.DataFrame:
+    """Só reuniões ativas — as arquivadas pelo módulo Arquivo ficam
+    disponíveis exclusivamente em `gat.arquivo_database`."""
     with _conectar() as conn:
-        return pd.read_sql_query("SELECT * FROM reunioes ORDER BY COALESCE(data_prevista, criado_em) DESC", conn)
+        return pd.read_sql_query(
+            "SELECT * FROM reunioes WHERE arquivado_em IS NULL ORDER BY COALESCE(data_prevista, criado_em) DESC", conn
+        )
 
 
 def obter_reuniao(reuniao_id: int) -> dict[str, Any] | None:
@@ -2214,7 +2322,9 @@ def obter_reuniao(reuniao_id: int) -> dict[str, Any] | None:
 
 def listar_planos_da_reuniao(reuniao_id: int) -> pd.DataFrame:
     with _conectar() as conn:
-        return pd.read_sql_query("SELECT * FROM planos_acao WHERE reuniao_id = ? ORDER BY id", conn, params=(reuniao_id,))
+        return pd.read_sql_query(
+            "SELECT * FROM planos_acao WHERE reuniao_id = ? AND arquivado_em IS NULL ORDER BY id", conn, params=(reuniao_id,)
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -2295,8 +2405,12 @@ def salvar_observacao_mensal(competencia: str, texto: str, usuario: str) -> None
 
 
 def listar_planos_acao() -> pd.DataFrame:
+    """Só planos de ação ativos — os arquivados pelo módulo Arquivo ficam
+    disponíveis exclusivamente em `gat.arquivo_database`."""
     with _conectar() as conn:
-        return pd.read_sql_query("SELECT * FROM planos_acao ORDER BY COALESCE(prazo, criado_em) ASC", conn)
+        return pd.read_sql_query(
+            "SELECT * FROM planos_acao WHERE arquivado_em IS NULL ORDER BY COALESCE(prazo, criado_em) ASC", conn
+        )
 
 
 def obter_plano_acao(plano_id: int) -> dict[str, Any] | None:
@@ -2681,10 +2795,13 @@ def reabrir_alerta_manual(alerta_id: int, usuario: str) -> None:
 
 
 def listar_alertas_manuais(modulo: str | None = None) -> pd.DataFrame:
-    query = "SELECT * FROM alertas_manuais"
+    """Só alertas ativos — os arquivados pelo módulo Arquivo somem da
+    Central de Alertas e ficam disponíveis exclusivamente em
+    `gat.arquivo_database`."""
+    query = "SELECT * FROM alertas_manuais WHERE arquivado_em IS NULL"
     params: list[Any] = []
     if modulo:
-        query += " WHERE modulo = ?"
+        query += " AND modulo = ?"
         params.append(modulo)
     query += " ORDER BY criado_em DESC"
     with _conectar() as conn:
@@ -2901,10 +3018,12 @@ def listar_atividades(
 
 
 def listar_reunioes_do_projeto(modulo: str, projeto_id: int) -> pd.DataFrame:
-    """Reuniões vinculadas a um projeto específico — usado na Linha do Tempo."""
+    """Reuniões ativas vinculadas a um projeto específico — usado na Linha
+    do Tempo e nas abas de Reuniões do GAT/PMO."""
     with _conectar() as conn:
         return pd.read_sql_query(
             "SELECT r.* FROM reunioes r JOIN reuniao_projetos rp ON rp.reuniao_id = r.id "
-            "WHERE rp.modulo = ? AND rp.projeto_id = ? ORDER BY COALESCE(r.data_realizada, r.data_prevista)",
+            "WHERE rp.modulo = ? AND rp.projeto_id = ? AND r.arquivado_em IS NULL "
+            "ORDER BY COALESCE(r.data_realizada, r.data_prevista)",
             conn, params=(modulo, projeto_id),
         )

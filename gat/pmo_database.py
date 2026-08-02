@@ -131,8 +131,11 @@ def obter_projeto(projeto_id: int) -> dict[str, Any] | None:
 
 
 def listar_projetos() -> pd.DataFrame:
+    """Só projetos ativos — os arquivados pelo módulo Arquivo somem do
+    Portfólio/Dashboards e ficam disponíveis exclusivamente em
+    `gat.arquivo_database`."""
     with conectar() as conn:
-        return pd.read_sql_query("SELECT * FROM pmo_projetos ORDER BY nome", conn)
+        return pd.read_sql_query("SELECT * FROM pmo_projetos WHERE arquivado_em IS NULL ORDER BY nome", conn)
 
 
 # ---------------------------------------------------------------------------
@@ -260,16 +263,18 @@ def remover_cronograma_ativo(projeto_id: int, usuario: str) -> None:
 def obter_cronograma_ativo(projeto_id: int) -> dict[str, Any] | None:
     with conectar() as conn:
         linha = conn.execute(
-            "SELECT * FROM pmo_cronograma_arquivos WHERE projeto_id = ? AND ativo = 1", (projeto_id,)
+            "SELECT * FROM pmo_cronograma_arquivos WHERE projeto_id = ? AND ativo = 1 AND arquivado_em IS NULL", (projeto_id,)
         ).fetchone()
         return dict(linha) if linha else None
 
 
 def listar_arquivos_cronograma(projeto_id: int) -> pd.DataFrame:
+    """Só documentos ativos — os arquivados pelo módulo Arquivo ficam
+    disponíveis exclusivamente em `gat.arquivo_database`."""
     with conectar() as conn:
         return pd.read_sql_query(
             "SELECT id, nome_arquivo, formato, interpretado, ativo, enviado_por, enviado_em, removido_por, removido_em "
-            "FROM pmo_cronograma_arquivos WHERE projeto_id = ? ORDER BY enviado_em DESC",
+            "FROM pmo_cronograma_arquivos WHERE projeto_id = ? AND arquivado_em IS NULL ORDER BY enviado_em DESC",
             conn, params=(projeto_id,),
         )
 
