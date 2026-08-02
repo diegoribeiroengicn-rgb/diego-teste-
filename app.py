@@ -58,6 +58,7 @@ from views import (
     prestadores_dashboard,
     relatorios_mensais,
     reunioes,
+    visao_gestor,
 )
 
 st.set_page_config(
@@ -167,6 +168,11 @@ if pode_area(usuario, "reunioes"):
     grupo_gestao.append(_pagina(lambda: gestao_historico.render(usuario), "Histórico", ":material/history:", "gestao_historico"))
 if grupo_gestao:
     paginas["Gestão"] = grupo_gestao
+
+if pode_area(usuario, "visao_gestor"):
+    paginas["Visão do Gestor"] = [
+        _pagina(lambda: visao_gestor.render(usuario), "Visão do Gestor", ":material/dashboard:", "visao_gestor"),
+    ]
 
 grupo_relatorios = []
 if pode_area(usuario, "analistas"):

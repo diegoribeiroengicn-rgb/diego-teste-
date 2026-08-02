@@ -135,6 +135,20 @@ def gerar_relatorio_prioridades_pdf(df: pd.DataFrame, kpis: dict[str, Any], indi
     return buffer.getvalue()
 
 
+def gerar_relatorio_visao_gestor_pdf(titulo: str, kpis: dict[str, Any], painel: pd.DataFrame) -> bytes:
+    """Visão do Gestor — painel executivo diário da equipe, em PDF
+    (indicadores executivos + painel consolidado por analista)."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), topMargin=1.5 * cm, bottomMargin=1.5 * cm, leftMargin=1.8 * cm, rightMargin=1.8 * cm)
+    elementos = _cabecalho(f"Visão do Gestor — {titulo}", "GAT 2026 · Controle de Análises Técnicas · Tecnoplano")
+    elementos.append(Paragraph("Indicadores executivos", _ESTILO_SECAO))
+    elementos.append(_tabela_kpis([(rotulo, str(valor)) for rotulo, valor in kpis.items()]))
+    elementos.append(Paragraph("Painel por analista", _ESTILO_SECAO))
+    elementos.append(_tabela_dataframe(painel))
+    doc.build(elementos)
+    return buffer.getvalue()
+
+
 def gerar_one_page_report_pdf(
     competencia_label: str,
     resumo: dict[str, Any],

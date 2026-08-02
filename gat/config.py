@@ -397,6 +397,7 @@ AREAS_PERMISSAO = {
     "configuracoes": "Acessar Configurações",
     "auditoria": "Acessar Auditoria",
     "administrar_usuarios": "Administrar usuários",
+    "visao_gestor": "Visão do Gestor — Painel executivo diário da equipe (Gestor/Administrador)",
 }
 
 # Áreas sensíveis que, para usuários já existentes (sem uma escolha explícita
@@ -407,7 +408,7 @@ AREAS_RESTRITAS_PADRAO_BLOQUEADO = [
     "analistas.notas", "analistas.avaliar", "analistas.relatorios",
     "avaliacoes.editar", "avaliacoes.relatorios",
     "opr.exportar", "historico_atividades", "alertas.consolidado",
-    "manual_sistema.administrar", "analistas.kpis_prazo.consolidado",
+    "manual_sistema.administrar", "analistas.kpis_prazo.consolidado", "visao_gestor",
 ]
 
 # Templates padrão de permissão por perfil — usados apenas como ponto de
@@ -458,6 +459,7 @@ PERFIS_PADRAO: dict[str, dict[str, dict[str, bool]]] = {
             "analistas.relatorios": False,
             "analistas.kpis_prazo": True,
             "analistas.kpis_prazo.consolidado": False,
+            "visao_gestor": False,
             "avaliacoes.editar": False,
             "avaliacoes.relatorios": False,
             "opr.prestadores": True,
@@ -507,6 +509,7 @@ PERFIS_PADRAO: dict[str, dict[str, dict[str, bool]]] = {
             "analistas.relatorios": False,
             "analistas.kpis_prazo": False,
             "analistas.kpis_prazo.consolidado": False,
+            "visao_gestor": False,
             "avaliacoes.editar": False,
             "avaliacoes.relatorios": False,
             "opr.prestadores": True,
