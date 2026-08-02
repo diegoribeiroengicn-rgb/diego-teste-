@@ -66,6 +66,8 @@ COLUNAS_PRESTADORES = [
     "data_limite", "data_analise", "hold_inicio", "hold_fim", "num_at",
     "revisao_at", "responsavel", "status_analise", "observacoes",
     "natureza_revisao", "num_erros", "etg", "prestador_cadastro_id", "obra_id",
+    "sla_dias", "sla_original", "sla_reduzido", "nivel_prioridade",
+    "justificativa_sla", "data_limite_original", "sla_alterado_por", "sla_alterado_em",
 ]
 
 COLUNAS_CESSIONARIOS = [
@@ -75,6 +77,8 @@ COLUNAS_CESSIONARIOS = [
     "revisao_at", "responsavel", "status_analise", "observacoes",
     "natureza_revisao", "num_erros", "etg", "luc", "numero_rci", "numero_rvp",
     "data_atualizacao_rci", "data_atualizacao_rvp", "cessionario_cadastro_id",
+    "sla_original", "sla_reduzido", "justificativa_sla", "data_limite_original",
+    "sla_alterado_por", "sla_alterado_em",
 ]
 
 COLUNAS_CADASTRO_PRESTADORES = [
@@ -594,6 +598,50 @@ def _migracao_0009_fechamento_avaliacao_analista(conn: sqlite3.Connection) -> No
     )
 
 
+def _migracao_0010_sla_prioridades(conn: sqlite3.Connection) -> None:
+    """
+    SLA/prioridades (alteração pontual): colunas aditivas para registrar o
+    SLA padrão calculado (`sla_original`), o SLA efetivo em vigor
+    (`sla_atual`/`sla_dias`), se houve redução manual, o nível de
+    prioridade (apenas Prestadores — 1/2/3), a justificativa e a data
+    limite original — nunca sobrescritas quando um SLA reduzido/prioridade
+    é aplicado depois, preservando o histórico completo (ver item 4 da
+    alteração de alertas/SLA/prioridades).
+    """
+    _garantir_coluna(conn, "prestadores", "sla_dias", "INTEGER")
+    _garantir_coluna(conn, "prestadores", "sla_original", "INTEGER")
+    _garantir_coluna(conn, "prestadores", "sla_reduzido", "INTEGER NOT NULL DEFAULT 0")
+    _garantir_coluna(conn, "prestadores", "nivel_prioridade", "INTEGER")
+    _garantir_coluna(conn, "prestadores", "justificativa_sla", "TEXT")
+    _garantir_coluna(conn, "prestadores", "data_limite_original", "TEXT")
+    _garantir_coluna(conn, "prestadores", "sla_alterado_por", "TEXT")
+    _garantir_coluna(conn, "prestadores", "sla_alterado_em", "TEXT")
+
+    _garantir_coluna(conn, "cessionarios", "sla_original", "INTEGER")
+    _garantir_coluna(conn, "cessionarios", "sla_reduzido", "INTEGER NOT NULL DEFAULT 0")
+    _garantir_coluna(conn, "cessionarios", "justificativa_sla", "TEXT")
+    _garantir_coluna(conn, "cessionarios", "data_limite_original", "TEXT")
+    _garantir_coluna(conn, "cessionarios", "sla_alterado_por", "TEXT")
+    _garantir_coluna(conn, "cessionarios", "sla_alterado_em", "TEXT")
+
+    # Backfill: para registros já existentes, o SLA "original" é o SLA
+    # padrão vigente (nenhum ainda tinha redução/prioridade) — preenche
+    # sla_dias/sla_original a partir do que já está calculado/gravado,
+    # sem alterar data_limite nem qualquer outro dado já existente.
+    conn.execute("UPDATE prestadores SET sla_dias = 10, sla_original = 10 WHERE sla_dias IS NULL")
+    conn.execute("UPDATE cessionarios SET sla_original = sla_dias WHERE sla_original IS NULL")
+
+
+def _migracao_0011_remover_isencao_retroativa(conn: sqlite3.Connection) -> None:
+    """
+    Remove a isenção retroativa congelada pela migração 8: a partir daqui,
+    todo projeto em revisão >= 1 sem avaliação de checklist volta a gerar
+    a pendência de avaliação obrigatória, inclusive os que já estavam
+    congelados como isentos desde a ativação da regra.
+    """
+    conn.execute("DELETE FROM avaliacao_obrigatoria_isentos")
+
+
 _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (1, "Índices de busca por N° AT e nome em Prestadores e Cessionários", _migracao_0001_indices_busca),
     (2, "Índices para avaliações (checklist/analistas), alertas com radar e histórico de atividades", _migracao_0002_indices_avaliacoes_alertas),
@@ -604,6 +652,8 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (7, "Projetos de Cessionários: substitui PEP por LUC, N° RCI, N° RVP e datas de atualização", _migracao_0007_luc_rci_rvp_cessionarios),
     (8, "Avaliação obrigatória (Rev.01): congela como isentos os projetos já em revisão >= 1 sem avaliação no momento da ativação", _migracao_0008_avaliacao_obrigatoria_isentos),
     (9, "Fechamento mensal persistente e auditável da nota do analista", _migracao_0009_fechamento_avaliacao_analista),
+    (10, "SLA/prioridades: colunas de SLA original/atual, redução manual, nível de prioridade e justificativa", _migracao_0010_sla_prioridades),
+    (11, "Remove a isenção retroativa da avaliação obrigatória (aplica de fato a remoção decidida anteriormente)", _migracao_0011_remover_isencao_retroativa),
 ]
 
 

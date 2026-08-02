@@ -140,7 +140,7 @@ def render(usuario: dict) -> None:
     df_filtrado["Avaliação"] = df_filtrado["_situacao_avaliacao"].map(
         {"PENDENTE": "🔴 Avaliação pendente (Rev.01)", "CONCLUIDA": "🟢 Avaliação em dia", "": ""}
     )
-    df_filtrado["_dias_restantes"] = SLA_PRESTADORES_DIAS_UTEIS - df_filtrado["dias_uteis_decorridos"]
+    df_filtrado["_dias_restantes"] = df_filtrado["sla_dias"].fillna(SLA_PRESTADORES_DIAS_UTEIS) - df_filtrado["dias_uteis_decorridos"]
     df_filtrado["Situação do Prazo"] = df_filtrado.apply(
         lambda r: _rotulo_situacao_prazo(r["_dias_restantes"], r.get("revisao")), axis=1
     )

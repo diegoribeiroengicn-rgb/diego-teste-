@@ -100,24 +100,57 @@ def status_avaliacao_obrigatoria(
 
 def calcular_sla_cessionario(tipo: str, revisao: int) -> int:
     """
-    Determina o SLA (em dias úteis) de uma análise de cessionário, com base
-    no tipo de operação e se é a revisão inicial (0) ou uma revisão
-    subsequente — replicando a fórmula original da planilha PROJ_CESS.
+    Determina o SLA padrão (em dias úteis) de uma análise de cessionário:
+
+    * Quiosque — sempre 5 dias úteis, em qualquer revisão;
+    * Loja/Externo — 10 dias úteis na Revisão 00, 5 dias úteis da Revisão
+      01 em diante.
     """
-    if revisao == 0 and tipo in ("Quiosque", "Loja", "Externo"):
+    if tipo == "Quiosque":
+        return SLA_CESSIONARIOS_REVISAO
+    if revisao == 0 and tipo in ("Loja", "Externo"):
         return SLA_CESSIONARIOS_NOVO
     return SLA_CESSIONARIOS_REVISAO
 
 
-def status_entrega_prestador(data_solicitacao, data_analise, hold_dias: int) -> tuple[str, int]:
+NIVEIS_PRIORIDADE_PRESTADOR: dict[int, int] = {3: 7, 2: 5, 1: 3}
+NIVEIS_PRIORIDADE_LABELS: dict[int, str] = {
+    3: "Nível 3 (7 dias úteis)", 2: "Nível 2 (5 dias úteis)", 1: "Nível 1 (até 3 dias úteis)",
+}
+
+
+def calcular_sla_efetivo(sla_padrao: int, sla_reduzido: bool, dias_reduzidos: int | None, nivel_prioridade: int | None = None) -> int:
+    """
+    SLA (dias úteis) realmente em vigor para uma análise, respeitando a
+    seguinte ordem de precedência:
+
+    1. SLA reduzido informado manualmente (`dias_reduzidos`) — inclui o
+       caso do Nível 1 de prioridade de Prestadores, que permite 1, 2 ou
+       3 dias úteis à escolha do especialista;
+    2. Nível de prioridade 2 ou 3 (Prestadores) — SLA fixo de 5 ou 7 dias;
+    3. SLA padrão calculado por tipo/revisão (`sla_padrao`).
+
+    Nunca combina redução manual com nível de prioridade simultaneamente:
+    a tela só permite escolher um dos dois mecanismos por vez.
+    """
+    if sla_reduzido and dias_reduzidos:
+        return int(dias_reduzidos)
+    if nivel_prioridade in NIVEIS_PRIORIDADE_PRESTADOR:
+        return NIVEIS_PRIORIDADE_PRESTADOR[nivel_prioridade]
+    return sla_padrao
+
+
+def status_entrega_prestador(data_solicitacao, data_analise, hold_dias: int, sla_dias: int = SLA_PRESTADORES_DIAS_UTEIS) -> tuple[str, int]:
     """
     Calcula os dias úteis decorridos e o status de entrega de uma análise
-    de prestador, comparando com o SLA fixo de 10 dias úteis.
+    de prestador, comparando com o SLA em vigor (10 dias úteis por
+    padrão, ou o SLA reduzido/de prioridade quando aplicável — ver
+    `calcular_sla_efetivo`).
     """
     decorridos = dias_uteis_decorridos(data_solicitacao, data_analise, hold_dias)
-    if decorridos < SLA_PRESTADORES_DIAS_UTEIS:
+    if decorridos < sla_dias:
         status = "ANTES DO PRAZO"
-    elif decorridos == SLA_PRESTADORES_DIAS_UTEIS:
+    elif decorridos == sla_dias:
         status = "NO PRAZO"
     else:
         status = "ATRASADO"
@@ -289,7 +322,8 @@ def enriquecer_prestadores(df: pd.DataFrame) -> pd.DataFrame:
 
     def _linha(linha):
         hold = calcular_hold_dias(linha.get("hold_inicio"), linha.get("hold_fim"))
-        status, decorridos = status_entrega_prestador(linha.get("data_solicitacao"), linha.get("data_analise"), hold)
+        sla_vigente = int(linha.get("sla_dias")) if linha.get("sla_dias") else SLA_PRESTADORES_DIAS_UTEIS
+        status, decorridos = status_entrega_prestador(linha.get("data_solicitacao"), linha.get("data_analise"), hold, sla_vigente)
         return pd.Series({"hold_dias": hold, "dias_uteis_decorridos": decorridos, "status_entrega_calc": status})
 
     calculados = df.apply(_linha, axis=1)

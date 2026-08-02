@@ -18,7 +18,9 @@ import streamlit as st
 
 from gat.alertas_engine import chaves_avaliadas_obrigatoria, rev1_concluida
 from gat.business_rules import (
+    NIVEIS_PRIORIDADE_LABELS,
     calcular_sla_cessionario,
+    calcular_sla_efetivo,
     classificar_nota,
     status_entrega_cessionario,
     status_entrega_prestador,
@@ -187,6 +189,48 @@ def _confirmar_descarte(chave_confirmacao: str, houve_alteracoes: bool, cancelar
     return st.session_state.pop(chave_confirmado, False)
 
 
+def _calcular_campos_sla_persistidos(
+    registro: dict[str, Any] | None, editando: bool, sla_padrao: int, sla_efetivo: int,
+    sla_reduzido: bool, nivel_prioridade: int | None, justificativa_sla: str,
+    sugestao_limite_padrao, usuario: str,
+) -> dict[str, Any]:
+    """
+    Monta os campos de SLA/prioridade a persistir, preservando o SLA e a
+    data limite "originais" (padrão, sem redução/prioridade) para sempre,
+    mesmo que a análise seja editada várias vezes depois — nunca
+    recalculados nem sobrescritos uma vez gravados (item 4 da alteração
+    de SLA/prioridades). `nivel_prioridade` é `None` para Cessionários
+    (a quem os níveis 1/2/3 de Prestadores não se aplicam automaticamente).
+    """
+    sla_original = int(registro.get("sla_original")) if editando and registro.get("sla_original") is not None else int(sla_padrao)
+    data_limite_original = (
+        registro.get("data_limite_original") if editando and registro.get("data_limite_original")
+        else (sugestao_limite_padrao.isoformat() if sugestao_limite_padrao else None)
+    )
+    prioritaria = sla_reduzido or nivel_prioridade is not None
+    mudou = (
+        not editando
+        or bool(registro.get("sla_reduzido")) != sla_reduzido
+        or (registro.get("nivel_prioridade") if editando else None) != nivel_prioridade
+        or int(registro.get("sla_dias") or -1) != int(sla_efetivo)
+    )
+    if mudou and prioritaria:
+        sla_alterado_por, sla_alterado_em = usuario, datetime.now().isoformat()
+    else:
+        sla_alterado_por = registro.get("sla_alterado_por") if editando else None
+        sla_alterado_em = registro.get("sla_alterado_em") if editando else None
+    return {
+        "sla_dias": int(sla_efetivo),
+        "sla_original": sla_original,
+        "sla_reduzido": 1 if sla_reduzido else 0,
+        "nivel_prioridade": nivel_prioridade,
+        "justificativa_sla": justificativa_sla.strip() if justificativa_sla and justificativa_sla.strip() else None,
+        "data_limite_original": data_limite_original,
+        "sla_alterado_por": sla_alterado_por,
+        "sla_alterado_em": sla_alterado_em,
+    }
+
+
 def _detectar_pendencia_avaliacao(tipo_entidade: str, modulo: str, dados: dict[str, Any], projeto_id: int, coluna_nome: str) -> dict[str, Any] | None:
     """Verifica, logo após salvar uma análise técnica (Prestador ou
     Cessionário), se ela deixa uma avaliação obrigatória da Rev.01
@@ -316,22 +360,64 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
         responsavel = st.selectbox("Responsável (Analista)", RESPONSAVEIS, index=_idx(RESPONSAVEIS, registro.get("responsavel") if registro else None), key=f"pr_resp_{sufixo}")
         status_analise = st.selectbox("Status Análise", STATUS_ANALISE_OPCOES, index=_idx(STATUS_ANALISE_OPCOES, registro.get("status_analise") if registro else "EM ANÁLISE"), key=f"pr_status_{sufixo}")
 
+    st.markdown("##### Prioridade e SLA")
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        opcoes_nivel = ["Nenhum"] + [NIVEIS_PRIORIDADE_LABELS[n] for n in (3, 2, 1)]
+        rotulo_nivel_atual = NIVEIS_PRIORIDADE_LABELS.get(registro.get("nivel_prioridade")) if editando else None
+        rotulo_nivel = st.selectbox("Nível de prioridade", opcoes_nivel, index=_idx(opcoes_nivel, rotulo_nivel_atual or "Nenhum"), key=f"pr_nivel_{sufixo}")
+        nivel_prioridade = next((n for n, r in NIVEIS_PRIORIDADE_LABELS.items() if r == rotulo_nivel), None)
+        dias_nivel1 = None
+        if nivel_prioridade == 1:
+            dias_nivel1 = st.number_input(
+                "Dias úteis (Nível 1)", min_value=1, max_value=3, step=1,
+                value=int(registro.get("sla_dias") or 3) if editando and registro.get("nivel_prioridade") == 1 else 3,
+                key=f"pr_diasnivel1_{sufixo}",
+            )
+    with col_p2:
+        sla_reduzido = st.checkbox(
+            "SLA reduzido (personalizado)", value=bool(registro.get("sla_reduzido")) if editando else False,
+            key=f"pr_slareduzido_{sufixo}", disabled=nivel_prioridade is not None,
+            help="Desabilitado quando um nível de prioridade está selecionado — escolha um ou outro.",
+        )
+        dias_reduzidos = None
+        if sla_reduzido:
+            dias_reduzidos = st.number_input(
+                "Quantidade de dias úteis para entrega", min_value=1, step=1,
+                value=int(registro.get("sla_dias") or SLA_PRESTADORES_DIAS_UTEIS) if editando and registro.get("sla_reduzido") else SLA_PRESTADORES_DIAS_UTEIS,
+                key=f"pr_diasreduzidos_{sufixo}",
+            )
+
+    justificativa_sla = ""
+    if sla_reduzido:
+        justificativa_sla = st.text_area(
+            "Justificativa do SLA reduzido *", value=registro.get("justificativa_sla", "") if editando and registro.get("sla_reduzido") else "",
+            key=f"pr_justsla_{sufixo}",
+        )
+
+    sla_padrao = SLA_PRESTADORES_DIAS_UTEIS
+    sla_efetivo = int(dias_nivel1) if nivel_prioridade == 1 and dias_nivel1 else calcular_sla_efetivo(sla_padrao, sla_reduzido, dias_reduzidos, nivel_prioridade)
+    if nivel_prioridade is not None or sla_reduzido:
+        st.caption(f"SLA aplicado a esta análise: **{sla_efetivo} dia(s) útil(eis)** (padrão: {sla_padrao}). Esta análise entrará na Lista de Prioridades.")
+
     st.markdown("##### Datas e prazos")
     col3, col4, col5 = st.columns(3)
     with col3:
         data_solicitacao = st.date_input("Data de Solicitação *", value=_parse_data(registro.get("data_solicitacao")) if registro else date.today(), format="DD/MM/YYYY", key=f"pr_dsol_{sufixo}")
-    sugestao_limite = calcular_data_limite(data_solicitacao, SLA_PRESTADORES_DIAS_UTEIS)
+    sugestao_limite_padrao = calcular_data_limite(data_solicitacao, sla_padrao)
+    sugestao_limite = calcular_data_limite(data_solicitacao, sla_efetivo)
     if not editando:
         chave_gatilho = f"pr_dlim_gatilho_{sufixo}"
-        if st.session_state.get(chave_gatilho) != data_solicitacao:
+        gatilho_atual = (data_solicitacao, sla_efetivo)
+        if st.session_state.get(chave_gatilho) != gatilho_atual:
             st.session_state[f"pr_dlim_{sufixo}"] = sugestao_limite
-            st.session_state[chave_gatilho] = data_solicitacao
+            st.session_state[chave_gatilho] = gatilho_atual
     with col4:
         data_limite = st.date_input(
             "Data de Entrega Acordada/Prevista *",
             value=_parse_data(registro.get("data_limite")) if editando else sugestao_limite,
             format="DD/MM/YYYY",
-            help=f"Sugestão automática (SLA de {SLA_PRESTADORES_DIAS_UTEIS} dias úteis): {sugestao_limite.strftime('%d/%m/%Y') if sugestao_limite else '-'}. Pode ser repactuada manualmente.",
+            help=f"Sugestão automática (SLA de {sla_efetivo} dias úteis): {sugestao_limite.strftime('%d/%m/%Y') if sugestao_limite else '-'}. Pode ser repactuada manualmente.",
             key=f"pr_dlim_{sufixo}",
         )
     with col5:
@@ -401,12 +487,19 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
     if salvar and (not prestador or not data_solicitacao):
         st.error("Preencha ao menos Prestador de Serviço e Data de Solicitação.")
         salvar = False
+    if salvar and sla_reduzido and not justificativa_sla.strip():
+        st.error("Informe a justificativa do SLA reduzido para salvar.")
+        salvar = False
 
     if (
         _tentativa_salvar_iniciada(chave_tentativa, salvar)
         and _pode_persistir_com_pep(peps, f"pr_confirma_sem_pep_{sufixo}")
         and _pode_repactuar(repactuando, motivo_repactuacao)
     ):
+        campos_sla = _calcular_campos_sla_persistidos(
+            registro, editando, sla_padrao, sla_efetivo, sla_reduzido, nivel_prioridade,
+            justificativa_sla, sugestao_limite_padrao, usuario,
+        )
         dados = {
             "item": registro.get("item") if editando else None,
             "codigo": codigo,
@@ -432,6 +525,7 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
             "etg": etg,
             "prestador_cadastro_id": cadastro_selecionado["id"] if cadastro_selecionado else None,
             "obra_id": obra_id,
+            **campos_sla,
         }
         if editando:
             atualizar_prestador(registro["id"], dados, usuario)
@@ -542,16 +636,42 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
             format="DD/MM/YYYY", key=f"ce_data_rvp_{sufixo}",
         )
 
-    sla_dias = calcular_sla_cessionario(tipo, int(revisao))
+    sla_padrao = calcular_sla_cessionario(tipo, int(revisao))
+
+    st.markdown("##### Prioridade e SLA")
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        sla_reduzido = st.checkbox(
+            "SLA reduzido", value=bool(registro.get("sla_reduzido")) if editando else False, key=f"ce_slareduzido_{sufixo}",
+        )
+        dias_reduzidos = None
+        if sla_reduzido:
+            dias_reduzidos = st.number_input(
+                "Quantidade de dias úteis para entrega", min_value=1, step=1,
+                value=int(registro.get("sla_dias") or sla_padrao) if editando and registro.get("sla_reduzido") else sla_padrao,
+                key=f"ce_diasreduzidos_{sufixo}",
+            )
+    with col_p2:
+        justificativa_sla = ""
+        if sla_reduzido:
+            justificativa_sla = st.text_area(
+                "Justificativa do SLA reduzido *", value=registro.get("justificativa_sla", "") if editando and registro.get("sla_reduzido") else "",
+                key=f"ce_justsla_{sufixo}",
+            )
+
+    sla_efetivo = calcular_sla_efetivo(sla_padrao, sla_reduzido, dias_reduzidos, None)
+    if sla_reduzido:
+        st.caption(f"SLA aplicado a esta análise: **{sla_efetivo} dia(s) útil(eis)** (padrão: {sla_padrao}). Esta análise entrará na Lista de Prioridades.")
 
     st.markdown("##### Datas e prazos")
     col3, col4, col5 = st.columns(3)
     with col3:
         data_solicitacao = st.date_input("Data de Solicitação *", value=_parse_data(registro.get("data_solicitacao")) if registro else date.today(), format="DD/MM/YYYY", key=f"ce_dsol_{sufixo}")
-    sugestao_limite = calcular_data_limite(data_solicitacao, sla_dias)
+    sugestao_limite_padrao = calcular_data_limite(data_solicitacao, sla_padrao)
+    sugestao_limite = calcular_data_limite(data_solicitacao, sla_efetivo)
     if not editando:
         chave_gatilho = f"ce_dlim_gatilho_{sufixo}"
-        gatilho_atual = (data_solicitacao, tipo, int(revisao))
+        gatilho_atual = (data_solicitacao, tipo, int(revisao), sla_efetivo)
         if st.session_state.get(chave_gatilho) != gatilho_atual:
             st.session_state[f"ce_dlim_{sufixo}"] = sugestao_limite
             st.session_state[chave_gatilho] = gatilho_atual
@@ -560,7 +680,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
             "Data de Entrega Acordada/Prevista *",
             value=_parse_data(registro.get("data_limite")) if editando else sugestao_limite,
             format="DD/MM/YYYY",
-            help=f"Sugestão automática (SLA de {sla_dias} dias úteis conforme tipo/revisão): {sugestao_limite.strftime('%d/%m/%Y') if sugestao_limite else '-'}. Pode ser repactuada manualmente.",
+            help=f"Sugestão automática (SLA de {sla_efetivo} dias úteis): {sugestao_limite.strftime('%d/%m/%Y') if sugestao_limite else '-'}. Pode ser repactuada manualmente.",
             key=f"ce_dlim_{sufixo}",
         )
     with col5:
@@ -573,7 +693,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
         hold_fim = st.date_input("Hold (Fim)", value=_parse_data(registro.get("hold_fim")) if registro else None, format="DD/MM/YYYY", key=f"ce_hf_{sufixo}")
 
     hold_dias = calcular_hold_dias(hold_inicio, hold_fim)
-    status_calc, saldo = status_entrega_cessionario(data_solicitacao, data_analise, hold_dias, sla_dias)
+    status_calc, saldo = status_entrega_cessionario(data_solicitacao, data_analise, hold_dias, sla_efetivo)
 
     data_limite_original = _parse_data(registro.get("data_limite")) if editando else None
     repactuando = editando and data_limite_original is not None and data_limite is not None and data_limite != data_limite_original
@@ -590,7 +710,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
 
     st.markdown("##### Cálculo automático (dias úteis · calendário RJ)")
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("SLA (dias úteis)", sla_dias)
+    m1.metric("SLA (dias úteis)", sla_efetivo)
     m2.metric("Saldo de dias úteis", saldo)
     m3.metric("Dias em Hold", hold_dias)
     m4.metric("Status de Entrega", status_calc)
@@ -615,6 +735,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
         "hold_inicio": hold_inicio, "hold_fim": hold_fim, "natureza_revisao": natureza_revisao,
         "num_erros": num_erros, "etg": etg, "observacoes": observacoes, "motivo_repactuacao": motivo_repactuacao,
         "cessionario_cadastro_id": cadastro_cess_selecionado["id"] if cadastro_cess_selecionado else None,
+        "sla_reduzido": sla_reduzido, "dias_reduzidos": dias_reduzidos, "justificativa_sla": justificativa_sla,
     }
     houve_alteracoes = _houve_alteracoes_nao_salvas(f"ce_snapshot_{sufixo}", valores_atuais)
 
@@ -632,11 +753,18 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
     if salvar and (not cessionario or not data_solicitacao):
         st.error("Preencha ao menos Cessionário e Data de Solicitação.")
         salvar = False
+    if salvar and sla_reduzido and not justificativa_sla.strip():
+        st.error("Informe a justificativa do SLA reduzido para salvar.")
+        salvar = False
 
     if (
         _tentativa_salvar_iniciada(chave_tentativa, salvar)
         and _pode_repactuar(repactuando, motivo_repactuacao)
     ):
+        campos_sla = _calcular_campos_sla_persistidos(
+            registro, editando, sla_padrao, sla_efetivo, sla_reduzido, None,
+            justificativa_sla, sugestao_limite_padrao, usuario,
+        )
         dados = {
             "item": registro.get("item") if editando else None,
             "codigo": codigo,
@@ -652,7 +780,6 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
             "num_documentos": int(num_documentos),
             "data_solicitacao": data_solicitacao.isoformat(),
             "tipo": tipo,
-            "sla_dias": int(sla_dias),
             "data_limite": data_limite.isoformat() if data_limite else None,
             "data_analise": data_analise.isoformat() if data_analise else None,
             "hold_inicio": hold_inicio.isoformat() if hold_inicio else None,
@@ -666,6 +793,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
             "num_erros": int(num_erros),
             "etg": etg,
             "cessionario_cadastro_id": cadastro_cess_selecionado["id"] if cadastro_cess_selecionado else None,
+            **campos_sla,
         }
         if editando:
             atualizar_cessionario(registro["id"], dados, usuario)
