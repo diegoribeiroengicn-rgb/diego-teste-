@@ -10,7 +10,7 @@ from typing import Any
 
 import pandas as pd
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.platypus import (
@@ -105,6 +105,31 @@ def gerar_relatorio_mensal_pdf(
     if produtividade_df is not None and not produtividade_df.empty:
         elementos.append(Paragraph("Produtividade dos analistas", _ESTILO_SECAO))
         elementos.append(_tabela_dataframe(produtividade_df))
+
+    doc.build(elementos)
+    return buffer.getvalue()
+
+
+def gerar_relatorio_prioridades_pdf(df: pd.DataFrame, kpis: dict[str, Any], individual: dict[str, Any] | None = None) -> bytes:
+    """Relatório de Prioridades (item 12) em PDF — coletivo (lista completa
+    filtrada) ou individual (um único projeto prioritário), com os mesmos
+    campos exibidos na tela Lista de Prioridades."""
+    buffer = io.BytesIO()
+    pagesize = A4 if individual else landscape(A4)
+    doc = SimpleDocTemplate(buffer, pagesize=pagesize, topMargin=1.5 * cm, bottomMargin=1.5 * cm, leftMargin=1.8 * cm, rightMargin=1.8 * cm)
+
+    titulo = "Relatório de Prioridades — Individual" if individual else "Relatório de Prioridades — Coletivo"
+    elementos = _cabecalho(titulo, "GAT 2026 · Controle de Análises Técnicas · Tecnoplano")
+
+    if individual:
+        elementos.append(Paragraph("Dados do projeto", _ESTILO_SECAO))
+        pares = [(rotulo.replace("_", " ").title(), str(valor) if valor is not None else "—") for rotulo, valor in individual.items()]
+        elementos.append(_tabela_kpis(pares))
+    else:
+        elementos.append(Paragraph("Indicadores", _ESTILO_SECAO))
+        elementos.append(_tabela_kpis([(rotulo, str(valor)) for rotulo, valor in kpis.items()]))
+        elementos.append(Paragraph("Projetos prioritários", _ESTILO_SECAO))
+        elementos.append(_tabela_dataframe(df))
 
     doc.build(elementos)
     return buffer.getvalue()

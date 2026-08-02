@@ -10,8 +10,16 @@ import streamlit as st
 
 from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, montar_lista_prioridades
 from gat.config import DISCIPLINAS, RESPONSAVEIS
-from gat.database import listar_cessionarios, listar_prestadores
-from gat.permissions import exigir_area
+from gat.database import listar_cessionarios, listar_prestadores, registrar_atividade
+from gat.export_pdf import gerar_relatorio_prioridades_pdf
+from gat.permissions import exigir_area, pode_area
+from gat.relatorios_prioridades import (
+    COLUNAS_RELATORIO_PRIORIDADES,
+    gerar_excel_prioridades,
+    gerar_word_prioridades_coletivo,
+    gerar_word_prioridades_individual,
+    nome_arquivo_prioridades,
+)
 
 _ICONE_MAPA_CALOR = {"verde": "🟢", "amarelo": "🟡", "laranja": "🟠", "vermelho": "🔴", "roxo": "🟣"}
 _LABEL_SITUACAO = {
@@ -107,3 +115,58 @@ def render(usuario: dict) -> None:
         exibicao.rename(columns=colunas_exibicao)[list(colunas_exibicao.values())],
         hide_index=True, use_container_width=True,
     )
+
+    if pode_area(usuario, "lista_prioridades.relatorios"):
+        st.markdown("---")
+        st.markdown("##### Relatórios de Prioridades")
+        kpis = {
+            "Total prioritários": len(filtrada), "Prestadores": int((filtrada["tipo"] == "Prestador").sum()),
+            "Cessionários": int((filtrada["tipo"] == "Cessionário").sum()),
+            "Atrasados": int((filtrada["situacao_prazo"] == "ATRASADO").sum()),
+        }
+        aba_coletivo, aba_individual = st.tabs(["Relatório coletivo", "Relatório individual"])
+
+        with aba_coletivo:
+            col_xlsx, col_docx, col_pdf = st.columns(3)
+            if col_xlsx.button("Gerar Excel", icon=":material/description:", key="prio_gerar_xlsx", use_container_width=True):
+                conteudo = gerar_excel_prioridades(filtrada)
+                col_xlsx.download_button(
+                    "Baixar Excel", data=conteudo, file_name=nome_arquivo_prioridades("coletivo").replace(".docx", ".xlsx"),
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="prio_baixar_xlsx",
+                )
+            if col_docx.button("Gerar Word", icon=":material/description:", key="prio_gerar_docx", use_container_width=True):
+                conteudo = gerar_word_prioridades_coletivo(filtrada, kpis, usuario["username"])
+                col_docx.download_button(
+                    "Baixar Word", data=conteudo, file_name=nome_arquivo_prioridades("coletivo"),
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", key="prio_baixar_docx",
+                )
+            if col_pdf.button("Gerar PDF", icon=":material/description:", key="prio_gerar_pdf", use_container_width=True):
+                exibicao_pdf = filtrada.rename(columns=COLUNAS_RELATORIO_PRIORIDADES)[list(COLUNAS_RELATORIO_PRIORIDADES.values())]
+                conteudo = gerar_relatorio_prioridades_pdf(exibicao_pdf, kpis)
+                col_pdf.download_button(
+                    "Baixar PDF", data=conteudo, file_name=nome_arquivo_prioridades("coletivo").replace(".docx", ".pdf"),
+                    mime="application/pdf", key="prio_baixar_pdf",
+                )
+            registrar_atividade(usuario["username"], usuario.get("perfil"), "RELATORIO_PRIORIDADES_COLETIVO", modulo="gestao")
+
+        with aba_individual:
+            opcoes = {f"{r['tipo']} · {r['nome_entidade']} · AT {r.get('num_at') or '—'}": idx for idx, r in filtrada.iterrows()}
+            escolha = st.selectbox("Selecione o projeto", list(opcoes.keys()), key="prio_individual_escolha")
+            if escolha:
+                registro = filtrada.loc[opcoes[escolha]].to_dict()
+                col_docx2, col_pdf2 = st.columns(2)
+                if col_docx2.button("Gerar Word", icon=":material/description:", key="prio_gerar_docx_ind", use_container_width=True):
+                    conteudo = gerar_word_prioridades_individual(registro, usuario["username"])
+                    col_docx2.download_button(
+                        "Baixar Word", data=conteudo,
+                        file_name=nome_arquivo_prioridades("individual", str(registro.get("codigo") or registro.get("num_at") or "projeto")),
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", key="prio_baixar_docx_ind",
+                    )
+                if col_pdf2.button("Gerar PDF", icon=":material/description:", key="prio_gerar_pdf_ind", use_container_width=True):
+                    conteudo = gerar_relatorio_prioridades_pdf(pd.DataFrame(), {}, individual=registro)
+                    col_pdf2.download_button(
+                        "Baixar PDF", data=conteudo,
+                        file_name=nome_arquivo_prioridades("individual", str(registro.get("codigo") or registro.get("num_at") or "projeto")).replace(".docx", ".pdf"),
+                        mime="application/pdf", key="prio_baixar_pdf_ind",
+                    )
+                registrar_atividade(usuario["username"], usuario.get("perfil"), "RELATORIO_PRIORIDADES_INDIVIDUAL", modulo="gestao", detalhe=escolha)

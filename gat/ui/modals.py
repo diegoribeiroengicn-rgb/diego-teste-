@@ -276,6 +276,46 @@ def _renderizar_confirmacao_avaliacao(pendencia: dict[str, Any], chave_confirmac
         st.rerun()
 
 
+_STATUS_MENSAGEM_OBRIGATORIA_PRIORIDADE = {"LIBERADO C/ REST.", "NÃO LIBERADO"}
+
+
+def _detectar_mensagem_obrigatoria_prioridade(tipo_entidade: str, dados: dict[str, Any]) -> dict[str, Any] | None:
+    """Item 11 do módulo de SLA/Prioridades: toda análise prioritária (Nível
+    de Prioridade ou SLA reduzido em vigor) que é concluída como "Liberado
+    c/ Rest." ou "Não Liberado" exige informar o líder responsável — Diego
+    para Prestadores, Alline para Cessionários. A mensagem é apenas um
+    aviso de leitura obrigatória: não impede nem reverte o salvamento, que
+    já ocorreu."""
+    prioritaria = bool(dados.get("sla_reduzido")) or dados.get("nivel_prioridade") is not None
+    if not prioritaria:
+        return None
+    status = str(dados.get("status_analise") or "").strip().upper()
+    if status not in _STATUS_MENSAGEM_OBRIGATORIA_PRIORIDADE:
+        return None
+    return {
+        "tipo_entidade": tipo_entidade,
+        "lider": "Diego" if tipo_entidade == "PRESTADOR" else "Alline",
+        "status_analise": dados.get("status_analise"),
+    }
+
+
+def _renderizar_confirmacao_prioridade(pendencia: dict[str, Any], chave_confirmacao: str, usuario: str) -> None:
+    st.success("Análise salva com sucesso.", icon=":material/check_circle:")
+    st.warning(
+        f"Esta é uma análise prioritária, concluída como \"{pendencia['status_analise']}\". "
+        f"É obrigatório informar {pendencia['lider']} sobre esta conclusão.",
+        icon=":material/priority_high:",
+    )
+    if st.button("Li e estou ciente", type="primary", use_container_width=True, key=f"{chave_confirmacao}_ok"):
+        registrar_atividade(
+            usuario, None, "MENSAGEM_PRIORIDADE_CONFIRMADA",
+            modulo="prestadores" if pendencia["tipo_entidade"] == "PRESTADOR" else "cessionarios",
+            detalhe=f"Confirmado aviso de informar {pendencia['lider']} — status \"{pendencia['status_analise']}\".",
+        )
+        st.session_state.pop(chave_confirmacao, None)
+        st.rerun()
+
+
 # ---------------------------------------------------------------------------
 # Modal de Prestadores (Aba A)
 # ---------------------------------------------------------------------------
@@ -290,6 +330,12 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
     pendencia_avaliacao = st.session_state.get(chave_confirmacao_avaliacao)
     if pendencia_avaliacao:
         _renderizar_confirmacao_avaliacao(pendencia_avaliacao, chave_confirmacao_avaliacao)
+        return
+
+    chave_confirmacao_prioridade = f"pr_confirmar_prioridade_{sufixo}"
+    pendencia_prioridade = st.session_state.get(chave_confirmacao_prioridade)
+    if pendencia_prioridade:
+        _renderizar_confirmacao_prioridade(pendencia_prioridade, chave_confirmacao_prioridade, usuario)
         return
 
     st.caption("Edite os campos e clique em **Salvar**. A data limite sugerida e o prazo são calculados automaticamente pelo calendário oficial de feriados do RJ." if editando else
@@ -550,6 +596,11 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None) -> No
             st.session_state[chave_confirmacao_avaliacao] = pendencia_avaliacao
             _renderizar_confirmacao_avaliacao(pendencia_avaliacao, chave_confirmacao_avaliacao)
             return
+        pendencia_prioridade = _detectar_mensagem_obrigatoria_prioridade("PRESTADOR", dados)
+        if pendencia_prioridade:
+            st.session_state[chave_confirmacao_prioridade] = pendencia_prioridade
+            _renderizar_confirmacao_prioridade(pendencia_prioridade, chave_confirmacao_prioridade, usuario)
+            return
         st.rerun()
 
 
@@ -567,6 +618,12 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
     pendencia_avaliacao = st.session_state.get(chave_confirmacao_avaliacao)
     if pendencia_avaliacao:
         _renderizar_confirmacao_avaliacao(pendencia_avaliacao, chave_confirmacao_avaliacao)
+        return
+
+    chave_confirmacao_prioridade = f"ce_confirmar_prioridade_{sufixo}"
+    pendencia_prioridade = st.session_state.get(chave_confirmacao_prioridade)
+    if pendencia_prioridade:
+        _renderizar_confirmacao_prioridade(pendencia_prioridade, chave_confirmacao_prioridade, usuario)
         return
 
     st.caption("Edite os campos e clique em **Salvar**. O saldo de dias úteis é calculado automaticamente pelo calendário oficial de feriados do RJ." if editando else
@@ -817,6 +874,11 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> 
         if pendencia_avaliacao:
             st.session_state[chave_confirmacao_avaliacao] = pendencia_avaliacao
             _renderizar_confirmacao_avaliacao(pendencia_avaliacao, chave_confirmacao_avaliacao)
+            return
+        pendencia_prioridade = _detectar_mensagem_obrigatoria_prioridade("CESSIONARIO", dados)
+        if pendencia_prioridade:
+            st.session_state[chave_confirmacao_prioridade] = pendencia_prioridade
+            _renderizar_confirmacao_prioridade(pendencia_prioridade, chave_confirmacao_prioridade, usuario)
             return
         st.rerun()
 
