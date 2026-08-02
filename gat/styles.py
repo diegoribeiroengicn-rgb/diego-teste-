@@ -4,6 +4,12 @@ Streamlit — inspirada em sistemas corporativos (Microsoft 365, SAP Fiori,
 Azure Portal, Power BI Service): sóbria, com tipografia legível e ícones
 padronizados (Material Symbols), incluindo a aparência de "janela
 flutuante" para os pop-ups/modais (`st.dialog`) de cadastro e edição.
+
+Suporta Tema Claro e Tema Escuro através de um único conjunto de
+variáveis CSS (`--gat-*`) — a função é chamada novamente a cada rerun do
+Streamlit com o tema atual do usuário, então a troca é imediata (não
+exige reload de página nem novo login). A logomarca da Tecnoplano nunca
+recebe filtro de cor: é a mesma imagem, incólume, nos dois temas.
 """
 
 import base64
@@ -11,6 +17,36 @@ import base64
 import streamlit as st
 
 from gat.config import CORES, LOGO_PATH
+
+TEMA_CLARO = "claro"
+TEMA_ESCURO = "escuro"
+
+# Paleta do Tema Escuro: tons neutros de grafite e azul institucional mais
+# claro (para contraste em fundo escuro), evitando preto absoluto e
+# branco puro, conforme o padrão visual do sistema (ver Manual do
+# Sistema > "Padrão visual do sistema").
+_PALETA_ESCURA = {
+    "bg": "#10141C",
+    "superficie_1": "#1A212C",
+    "superficie_2": "#232B38",
+    "superficie_3": "#1E2A47",
+    "borda": "#2E3646",
+    "borda_forte": "#3D4759",
+    "navy": "#7FA8F2",
+    "azul": "#5B8DEF",
+    "azul_2": "#4C7EE0",
+    "azul_3": "#1E2A47",
+    "texto": "#E2E8F0",
+    "texto_fraco": "#9FADC2",
+    "vermelho_bg": "#3A1F22",
+}
+
+
+def _paleta(tema: str) -> dict:
+    cores = dict(CORES)
+    if tema == TEMA_ESCURO:
+        cores.update(_PALETA_ESCURA)
+    return cores
 
 
 def logo_base64() -> str:
@@ -20,23 +56,30 @@ def logo_base64() -> str:
     return base64.b64encode(LOGO_PATH.read_bytes()).decode("utf-8")
 
 
-def injetar_css_global() -> None:
-    """Injeta o CSS institucional Tecnoplano em toda a aplicação."""
+def injetar_css_global(tema: str = TEMA_CLARO) -> None:
+    """Injeta o CSS institucional Tecnoplano em toda a aplicação, no Tema
+    Claro (padrão) ou Escuro conforme a preferência do usuário logado."""
+    cores = _paleta(tema)
+    escuro = tema == TEMA_ESCURO
+    superficie_1 = cores["superficie_1"]
     css = f"""
     <style>
     :root {{
-        --gat-navy: {CORES['navy']};
-        --gat-azul: {CORES['azul']};
-        --gat-azul-2: {CORES['azul_2']};
-        --gat-azul-3: {CORES['azul_3']};
-        --gat-verde: {CORES['verde']};
-        --gat-vermelho: {CORES['vermelho']};
-        --gat-laranja: {CORES['laranja']};
-        --gat-dourado: {CORES['dourado']};
-        --gat-bg: {CORES['bg']};
-        --gat-borda: {CORES['borda']};
-        --gat-texto: {CORES['texto']};
-        --gat-texto-fraco: {CORES['texto_fraco']};
+        --gat-navy: {cores['navy']};
+        --gat-azul: {cores['azul']};
+        --gat-azul-2: {cores['azul_2']};
+        --gat-azul-3: {cores['azul_3']};
+        --gat-verde: {cores['verde']};
+        --gat-vermelho: {cores['vermelho']};
+        --gat-laranja: {cores['laranja']};
+        --gat-dourado: {cores['dourado']};
+        --gat-bg: {cores['bg']};
+        --gat-superficie-1: {superficie_1};
+        --gat-superficie-2: {cores['superficie_2']};
+        --gat-borda: {cores['borda']};
+        --gat-borda-forte: {cores['borda_forte']};
+        --gat-texto: {cores['texto']};
+        --gat-texto-fraco: {cores['texto_fraco']};
     }}
 
     /* ---- Fundo geral e tipografia ---- */
@@ -48,6 +91,7 @@ def injetar_css_global() -> None:
     p, li, label, .stMarkdown {{
         font-size: 0.95rem;
         line-height: 1.55;
+        color: var(--gat-texto);
     }}
     h1, h2, h3 {{
         color: var(--gat-navy);
@@ -69,11 +113,11 @@ def injetar_css_global() -> None:
         display: flex;
         align-items: center;
         justify-content: space-between;
-        background: #ffffff;
+        background: {superficie_1};
         border-bottom: 3px solid var(--gat-navy);
         padding: 14px 26px;
         border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(27,58,138,.12);
+        box-shadow: 0 2px 10px rgba(15,23,42,{'.35' if escuro else '.12'});
         margin-bottom: 24px;
     }}
     .gat-topbar-title {{
@@ -91,12 +135,12 @@ def injetar_css_global() -> None:
 
     /* ---- Cartões de KPI ---- */
     .gat-kpi-card {{
-        background: #ffffff;
+        background: {superficie_1};
         border: 1px solid var(--gat-borda);
         border-left: 4px solid var(--gat-navy);
         border-radius: 8px;
         padding: 18px 20px;
-        box-shadow: 0 1px 3px rgba(15,23,42,.05);
+        box-shadow: 0 1px 3px rgba(15,23,42,{'.3' if escuro else '.05'});
         margin-bottom: 4px;
     }}
     .gat-kpi-label {{
@@ -132,8 +176,8 @@ def injetar_css_global() -> None:
         font-size: .92rem;
         padding: .45rem 1.1rem;
         transition: all .12s ease-in-out;
-        border: 1px solid var(--gat-borda-forte, #CBD5E1);
-        background: #ffffff;
+        border: 1px solid var(--gat-borda-forte);
+        background: {superficie_1};
         color: var(--gat-navy);
     }}
     .stButton > button:hover, .stDownloadButton > button:hover, .stFormSubmitButton > button:hover,
@@ -165,19 +209,27 @@ def injetar_css_global() -> None:
     div[class*="st-key-"][class*="destrutivo"] .stButton > button {{
         color: var(--gat-vermelho);
         border-color: var(--gat-vermelho);
-        background: #ffffff;
+        background: {superficie_1};
     }}
     div[class*="st-key-"][class*="destrutivo"] .stButton > button:hover,
     div[class*="st-key-"][class*="destrutivo"] .stButton > button:focus-visible,
     div[class*="st-key-"][class*="destrutivo"] .stButton > button:focus {{
-        background: {CORES['vermelho_bg']};
+        background: {cores['vermelho_bg']};
         color: var(--gat-vermelho);
         border-color: var(--gat-vermelho);
     }}
 
+    /* ---- Cabeçalho nativo do Streamlit (barra superior) ---- */
+    header[data-testid="stHeader"] {{
+        background: var(--gat-bg);
+    }}
+    header[data-testid="stHeader"] * {{
+        color: var(--gat-texto);
+    }}
+
     /* ---- Sidebar ---- */
     section[data-testid="stSidebar"] {{
-        background: #ffffff;
+        background: {superficie_1};
         border-right: 1px solid var(--gat-borda);
     }}
     section[data-testid="stSidebar"] p {{
@@ -197,8 +249,11 @@ def injetar_css_global() -> None:
         margin: 1px 0;
         transition: background .12s ease-in-out;
     }}
+    a[data-testid="stSidebarNavLink"] p, a[data-testid="stSidebarNavLink"] span[data-testid="stIconMaterial"] {{
+        color: var(--gat-texto);
+    }}
     a[data-testid="stSidebarNavLink"]:hover {{
-        background: var(--gat-superficie-2, #F1F5F9);
+        background: var(--gat-superficie-2);
     }}
     a[data-testid="stSidebarNavLink"][aria-current="page"] {{
         background: var(--gat-azul-3);
@@ -214,9 +269,10 @@ def injetar_css_global() -> None:
 
     /* ---- Aparência de pop-up flutuante para st.dialog ---- */
     div[data-testid="stDialog"] div[role="dialog"] {{
+        background: {superficie_1};
         border-top: 6px solid var(--gat-navy);
         border-radius: 12px;
-        box-shadow: 0 20px 60px rgba(15,23,42,.35);
+        box-shadow: 0 20px 60px rgba(15,23,42,{'.6' if escuro else '.35'});
     }}
     div[data-testid="stDialog"] h1,
     div[data-testid="stDialog"] h2,
@@ -231,6 +287,10 @@ def injetar_css_global() -> None:
     }}
 
     /* ---- Expanders (filtros) ---- */
+    div[data-testid="stExpander"] {{
+        background: {superficie_1};
+        border-color: var(--gat-borda);
+    }}
     div[data-testid="stExpander"] summary {{
         font-weight: 600;
         font-size: .92rem;
@@ -249,7 +309,7 @@ def injetar_css_global() -> None:
 
     /* ---- Métricas nativas (st.metric) ---- */
     div[data-testid="stMetric"] {{
-        background: #ffffff;
+        background: {superficie_1};
         border: 1px solid var(--gat-borda);
         border-radius: 8px;
         padding: 12px 16px;
@@ -261,6 +321,47 @@ def injetar_css_global() -> None:
         color: var(--gat-texto-fraco);
         font-weight: 600;
     }}
+
+    /* ---- Formulários, campos de texto, seletores, calendário ----
+       Streamlit >= 1.5x usa React Aria (não mais BaseWeb) para
+       selectbox/multiselect/combobox/calendário — os seletores abaixo
+       cobrem os dois modelos (o BaseWeb fica como reforço/compatibilidade). */
+    div[data-testid="stTextInput"] input, div[data-testid="stTextArea"] textarea,
+    div[data-testid="stNumberInput"] input, div[data-baseweb="select"] > div,
+    div[data-testid="stDateInput"] input,
+    div[data-testid="stSelectbox"] input, div[data-testid="stMultiSelect"] input,
+    div[data-testid="stSelectbox"] [role="group"], div[data-testid="stMultiSelect"] [role="group"],
+    [data-rac] input, [data-rac][role="group"] {{
+        background: {superficie_1};
+        color: var(--gat-texto);
+        border-color: var(--gat-borda-forte);
+    }}
+    div[data-baseweb="popover"], div[data-baseweb="calendar"], div[data-baseweb="menu"],
+    [role="listbox"], [role="option"], [role="dialog"][data-rac],
+    div[id^="react-aria"], div[class*="ListBox"], ul[data-rac] {{
+        background: {superficie_1} !important;
+        color: var(--gat-texto);
+    }}
+    [role="option"]:hover, [role="option"][data-focused="true"], [role="option"][aria-selected="true"] {{
+        background: var(--gat-superficie-2) !important;
+    }}
+    div[data-testid="stFileUploaderDropzone"] {{
+        background: var(--gat-superficie-2);
+        border-color: var(--gat-borda-forte);
+    }}
+    div[data-testid="stContainer"], div[data-testid="stForm"] {{
+        border-color: var(--gat-borda);
+    }}
+
+    /* ---- Gráficos Plotly: texto e grades legíveis no Tema Escuro ----
+       Os gráficos usam fundo transparente (herdam o fundo da página) —
+       aqui só recolorimos texto/eixos/grades via CSS, sem precisar
+       reconfigurar cada gráfico individualmente em Python. */
+    {"".join([
+        ".js-plotly-plot .plotly text { fill: " + cores['texto'] + " !important; }",
+        ".js-plotly-plot .xgridlayer path, .js-plotly-plot .ygridlayer path { stroke: " + cores['borda'] + " !important; }",
+        ".js-plotly-plot .xzl, .js-plotly-plot .yzl { stroke: " + cores['borda_forte'] + " !important; }",
+    ]) if escuro else ""}
 
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}

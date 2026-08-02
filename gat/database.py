@@ -1127,6 +1127,36 @@ def _migracao_0020_manual_arquivo(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migracao_0021_tema_usuario(conn: sqlite3.Connection) -> None:
+    """
+    Preferência de tema (Claro/Escuro) por usuário — persistida no banco
+    (não em sessão) para sobreviver a logout, novo login e reinicialização
+    do servidor. Aditiva: usuários existentes recebem 'claro' por padrão,
+    preservando a aparência atual.
+    """
+    _garantir_coluna(conn, "usuarios", "tema_preferido", "TEXT NOT NULL DEFAULT 'claro'")
+
+
+def _migracao_0022_manual_tema(conn: sqlite3.Connection) -> None:
+    """
+    Atualiza automaticamente o Manual do Sistema com os capítulos "Tema
+    Claro e Tema Escuro" e "Padrão visual do sistema" — acrescentados ao
+    final da lista já existente, sem alterar nenhum capítulo anterior.
+    """
+    from gat.tema_manual_conteudo import CAPITULOS_TEMA
+
+    agora = datetime.now().isoformat()
+    maior_ordem = conn.execute("SELECT COALESCE(MAX(ordem), 0) FROM manual_capitulos").fetchone()[0]
+    for indice, (titulo, conteudo) in enumerate(CAPITULOS_TEMA, start=1):
+        existe = conn.execute("SELECT id FROM manual_capitulos WHERE titulo = ?", (titulo,)).fetchone()
+        if existe:
+            continue
+        conn.execute(
+            "INSERT INTO manual_capitulos (ordem, titulo, conteudo, perfis_visiveis, criado_em) VALUES (?, ?, ?, NULL, ?)",
+            (maior_ordem + indice, titulo, conteudo, agora),
+        )
+
+
 _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (1, "Índices de busca por N° AT e nome em Prestadores e Cessionários", _migracao_0001_indices_busca),
     (2, "Índices para avaliações (checklist/analistas), alertas com radar e histórico de atividades", _migracao_0002_indices_avaliacoes_alertas),
@@ -1148,6 +1178,8 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (18, "Módulo Arquivo: arquivamento lógico (arquivado_em/por/motivo/teste) em pmo_projetos, prestadores, cessionarios, cadastro_prestadores, cadastro_cessionarios, usuarios, reunioes, planos_acao, alertas_manuais, pmo_cronograma_arquivos + tabela arquivo_auditoria", _migracao_0018_arquivo_schema),
     (19, "Módulo Arquivo: bloqueia por padrão o acesso do perfil Consulta (todos os demais perfis mantêm acesso)", _migracao_0019_arquivo_permissao_consulta),
     (20, "Módulo Arquivo: capítulo 'Módulo Arquivo' no Manual do Sistema", _migracao_0020_manual_arquivo),
+    (21, "Preferência de Tema Claro/Escuro por usuário (usuarios.tema_preferido)", _migracao_0021_tema_usuario),
+    (22, "Manual do Sistema: capítulos 'Tema Claro e Tema Escuro' e 'Padrão visual do sistema'", _migracao_0022_manual_tema),
 ]
 
 
@@ -1590,6 +1622,16 @@ def alterar_senha_usuario(username: str, senha_atual: str, nova_senha: str) -> b
         )
         _registrar_evento_seguranca(conn, "ALTERACAO_SENHA_PROPRIA", username, username, "Usuário alterou a própria senha.")
         return True
+
+
+def definir_tema_usuario(username: str, tema: str) -> None:
+    """Salva a preferência de tema (Claro/Escuro) do próprio usuário —
+    persistida no banco, individual por conta, sobrevive a logout/login e
+    a reinicializações do sistema."""
+    if tema not in ("claro", "escuro"):
+        raise ValueError("Tema inválido — use 'claro' ou 'escuro'.")
+    with _conectar() as conn:
+        conn.execute("UPDATE usuarios SET tema_preferido = ? WHERE username = ?", (tema, username))
 
 
 def concluir_troca_senha_obrigatoria(username: str, nova_senha: str) -> None:

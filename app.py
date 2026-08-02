@@ -26,10 +26,10 @@ from gat.auth import (
     usuario_autenticado,
 )
 from gat.config import MODULOS_CONTROLADOS
-from gat.database import init_db, registrar_atividade
+from gat.database import definir_tema_usuario, init_db, registrar_atividade
 from gat.export_excel import gerar_relatorio_excel
 from gat.permissions import pode_area, pode_modulo
-from gat.styles import cabecalho_institucional, injetar_css_global, logo_base64
+from gat.styles import TEMA_CLARO, TEMA_ESCURO, cabecalho_institucional, injetar_css_global, logo_base64
 from views import (
     administracao,
     alertas,
@@ -86,6 +86,9 @@ usuario = usuario_atual()
 # ---------------------------------------------------------------------------
 # Sidebar — identidade institucional
 # ---------------------------------------------------------------------------
+_ROTULOS_TEMA = {TEMA_CLARO: "Tema Claro", TEMA_ESCURO: "Tema Escuro"}
+tema_atual = usuario.get("tema_preferido") or TEMA_CLARO
+
 with st.sidebar:
     logo_b64 = logo_base64()
     if logo_b64:
@@ -96,7 +99,18 @@ with st.sidebar:
         )
     st.markdown(f"**{usuario['nome_completo'] or usuario['username']}**")
     st.caption(f"Perfil: {usuario['perfil']}")
+    tema_escolhido = st.segmented_control(
+        "Aparência", options=[TEMA_CLARO, TEMA_ESCURO], format_func=lambda t: _ROTULOS_TEMA[t],
+        default=tema_atual, key="gat_tema_toggle",
+        help="Alterna entre Tema Claro e Tema Escuro. A escolha é individual e fica salva para o seu usuário.",
+    )
+    if tema_escolhido and tema_escolhido != tema_atual:
+        definir_tema_usuario(usuario["username"], tema_escolhido)
+        st.session_state["usuario"]["tema_preferido"] = tema_escolhido
+        tema_atual = tema_escolhido
     st.divider()
+
+injetar_css_global(tema_atual)
 
 # ---------------------------------------------------------------------------
 # Navegação — agrupada por módulo (menu lateral, sem rádio/bolinhas)

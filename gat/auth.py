@@ -59,6 +59,7 @@ def _autenticar(username: str, senha: str) -> bool:
         "nome_completo": usuario["nome_completo"],
         "perfil": usuario["perfil"],
         "analista_vinculado": usuario["analista_vinculado"],
+        "tema_preferido": usuario["tema_preferido"],
     }
 
     if usuario["deve_trocar_senha"]:
