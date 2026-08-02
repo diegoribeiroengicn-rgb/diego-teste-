@@ -22,8 +22,14 @@ from gat.database import listar_cessionarios, obter_cessionario, registrar_ativi
 from gat.export_projetos import gerar_csv_bytes, gerar_excel_bytes, montar_exportacao_cessionarios, nome_arquivo_exportacao
 from gat.permissions import exigir_area, exigir_modulo, pode_area
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
+from gat.ui.formatos import formatar_datas_df
 from gat.ui.modals import dialog_cessionario
 from gat.ui.tables import tabela_com_edicao
+
+_COLUNAS_DATA_CESSIONARIOS = [
+    "data_solicitacao", "data_limite", "data_analise", "hold_inicio", "hold_fim",
+    "data_atualizacao_rci", "data_atualizacao_rvp",
+]
 
 _ICONE_SITUACAO_PRAZO = {
     "DENTRO DO PRAZO": "🟢",
@@ -178,7 +184,8 @@ def render(usuario: dict) -> None:
     )
 
     colunas = list(COLUNAS_EXIBICAO_CESSIONARIOS.keys())
-    df_exibicao = df_filtrado[[*colunas[:3], "Avaliação", "Situação do Prazo", "Nível de Atraso", *colunas[3:]]].rename(columns=COLUNAS_EXIBICAO_CESSIONARIOS)
+    df_para_exibicao = formatar_datas_df(df_filtrado, _COLUNAS_DATA_CESSIONARIOS)
+    df_exibicao = df_para_exibicao[[*colunas[:3], "Avaliação", "Situação do Prazo", "Nível de Atraso", *colunas[3:]]].rename(columns=COLUNAS_EXIBICAO_CESSIONARIOS)
 
     def _abrir_edicao(registro: dict) -> None:
         exigir_area(usuario, "cessionarios.editar")

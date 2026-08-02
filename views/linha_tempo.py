@@ -27,6 +27,7 @@ from gat.ui.charts import (
     grafico_top_atraso_entidades,
 )
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
+from gat.ui.formatos import formatar_data_br, formatar_datas_df
 
 _MODULOS_VISIVEIS = {"Prestadores": "prestadores", "Cessionários": "cessionarios"}
 
@@ -71,7 +72,10 @@ def _sequencia_completa_projeto(modulo: str, coluna_nome: str, tipo_entidade: st
         else:
             _etapa("Resposta da Tecnoplano", None, None, None, "Ainda em análise — sem data de resposta registrada.")
         if hold_dias:
-            _etapa("Aguardando retorno externo (Hold)", None, hold_dias, None, f"Hold de {revisao.get('hold_inicio', '—')} a {revisao.get('hold_fim', '—')}.")
+            _etapa(
+                "Aguardando retorno externo (Hold)", None, hold_dias, None,
+                f"Hold de {formatar_data_br(revisao.get('hold_inicio')) or '—'} a {formatar_data_br(revisao.get('hold_fim')) or '—'}.",
+            )
 
         if anterior is not None:
             if pd.notna(revisao.get("data_solicitacao")) and pd.notna(anterior.get("data_solicitacao")):
@@ -92,7 +96,7 @@ def _sequencia_completa_projeto(modulo: str, coluna_nome: str, tipo_entidade: st
     if not reunioes.empty:
         st.markdown("**Reuniões vinculadas**")
         st.dataframe(
-            reunioes[["titulo", "data_prevista", "data_realizada"]].rename(
+            formatar_datas_df(reunioes, ["data_prevista", "data_realizada"])[["titulo", "data_prevista", "data_realizada"]].rename(
                 columns={"titulo": "Título", "data_prevista": "Data Prevista", "data_realizada": "Data Realizada"}
             ),
             use_container_width=True, hide_index=True,
@@ -104,7 +108,9 @@ def _sequencia_completa_projeto(modulo: str, coluna_nome: str, tipo_entidade: st
         if not avaliacoes_projeto.empty:
             st.markdown("**Avaliações**")
             st.dataframe(
-                avaliacoes_projeto[["data_avaliacao", "revisao", "pontuacao", "classificacao", "acompanhamento"]].rename(
+                formatar_datas_df(avaliacoes_projeto, ["data_avaliacao"])[
+                    ["data_avaliacao", "revisao", "pontuacao", "classificacao", "acompanhamento"]
+                ].rename(
                     columns={"data_avaliacao": "Data", "revisao": "Revisão", "pontuacao": "Pontuação", "classificacao": "Classificação", "acompanhamento": "Acompanhamento"}
                 ),
                 use_container_width=True, hide_index=True,

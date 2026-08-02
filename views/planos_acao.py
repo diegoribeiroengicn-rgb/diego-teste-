@@ -9,6 +9,7 @@ import streamlit as st
 from gat.config import CORES, RESPONSAVEIS, STATUS_PLANO_ACAO_OPCOES
 from gat.database import listar_planos_acao, obter_plano_acao
 from gat.permissions import exigir_area
+from gat.ui.formatos import formatar_datas_df
 from gat.ui.kpi_cards import renderizar_kpis
 from gat.ui.modals_gestao import dialog_plano_acao
 from gat.ui.tables import tabela_com_edicao
@@ -72,7 +73,7 @@ def render(usuario: dict) -> None:
     st.caption(f"{len(df_filtrado)} plano(s) encontrado(s).")
 
     colunas = list(_COLUNAS_EXIBICAO.keys())
-    df_exibicao = df_filtrado[colunas].rename(columns=_COLUNAS_EXIBICAO)
+    df_exibicao = formatar_datas_df(df_filtrado[colunas], ["prazo"]).rename(columns=_COLUNAS_EXIBICAO)
 
     tabela_com_edicao(
         df_exibicao,

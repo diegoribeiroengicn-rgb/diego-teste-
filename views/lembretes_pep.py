@@ -15,6 +15,7 @@ from gat.business_rules import (
 from gat.config import CORES, RESPONSAVEIS
 from gat.database import listar_prestadores, obter_prestador
 from gat.permissions import exigir_area, pode_area
+from gat.ui.formatos import formatar_data_br
 from gat.ui.kpi_cards import renderizar_kpis
 from gat.ui.modals import dialog_prestador
 
@@ -118,7 +119,7 @@ def render(usuario: dict) -> None:
             st.markdown(
                 f"**[{linha['modulo']}] Item {linha['item']} — {linha['nome']}** "
                 f"({_ou_traco(linha['disciplina'])}) · AT {_ou_traco(linha['num_at'])} · "
-                f"Responsável: {_ou_traco(linha['responsavel'])} · Entrada: {_ou_traco(linha['data_solicitacao'])} · "
+                f"Responsável: {_ou_traco(linha['responsavel'])} · Entrada: {formatar_data_br(linha['data_solicitacao']) or '-'} · "
                 f"{int(linha['dias_sem_pep'])} dia(s) sem PEP"
             )
         with col_badge:

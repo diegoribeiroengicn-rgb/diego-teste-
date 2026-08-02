@@ -231,6 +231,68 @@ def _calcular_campos_sla_persistidos(
     }
 
 
+def _preparar_recalculo_data_limite(
+    chave_dlim: str, gatilho_atual: tuple, sugestao_limite, editando: bool,
+) -> None:
+    """
+    Prepara o session_state do campo de data prevista ANTES de renderizar o
+    widget (item 1/4 da modificação de cálculo automático de data prevista):
+    em registros novos, preenche automaticamente; em edição, recalcula
+    automaticamente sempre que um campo que afeta o prazo (data de
+    solicitação, tipo, revisão, SLA reduzido, prioridade) muda — a menos que
+    o valor em tela já estivesse divergente do último cálculo (ou seja, já
+    havia sido ajustado manualmente), caso em que apenas sinaliza a
+    pendência de confirmação, renderizada por `_renderizar_confirmacao_recalculo`
+    (item 5: "Deseja recalculá-la com base no novo SLA?").
+    """
+    chave_gatilho = f"{chave_dlim}_gatilho"
+    chave_ultima_sugestao = f"{chave_dlim}_ultima_sugestao"
+    if chave_gatilho not in st.session_state:
+        st.session_state[chave_gatilho] = gatilho_atual
+        st.session_state[chave_ultima_sugestao] = sugestao_limite
+        if not editando:
+            st.session_state[chave_dlim] = sugestao_limite
+        return
+    if st.session_state[chave_gatilho] != gatilho_atual:
+        valor_anterior = st.session_state.get(chave_dlim)
+        sugestao_anterior = st.session_state.get(chave_ultima_sugestao)
+        if valor_anterior == sugestao_anterior:
+            st.session_state[chave_dlim] = sugestao_limite
+        else:
+            st.session_state[f"{chave_dlim}_pendente_recalculo"] = sugestao_limite
+        st.session_state[chave_gatilho] = gatilho_atual
+    st.session_state[chave_ultima_sugestao] = sugestao_limite
+
+
+def _renderizar_confirmacao_recalculo(chave_dlim: str, sla_efetivo: int) -> None:
+    """Confirmação do item 5: exibida somente quando um campo que afeta o
+    prazo mudou e a data prevista atual já estava ajustada manualmente —
+    nunca sobrescreve silenciosamente uma data pinada manualmente."""
+    chave_pendente = f"{chave_dlim}_pendente_recalculo"
+    nova_sugestao = st.session_state.get(chave_pendente)
+    if nova_sugestao is None:
+        return
+    st.warning(
+        f"A data prevista foi ajustada manualmente. Deseja recalculá-la com base no novo SLA "
+        f"({sla_efetivo} dia(s) útil(eis) → {nova_sugestao.strftime('%d/%m/%Y')})?",
+        icon=":material/event_repeat:",
+    )
+    col_sim, col_nao = st.columns(2)
+    col_sim.button(
+        "Sim, recalcular", type="primary", use_container_width=True, key=f"{chave_dlim}_recalc_sim",
+        on_click=lambda: st.session_state.update({chave_dlim: nova_sugestao, chave_pendente: None}),
+    )
+    col_nao.button(
+        "Não, manter a data manual", use_container_width=True, key=f"{chave_dlim}_recalc_nao",
+        on_click=lambda: st.session_state.update({chave_pendente: None}),
+    )
+
+
+def _limpar_estado_recalculo_data_limite(chave_dlim: str) -> None:
+    for sufixo_chave in ("_gatilho", "_ultima_sugestao", "_pendente_recalculo"):
+        st.session_state.pop(f"{chave_dlim}{sufixo_chave}", None)
+
+
 def _detectar_pendencia_avaliacao(tipo_entidade: str, modulo: str, dados: dict[str, Any], projeto_id: int, coluna_nome: str) -> dict[str, Any] | None:
     """Verifica, logo após salvar uma análise técnica (Prestador ou
     Cessionário), se ela deixa uma avaliação obrigatória da Rev.01
@@ -440,9 +502,11 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
             )
 
     justificativa_sla = ""
-    if sla_reduzido:
+    if sla_reduzido or nivel_prioridade is not None:
+        rotulo_justificativa = "Justificativa do SLA reduzido *" if sla_reduzido else "Justificativa da prioridade *"
         justificativa_sla = st.text_area(
-            "Justificativa do SLA reduzido *", value=registro.get("justificativa_sla", "") if editando and registro.get("sla_reduzido") else "",
+            rotulo_justificativa,
+            value=registro.get("justificativa_sla", "") if editando and (registro.get("sla_reduzido") or registro.get("nivel_prioridade") is not None) else "",
             key=f"pr_justsla_{sufixo}",
         )
 
@@ -457,22 +521,20 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
         data_solicitacao = st.date_input("Data de Solicitação *", value=_parse_data(registro.get("data_solicitacao")) if registro else date.today(), format="DD/MM/YYYY", key=f"pr_dsol_{sufixo}")
     sugestao_limite_padrao = calcular_data_limite(data_solicitacao, sla_padrao)
     sugestao_limite = calcular_data_limite(data_solicitacao, sla_efetivo)
-    if not editando:
-        chave_gatilho = f"pr_dlim_gatilho_{sufixo}"
-        gatilho_atual = (data_solicitacao, sla_efetivo)
-        if st.session_state.get(chave_gatilho) != gatilho_atual:
-            st.session_state[f"pr_dlim_{sufixo}"] = sugestao_limite
-            st.session_state[chave_gatilho] = gatilho_atual
+    chave_dlim = f"pr_dlim_{sufixo}"
+    _preparar_recalculo_data_limite(chave_dlim, (data_solicitacao, sla_efetivo), sugestao_limite, editando)
     with col4:
         data_limite = st.date_input(
             "Data de Entrega Acordada/Prevista *",
             value=_parse_data(registro.get("data_limite")) if editando else sugestao_limite,
             format="DD/MM/YYYY",
-            help=f"Sugestão automática (SLA de {sla_efetivo} dias úteis): {sugestao_limite.strftime('%d/%m/%Y') if sugestao_limite else '-'}. Pode ser repactuada manualmente.",
-            key=f"pr_dlim_{sufixo}",
+            help=f"Sugestão automática (SLA de {sla_efetivo} dias úteis): {sugestao_limite.strftime('%d/%m/%Y') if sugestao_limite else '-'}. Preenchida e recalculada automaticamente; pode ser ajustada manualmente.",
+            key=chave_dlim,
         )
     with col5:
         data_analise = st.date_input("Data Análise (se concluída)", value=_parse_data(registro.get("data_analise")) if registro else None, format="DD/MM/YYYY", key=f"pr_dana_{sufixo}")
+
+    _renderizar_confirmacao_recalculo(chave_dlim, sla_efetivo)
 
     col6, col7 = st.columns(2)
     with col6:
@@ -484,7 +546,10 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
     status_calc, dias_decorridos = status_entrega_prestador(data_solicitacao, data_analise, hold_dias)
 
     data_limite_original = _parse_data(registro.get("data_limite")) if editando else None
-    repactuando = editando and data_limite_original is not None and data_limite is not None and data_limite != data_limite_original
+    repactuando = (
+        editando and data_limite_original is not None and data_limite is not None
+        and data_limite != data_limite_original and data_limite != sugestao_limite
+    )
     motivo_repactuacao = ""
     if repactuando:
         st.warning(
@@ -533,6 +598,7 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
     if _confirmar_descarte(f"pr_descarte_{sufixo}", houve_alteracoes, cancelar):
         st.session_state[chave_tentativa] = False
         st.session_state.pop(f"pr_snapshot_{sufixo}", None)
+        _limpar_estado_recalculo_data_limite(chave_dlim)
         st.rerun()
 
     if salvar and (not prestador or not data_solicitacao):
@@ -540,6 +606,9 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
         salvar = False
     if salvar and sla_reduzido and not justificativa_sla.strip():
         st.error("Informe a justificativa do SLA reduzido para salvar.")
+        salvar = False
+    if salvar and nivel_prioridade is not None and not sla_reduzido and not justificativa_sla.strip():
+        st.error("Informe a justificativa da prioridade para salvar.")
         salvar = False
 
     if (
@@ -576,6 +645,7 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
             "etg": etg,
             "prestador_cadastro_id": cadastro_selecionado["id"] if cadastro_selecionado else None,
             "obra_id": obra_id,
+            "data_limite_ajustada_manualmente": 1 if (data_limite and sugestao_limite and data_limite != sugestao_limite) else 0,
             **campos_sla,
         }
         if editando:
@@ -594,6 +664,7 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
             st.toast("Novo registro de prestador cadastrado com sucesso.", icon=":material/check_circle:")
         st.session_state[chave_tentativa] = False
         st.session_state.pop(f"pr_snapshot_{sufixo}", None)
+        _limpar_estado_recalculo_data_limite(chave_dlim)
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
 
         pendencia_avaliacao = _detectar_pendencia_avaliacao("PRESTADOR", "prestadores", dados, projeto_id_salvo, "prestador")
@@ -733,22 +804,20 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
         data_solicitacao = st.date_input("Data de Solicitação *", value=_parse_data(registro.get("data_solicitacao")) if registro else date.today(), format="DD/MM/YYYY", key=f"ce_dsol_{sufixo}")
     sugestao_limite_padrao = calcular_data_limite(data_solicitacao, sla_padrao)
     sugestao_limite = calcular_data_limite(data_solicitacao, sla_efetivo)
-    if not editando:
-        chave_gatilho = f"ce_dlim_gatilho_{sufixo}"
-        gatilho_atual = (data_solicitacao, tipo, int(revisao), sla_efetivo)
-        if st.session_state.get(chave_gatilho) != gatilho_atual:
-            st.session_state[f"ce_dlim_{sufixo}"] = sugestao_limite
-            st.session_state[chave_gatilho] = gatilho_atual
+    chave_dlim = f"ce_dlim_{sufixo}"
+    _preparar_recalculo_data_limite(chave_dlim, (data_solicitacao, tipo, int(revisao), sla_efetivo), sugestao_limite, editando)
     with col4:
         data_limite = st.date_input(
             "Data de Entrega Acordada/Prevista *",
             value=_parse_data(registro.get("data_limite")) if editando else sugestao_limite,
             format="DD/MM/YYYY",
-            help=f"Sugestão automática (SLA de {sla_efetivo} dias úteis): {sugestao_limite.strftime('%d/%m/%Y') if sugestao_limite else '-'}. Pode ser repactuada manualmente.",
-            key=f"ce_dlim_{sufixo}",
+            help=f"Sugestão automática (SLA de {sla_efetivo} dias úteis): {sugestao_limite.strftime('%d/%m/%Y') if sugestao_limite else '-'}. Preenchida e recalculada automaticamente; pode ser ajustada manualmente.",
+            key=chave_dlim,
         )
     with col5:
         data_analise = st.date_input("Data Análise (se concluída)", value=_parse_data(registro.get("data_analise")) if registro else None, format="DD/MM/YYYY", key=f"ce_dana_{sufixo}")
+
+    _renderizar_confirmacao_recalculo(chave_dlim, sla_efetivo)
 
     col6, col7 = st.columns(2)
     with col6:
@@ -760,7 +829,10 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
     status_calc, saldo = status_entrega_cessionario(data_solicitacao, data_analise, hold_dias, sla_efetivo)
 
     data_limite_original = _parse_data(registro.get("data_limite")) if editando else None
-    repactuando = editando and data_limite_original is not None and data_limite is not None and data_limite != data_limite_original
+    repactuando = (
+        editando and data_limite_original is not None and data_limite is not None
+        and data_limite != data_limite_original and data_limite != sugestao_limite
+    )
     motivo_repactuacao = ""
     if repactuando:
         st.warning(
@@ -812,6 +884,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
     if _confirmar_descarte(f"ce_descarte_{sufixo}", houve_alteracoes, cancelar):
         st.session_state[chave_tentativa] = False
         st.session_state.pop(f"ce_snapshot_{sufixo}", None)
+        _limpar_estado_recalculo_data_limite(chave_dlim)
         st.rerun()
 
     if salvar and (not cessionario or not data_solicitacao):
@@ -857,6 +930,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
             "num_erros": int(num_erros),
             "etg": etg,
             "cessionario_cadastro_id": cadastro_cess_selecionado["id"] if cadastro_cess_selecionado else None,
+            "data_limite_ajustada_manualmente": 1 if (data_limite and sugestao_limite and data_limite != sugestao_limite) else 0,
             **campos_sla,
         }
         if editando:
@@ -875,6 +949,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
             st.toast("Novo registro de cessionário cadastrado com sucesso.", icon=":material/check_circle:")
         st.session_state[chave_tentativa] = False
         st.session_state.pop(f"ce_snapshot_{sufixo}", None)
+        _limpar_estado_recalculo_data_limite(chave_dlim)
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
 
         pendencia_avaliacao = _detectar_pendencia_avaliacao("CESSIONARIO", "cessionarios", dados, projeto_id_salvo, "cessionario")

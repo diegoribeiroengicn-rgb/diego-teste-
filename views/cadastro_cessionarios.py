@@ -7,6 +7,7 @@ import streamlit as st
 
 from gat.database import listar_cadastro_cessionarios, listar_cessionarios, obter_cadastro_cessionario
 from gat.permissions import exigir_area, exigir_modulo, pode_area
+from gat.ui.formatos import formatar_datas_df
 from gat.ui.modals_cadastro import dialog_cadastro_cessionario, dialog_status_cadastro_cessionario
 from gat.ui.tables import tabela_com_edicao
 
@@ -97,7 +98,9 @@ def render(usuario: dict) -> None:
         st.caption("Nenhum projeto vinculado a este cadastro ainda.")
     else:
         st.dataframe(
-            vinculados[["item", "num_at", "disciplina", "revisao", "status_analise", "data_solicitacao"]].rename(columns={
+            formatar_datas_df(vinculados, ["data_solicitacao"])[
+                ["item", "num_at", "disciplina", "revisao", "status_analise", "data_solicitacao"]
+            ].rename(columns={
                 "item": "Item", "num_at": "N° AT", "disciplina": "Disciplina", "revisao": "Revisão",
                 "status_analise": "Status", "data_solicitacao": "Data Solicitação",
             }),

@@ -29,6 +29,7 @@ from gat.export_avaliacoes import (
 from gat.permissions import exigir_area, pode_area, pode_modulo
 from gat.ui.charts import grafico_status_donut
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
+from gat.ui.formatos import formatar_datas_df
 from gat.ui.kpi_cards import renderizar_kpis
 from gat.ui.modals import dialog_avaliacao
 from gat.ui.modals_avaliacao import dialog_avaliacao_checklist
@@ -219,7 +220,7 @@ def _tab_checklist(usuario: dict) -> None:
     if segmentacao_obra:
         colunas_tabela.insert(2, "nome_obra")
         rotulos["nome_obra"] = "Obra/Canteiro"
-    df_exibicao = df_filtrado[colunas_tabela].copy()
+    df_exibicao = formatar_datas_df(df_filtrado[colunas_tabela], ["data_avaliacao"]).copy()
     if segmentacao_obra:
         df_exibicao["nome_obra"] = df_exibicao["nome_obra"].fillna("—")
     df_exibicao = df_exibicao.rename(columns=rotulos)

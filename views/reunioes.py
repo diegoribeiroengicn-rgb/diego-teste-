@@ -8,6 +8,7 @@ from gat.business_rules import filtrar_por_competencia
 from gat.database import listar_planos_da_reuniao, listar_reunioes, obter_reuniao
 from gat.permissions import exigir_area
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
+from gat.ui.formatos import formatar_data_br, formatar_datas_df
 from gat.ui.kpi_cards import renderizar_kpis
 from gat.ui.modals_gestao import dialog_plano_acao, dialog_reuniao
 
@@ -52,13 +53,14 @@ def render(usuario: dict) -> None:
 
     for _, linha in df_filtrado.iterrows():
         status_txt = "Realizada" if linha["data_realizada"] else "Prevista"
-        with st.expander(f"{linha['titulo']} — {status_txt} ({linha['data_prevista'] or 's/ data'})", icon=":material/event:"):
+        data_prevista_rotulo = formatar_data_br(linha["data_prevista"]) or "s/ data"
+        with st.expander(f"{linha['titulo']} — {status_txt} ({data_prevista_rotulo})", icon=":material/event:"):
             reuniao = obter_reuniao(int(linha["id"]))
             col_a, col_b = st.columns(2)
             with col_a:
                 st.markdown(f"**Pauta:** {reuniao.get('pauta') or '-'}")
-                st.markdown(f"**Data Prevista:** {reuniao.get('data_prevista') or '-'}")
-                st.markdown(f"**Data Realizada:** {reuniao.get('data_realizada') or '-'}")
+                st.markdown(f"**Data Prevista:** {formatar_data_br(reuniao.get('data_prevista')) or '-'}")
+                st.markdown(f"**Data Realizada:** {formatar_data_br(reuniao.get('data_realizada')) or '-'}")
                 participantes = reuniao.get("participantes") or []
                 st.markdown(f"**Participantes:** {', '.join(participantes) if participantes else '-'}")
             with col_b:
@@ -85,7 +87,7 @@ def render(usuario: dict) -> None:
                 st.caption("Nenhum plano de ação vinculado.")
             else:
                 st.dataframe(
-                    df_planos[["descricao", "responsavel", "prazo", "status"]].rename(columns={
+                    formatar_datas_df(df_planos, ["prazo"])[["descricao", "responsavel", "prazo", "status"]].rename(columns={
                         "descricao": "Descrição", "responsavel": "Responsável", "prazo": "Prazo", "status": "Status",
                     }),
                     use_container_width=True,

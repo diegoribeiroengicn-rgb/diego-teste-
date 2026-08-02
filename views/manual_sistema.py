@@ -29,6 +29,7 @@ from gat.database import (
 )
 from gat.permissions import exigir_area, pode_area
 from gat.relatorios_manual import gerar_pdf_manual, gerar_word_manual, nome_arquivo_manual
+from gat.ui.formatos import formatar_data_br, formatar_datahora_br, formatar_datahoras_df
 
 _TAMANHO_MAXIMO_ANEXO = 5 * 1024 * 1024  # 5 MB por anexo
 
@@ -39,7 +40,7 @@ def _secao_leitura(usuario: dict) -> None:
 
     st.subheader(":material/menu_book: Manual do Sistema")
     if versao:
-        st.caption(f"Versão {versao['numero_versao']} · Publicado em {versao['publicado_em'][:10]} por {versao['publicado_por']}")
+        st.caption(f"Versão {versao['numero_versao']} · Publicado em {formatar_data_br(versao['publicado_em'])} por {versao['publicado_por']}")
 
     if versao and not usuario_confirmou_leitura_manual(usuario["username"], versao["numero_versao"]):
         with st.container(border=True):
@@ -204,7 +205,7 @@ def _secao_administracao(usuario: dict) -> None:
         anexos_capitulo = listar_anexos_manual(capitulo_id)
         for _, anexo in anexos_capitulo.iterrows():
             col_nome, col_remover = st.columns([4, 1])
-            col_nome.caption(f"{anexo['tipo']} — {anexo['nome_arquivo']} ({anexo['criado_em'][:10]})")
+            col_nome.caption(f"{anexo['tipo']} — {anexo['nome_arquivo']} ({formatar_data_br(anexo['criado_em'])})")
             if col_remover.button("Remover", key=f"manual_remover_anexo_{anexo['id']}"):
                 remover_anexo_manual(int(anexo["id"]))
                 st.rerun()
@@ -219,14 +220,21 @@ def _secao_administracao(usuario: dict) -> None:
             st.rerun()
 
         st.markdown("###### Histórico de versões")
-        st.dataframe(listar_manual_versoes(), hide_index=True, use_container_width=True)
+        versoes = formatar_datahoras_df(listar_manual_versoes(), ["publicado_em"]).rename(columns={
+            "numero_versao": "Versão", "notas": "Notas", "publicado_em": "Publicado em",
+            "publicado_por": "Publicado por", "ativa": "Ativa",
+        })
+        st.dataframe(versoes[["Versão", "Notas", "Publicado em", "Publicado por", "Ativa"]], hide_index=True, use_container_width=True)
 
         st.markdown("###### Confirmações de leitura")
         versao_atual = versao_ativa_manual()
         if versao_atual:
             confirmacoes = listar_confirmacoes_leitura_manual(versao_atual["numero_versao"])
             st.caption(f"{len(confirmacoes)} usuário(s) confirmaram a leitura da versão {versao_atual['numero_versao']}.")
-            st.dataframe(confirmacoes, hide_index=True, use_container_width=True)
+            confirmacoes_exibicao = formatar_datahoras_df(confirmacoes, ["confirmado_em"]).rename(columns={
+                "usuario": "Usuário", "versao": "Versão", "confirmado_em": "Confirmado em",
+            })
+            st.dataframe(confirmacoes_exibicao[["Usuário", "Versão", "Confirmado em"]], hide_index=True, use_container_width=True)
 
 
 def render(usuario: dict) -> None:

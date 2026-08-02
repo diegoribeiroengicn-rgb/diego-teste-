@@ -9,6 +9,7 @@ from gat.business_rules import filtrar_por_competencia
 from gat.database import listar_historico
 from gat.permissions import exigir_area
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
+from gat.ui.formatos import formatar_datahoras_df
 
 
 def render(usuario: dict) -> None:
@@ -42,7 +43,7 @@ def render(usuario: dict) -> None:
         return
 
     st.dataframe(
-        df_hist.rename(columns={
+        formatar_datahoras_df(df_hist, ["data_hora"]).rename(columns={
             "tabela": "Tipo", "registro_id": "ID", "campo": "Campo",
             "valor_anterior": "Valor Anterior", "valor_novo": "Valor Novo",
             "usuario": "Usuário", "data_hora": "Data/Hora",

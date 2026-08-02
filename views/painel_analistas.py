@@ -12,6 +12,7 @@ from gat.export_excel import gerar_relatorio_mensal_excel
 from gat.permissions import exigir_area, pode_area, pode_modulo
 from gat.relatorios_mensais import indicadores_mensais_modulo, produtividade_analistas
 from gat.ui.filtros import chave_competencia, rotulo_competencia, seletor_competencia
+from gat.ui.formatos import formatar_datas_df
 from gat.ui.kpi_cards import renderizar_kpis
 
 _MODULOS_VISIVEIS = {
@@ -130,7 +131,8 @@ def render(usuario: dict) -> None:
     if analista_drill != "Selecione...":
         df_drill = df_base[df_base["responsavel"] == analista_drill]
         colunas_drill = [c for c in ["item", "codigo", "prestador", "cessionario", "disciplina", "num_at", "revisao", "status_analise", "data_solicitacao", "data_analise"] if c in df_drill.columns]
-        st.dataframe(df_drill[colunas_drill].reset_index(drop=True), use_container_width=True, hide_index=True)
+        df_drill_exibicao = formatar_datas_df(df_drill[colunas_drill], ["data_solicitacao", "data_analise"]).reset_index(drop=True)
+        st.dataframe(df_drill_exibicao, use_container_width=True, hide_index=True)
 
     if pode_area(usuario, "analistas.relatorios") and mes is not None and ano is not None:
         st.markdown("##### Exportação")

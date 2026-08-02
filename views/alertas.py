@@ -29,6 +29,7 @@ from gat.database import (
 )
 from gat.permissions import exigir_area, pode_area, pode_modulo
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
+from gat.ui.formatos import formatar_data_br, formatar_datahora_br, formatar_datahoras_df
 from gat.ui.modals_alerta_manual import dialog_alerta_manual, dialog_encerrar_alerta_manual
 from gat.ui.modals_avaliacao import dialog_avaliacao_checklist
 
@@ -189,7 +190,7 @@ def _cartao_alerta_manual(usuario: dict, alerta: pd.Series, pode_gerenciar: bool
             st.caption(
                 f"N° AT {_ou_traco(alerta.get('num_at'))} · Código {_ou_traco(alerta.get('codigo_projeto'))} · "
                 f"Revisão {_ou_traco(alerta.get('revisao'))} · Especialista: {_ou_traco(alerta.get('especialista'))} · "
-                f"Criado por {alerta.get('criado_por')} em {_ou_traco(alerta.get('criado_em'))[:10]}"
+                f"Criado por {alerta.get('criado_por')} em {formatar_datahora_br(alerta.get('criado_em')) or '—'}"
             )
             if alerta.get("destinatarios"):
                 st.caption(f"Destinatários: {alerta['destinatarios']}")
@@ -200,7 +201,7 @@ def _cartao_alerta_manual(usuario: dict, alerta: pd.Series, pode_gerenciar: bool
             if alerta.get("vencimento"):
                 dias = dias_uteis_entre(date.today(), alerta["vencimento"])
                 chave = situacao_prazo(dias)
-                st.caption(f"{_ICONE_SITUACAO_PRAZO_MANUAL.get(chave, '')} Vence em {alerta['vencimento'][:10]}")
+                st.caption(f"{_ICONE_SITUACAO_PRAZO_MANUAL.get(chave, '')} Vence em {formatar_data_br(alerta['vencimento'])}")
 
         if pode_gerenciar:
             col1, col2 = st.columns(2)
@@ -243,12 +244,15 @@ def _secao_alertas_manuais(usuario: dict, modulos_incluidos: list[str], modulo_c
         if not encerrados.empty:
             with st.expander(f"Encerrados ({len(encerrados)})", icon=":material/history:"):
                 for _, alerta in encerrados.iterrows():
-                    st.markdown(f"**{alerta['titulo']}** — {_ou_traco(alerta.get('nome_entidade'))} · *Encerrado em {_ou_traco(alerta.get('encerrado_em'))[:10]} por {alerta.get('encerrado_por')}*")
+                    st.markdown(f"**{alerta['titulo']}** — {_ou_traco(alerta.get('nome_entidade'))} · *Encerrado em {formatar_datahora_br(alerta.get('encerrado_em')) or '—'} por {alerta.get('encerrado_por')}*")
                     if alerta.get("motivo_encerramento"):
                         st.caption(f"Motivo: {alerta['motivo_encerramento']}")
                     historico = listar_historico("alertas_manuais", int(alerta["id"]))
                     if not historico.empty:
-                        st.dataframe(historico[["campo", "valor_anterior", "valor_novo", "usuario", "data_hora"]], hide_index=True, use_container_width=True)
+                        st.dataframe(
+                            formatar_datahoras_df(historico, ["data_hora"])[["campo", "valor_anterior", "valor_novo", "usuario", "data_hora"]],
+                            hide_index=True, use_container_width=True,
+                        )
                     if pode_gerenciar and st.button("Reabrir", key=f"am_reabrir_{alerta['id']}"):
                         reabrir_alerta_manual(alerta["id"], usuario["username"])
                         st.toast("Alerta manual reaberto.", icon=":material/check_circle:")

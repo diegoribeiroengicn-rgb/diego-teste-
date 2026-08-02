@@ -18,19 +18,23 @@ from gat.export_word import (
     tabela_dataframe,
     tabela_indicadores,
 )
+from gat.ui.formatos import formatar_data_br, formatar_datas_df
 
 COLUNAS_RELATORIO_PRIORIDADES = {
     "tipo": "Tipo", "nome_entidade": "Prestador/Cessionário", "codigo": "Código",
     "num_at": "N° AT", "disciplina": "Disciplina", "revisao": "Revisão",
-    "responsavel": "Responsável", "origem_prioridade": "Origem da prioridade",
+    "responsavel": "Responsável", "motivos_entrada_label": "Motivo(s) de entrada",
+    "origem_prioridade": "Origem da prioridade",
     "sla_dias": "SLA vigente (dias)", "sla_original": "SLA original (dias)",
-    "dias_restantes": "Dias úteis restantes", "situacao_prazo": "Situação do prazo",
+    "data_limite": "Data prevista", "dias_restantes": "Dias úteis restantes",
+    "situacao_prazo": "Situação do prazo",
     "justificativa_sla": "Justificativa", "status_analise": "Status de análise",
     "sla_alterado_por": "SLA alterado por", "sla_alterado_em": "SLA alterado em",
 }
 
 
 def _preparar_exibicao(df: pd.DataFrame) -> pd.DataFrame:
+    df = formatar_datas_df(df, ["data_limite"])
     return df.rename(columns=COLUNAS_RELATORIO_PRIORIDADES)[list(COLUNAS_RELATORIO_PRIORIDADES.values())]
 
 
@@ -63,7 +67,10 @@ def gerar_word_prioridades_individual(registro: dict[str, Any], usuario_responsa
         periodo_label="Situação atual", filtros_aplicados=None, usuario_responsavel=usuario_responsavel,
     )
     secao(doc, "Dados do projeto prioritário", nivel=2)
-    pares = [(COLUNAS_RELATORIO_PRIORIDADES.get(chave, chave), valor) for chave, valor in registro.items() if chave in COLUNAS_RELATORIO_PRIORIDADES]
+    pares = [
+        (COLUNAS_RELATORIO_PRIORIDADES.get(chave, chave), formatar_data_br(valor) if chave == "data_limite" else valor)
+        for chave, valor in registro.items() if chave in COLUNAS_RELATORIO_PRIORIDADES
+    ]
     tabela_indicadores(doc, pares)
     rodape_institucional(doc)
     return documento_para_bytes(doc)

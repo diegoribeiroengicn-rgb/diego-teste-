@@ -68,6 +68,7 @@ COLUNAS_PRESTADORES = [
     "natureza_revisao", "num_erros", "etg", "prestador_cadastro_id", "obra_id",
     "sla_dias", "sla_original", "sla_reduzido", "nivel_prioridade",
     "justificativa_sla", "data_limite_original", "sla_alterado_por", "sla_alterado_em",
+    "data_limite_ajustada_manualmente",
 ]
 
 COLUNAS_CESSIONARIOS = [
@@ -78,7 +79,7 @@ COLUNAS_CESSIONARIOS = [
     "natureza_revisao", "num_erros", "etg", "luc", "numero_rci", "numero_rvp",
     "data_atualizacao_rci", "data_atualizacao_rvp", "cessionario_cadastro_id",
     "sla_original", "sla_reduzido", "justificativa_sla", "data_limite_original",
-    "sla_alterado_por", "sla_alterado_em",
+    "sla_alterado_por", "sla_alterado_em", "data_limite_ajustada_manualmente",
 ]
 
 COLUNAS_CADASTRO_PRESTADORES = [
@@ -642,6 +643,34 @@ def _migracao_0011_remover_isencao_retroativa(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM avaliacao_obrigatoria_isentos")
 
 
+def _migracao_0014_data_prevista_automatica(conn: sqlite3.Connection) -> None:
+    """
+    Cálculo automático da data prevista (alteração pontual): coluna aditiva
+    que sinaliza quando `data_limite` foi ajustada manualmente pelo usuário
+    (em vez de refletir o último cálculo automático do SLA em vigor) — usada
+    para decidir, em edições futuras, se a data pode ser recalculada
+    automaticamente ou se deve ser pedida confirmação antes de sobrescrevê-la
+    (item 5 da modificação de cálculo automático de data prevista). Todos os
+    registros já existentes começam como não-manuais (0); a própria tela
+    também se auto-corrige na primeira edição de cada registro, comparando a
+    data gravada com o cálculo atual.
+    """
+    _garantir_coluna(conn, "prestadores", "data_limite_ajustada_manualmente", "INTEGER NOT NULL DEFAULT 0")
+    _garantir_coluna(conn, "cessionarios", "data_limite_ajustada_manualmente", "INTEGER NOT NULL DEFAULT 0")
+
+
+def _migracao_0015_vinculo_analista_usuario(conn: sqlite3.Connection) -> None:
+    """
+    KPIs de prazo dos analistas (itens 13-20): coluna aditiva que vincula um
+    usuário (tipicamente de perfil ANALISTA) a um nome da lista RESPONSAVEIS
+    — é assim que o sistema identifica, de forma confiável e no backend
+    (nunca por seleção do próprio usuário), quais indicadores de prazo são
+    "os seus" ao aplicar a regra de privacidade do item 16.1. Fica em branco
+    até o administrador vincular explicitamente cada usuário analista.
+    """
+    _garantir_coluna(conn, "usuarios", "analista_vinculado", "TEXT")
+
+
 def _migracao_0013_manual_sistema(conn: sqlite3.Connection) -> None:
     """
     Novo módulo Manual do Sistema: capítulos organizados por versão
@@ -773,6 +802,8 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (11, "Remove a isenção retroativa da avaliação obrigatória (aplica de fato a remoção decidida anteriormente)", _migracao_0011_remover_isencao_retroativa),
     (12, "Alertas manuais: tabela alertas_manuais (criação/edição/encerramento com histórico em historico_edicoes)", _migracao_0012_alertas_manuais),
     (13, "Manual do Sistema: capítulos, versões publicadas, confirmação de leitura e anexos, semeado com os 28 capítulos iniciais", _migracao_0013_manual_sistema),
+    (14, "Cálculo automático de data prevista: coluna de ajuste manual (data_limite_ajustada_manualmente) em Prestadores/Cessionários", _migracao_0014_data_prevista_automatica),
+    (15, "KPIs de prazo dos analistas: vínculo usuários.analista_vinculado com a lista RESPONSAVEIS", _migracao_0015_vinculo_analista_usuario),
 ]
 
 
@@ -1143,16 +1174,19 @@ def buscar_usuario_por_id(usuario_id: int) -> dict[str, Any] | None:
         return dict(linha) if linha else None
 
 
-def criar_usuario(username: str, senha: str, nome_completo: str, perfil: str, executor: str) -> int:
+def criar_usuario(username: str, senha: str, nome_completo: str, perfil: str, executor: str, analista_vinculado: str | None = None) -> int:
     """Cria um usuário com senha inicial temporária — o próprio usuário será
-    obrigado a defini-la novamente no primeiro acesso (`deve_trocar_senha`)."""
+    obrigado a defini-la novamente no primeiro acesso (`deve_trocar_senha`).
+    `analista_vinculado` (opcional, tipicamente para perfil ANALISTA) associa
+    o login a um nome de RESPONSAVEIS — é o que permite ao próprio usuário
+    ver seus KPIs de prazo sem enxergar os de colegas (item 16.1)."""
     senha_hash = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
     agora = datetime.now().isoformat()
     with _conectar() as conn:
         cursor = conn.execute(
-            "INSERT INTO usuarios (username, senha_hash, nome_completo, perfil, ativo, deve_trocar_senha, criado_em) "
-            "VALUES (?, ?, ?, ?, 1, 1, ?)",
-            (username, senha_hash, nome_completo, perfil, agora),
+            "INSERT INTO usuarios (username, senha_hash, nome_completo, perfil, ativo, deve_trocar_senha, criado_em, analista_vinculado) "
+            "VALUES (?, ?, ?, ?, 1, 1, ?, ?)",
+            (username, senha_hash, nome_completo, perfil, agora, analista_vinculado),
         )
         usuario_id = cursor.lastrowid
         _semear_permissoes_perfil(conn, usuario_id, perfil)
@@ -1163,7 +1197,7 @@ def criar_usuario(username: str, senha: str, nome_completo: str, perfil: str, ex
 def listar_usuarios() -> pd.DataFrame:
     with _conectar() as conn:
         return pd.read_sql_query(
-            "SELECT id, username, nome_completo, perfil, ativo, deve_trocar_senha, ultimo_acesso, criado_em "
+            "SELECT id, username, nome_completo, perfil, ativo, deve_trocar_senha, ultimo_acesso, criado_em, analista_vinculado "
             "FROM usuarios ORDER BY username",
             conn,
         )
@@ -1227,17 +1261,22 @@ def registrar_ultimo_acesso(username: str) -> None:
         conn.execute("UPDATE usuarios SET ultimo_acesso = ? WHERE username = ?", (datetime.now().isoformat(), username))
 
 
-def atualizar_usuario(username: str, nome_completo: str, perfil: str, executor: str) -> None:
+def atualizar_usuario(username: str, nome_completo: str, perfil: str, executor: str, analista_vinculado: str | None = None) -> None:
     with _conectar() as conn:
-        anterior = conn.execute("SELECT nome_completo, perfil FROM usuarios WHERE username = ?", (username,)).fetchone()
+        anterior = conn.execute("SELECT nome_completo, perfil, analista_vinculado FROM usuarios WHERE username = ?", (username,)).fetchone()
         conn.execute(
-            "UPDATE usuarios SET nome_completo = ?, perfil = ? WHERE username = ?",
-            (nome_completo, perfil, username),
+            "UPDATE usuarios SET nome_completo = ?, perfil = ?, analista_vinculado = ? WHERE username = ?",
+            (nome_completo, perfil, analista_vinculado, username),
         )
         if anterior and anterior["perfil"] != perfil:
             _registrar_evento_seguranca(
                 conn, "ALTERACAO_PERFIL", username, executor,
                 f"Perfil alterado de {anterior['perfil']} para {perfil}.",
+            )
+        if anterior and (anterior["analista_vinculado"] or None) != (analista_vinculado or None):
+            _registrar_evento_seguranca(
+                conn, "ALTERACAO_ANALISTA_VINCULADO", username, executor,
+                f"Analista vinculado alterado de {anterior['analista_vinculado'] or '—'} para {analista_vinculado or '—'}.",
             )
 
 

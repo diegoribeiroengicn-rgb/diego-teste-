@@ -29,6 +29,7 @@ from gat.export_avaliacoes import (
 )
 from gat.permissions import exigir_area, pode_area
 from gat.relatorios_mensais import avaliacoes_obrigatorias_do_mes, produtividade_analistas
+from gat.ui.formatos import formatar_datahora_br
 from gat.ui.kpi_cards import renderizar_kpis
 
 _CHAVES_CRITERIOS = [c for c, _ in CRITERIOS_AVALIACAO_ANALISTA]
@@ -399,7 +400,7 @@ def render(usuario: dict) -> None:
 
         if linha_ref["fechado"]:
             st.info(
-                f":material/lock: Competência fechada em {str(linha_ref['data_fechamento'])[:16].replace('T', ' ')} "
+                f":material/lock: Competência fechada em {formatar_datahora_br(linha_ref['data_fechamento'])} "
                 f"por {linha_ref['usuario_fechamento']}.",
                 icon=":material/lock:",
             )

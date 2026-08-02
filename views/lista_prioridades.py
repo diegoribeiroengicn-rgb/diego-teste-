@@ -13,6 +13,7 @@ from gat.config import DISCIPLINAS, RESPONSAVEIS
 from gat.database import listar_cessionarios, listar_prestadores, registrar_atividade
 from gat.export_pdf import gerar_relatorio_prioridades_pdf
 from gat.permissions import exigir_area, pode_area
+from gat.ui.formatos import formatar_data_br, formatar_datas_df
 from gat.relatorios_prioridades import (
     COLUNAS_RELATORIO_PRIORIDADES,
     gerar_excel_prioridades,
@@ -39,9 +40,12 @@ def render(usuario: dict) -> None:
     st.subheader(":material/priority_high: Lista de Prioridades")
     st.caption(
         "Único painel do sistema com Prestadores e Cessionários juntos: projetos com Nível de Prioridade "
-        "ou SLA reduzido em vigor, ainda em andamento. Sai automaticamente da lista assim que a análise é "
-        "concluída (liberado, não liberado, obsoleto ou cancelado). Mapa de calor: 🟢 dentro do prazo · "
-        "🟡 vence em breve · 🟠 vence hoje · 🔴 atrasado · 🟣 reforço (SLA reduzido ou Nível 1)."
+        "ou SLA reduzido em vigor, ou a até 2 dias úteis do vencimento (vence em 2/1 dia, vence hoje ou já "
+        "atrasado), ainda em andamento. Sai automaticamente da lista assim que a análise é concluída "
+        "(liberado, não liberado, obsoleto ou cancelado). Ordenada pela condição mais crítica: vencidos, "
+        "vence hoje, vence em 1 dia, vence em 2 dias, Nível 1, Nível 2, Nível 3, SLA reduzido, data prevista "
+        "mais próxima. Mapa de calor: 🟢 dentro do prazo · 🟡 vence em breve · 🟠 vence hoje · 🔴 atrasado · "
+        "🟣 reforço (SLA reduzido ou Nível 1)."
     )
 
     df_prestadores = enriquecer_prestadores(filtrar_ativos(listar_prestadores()))
@@ -98,7 +102,7 @@ def render(usuario: dict) -> None:
     col_m3.metric("Cessionários", int((filtrada["tipo"] == "Cessionário").sum()))
     col_m4.metric("Atrasados", int((filtrada["situacao_prazo"] == "ATRASADO").sum()))
 
-    exibicao = filtrada.copy()
+    exibicao = formatar_datas_df(filtrada, ["data_solicitacao", "data_limite"])
     exibicao["Mapa de calor"] = exibicao["cor_mapa_calor"].map(_ICONE_MAPA_CALOR)
     exibicao["Situação do prazo"] = exibicao["situacao_prazo"].map(_LABEL_SITUACAO)
     exibicao["SLA reduzido?"] = exibicao["sla_reduzido"].map({True: "Sim", False: "Não"})
@@ -106,9 +110,11 @@ def render(usuario: dict) -> None:
     colunas_exibicao = {
         "Mapa de calor": "Mapa de calor", "tipo": "Tipo", "nome_entidade": "Prestador/Cessionário",
         "codigo": "Código", "num_at": "N° AT", "disciplina": "Disciplina", "revisao": "Revisão",
-        "responsavel": "Responsável", "origem_prioridade": "Origem da prioridade",
+        "responsavel": "Responsável", "motivos_entrada_label": "Motivo(s) de entrada",
+        "origem_prioridade": "Origem da prioridade",
         "SLA reduzido?": "SLA reduzido?", "sla_dias": "SLA vigente (dias)", "sla_original": "SLA original (dias)",
-        "dias_restantes": "Dias úteis restantes", "Situação do prazo": "Situação do prazo",
+        "data_limite": "Data prevista", "dias_restantes": "Dias úteis restantes",
+        "Situação do prazo": "Situação do prazo",
         "justificativa_sla": "Justificativa", "status_analise": "Status de análise",
     }
     st.dataframe(
@@ -141,7 +147,7 @@ def render(usuario: dict) -> None:
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", key="prio_baixar_docx",
                 )
             if col_pdf.button("Gerar PDF", icon=":material/description:", key="prio_gerar_pdf", use_container_width=True):
-                exibicao_pdf = filtrada.rename(columns=COLUNAS_RELATORIO_PRIORIDADES)[list(COLUNAS_RELATORIO_PRIORIDADES.values())]
+                exibicao_pdf = formatar_datas_df(filtrada, ["data_limite"]).rename(columns=COLUNAS_RELATORIO_PRIORIDADES)[list(COLUNAS_RELATORIO_PRIORIDADES.values())]
                 conteudo = gerar_relatorio_prioridades_pdf(exibicao_pdf, kpis)
                 col_pdf.download_button(
                     "Baixar PDF", data=conteudo, file_name=nome_arquivo_prioridades("coletivo").replace(".docx", ".pdf"),
@@ -154,6 +160,10 @@ def render(usuario: dict) -> None:
             escolha = st.selectbox("Selecione o projeto", list(opcoes.keys()), key="prio_individual_escolha")
             if escolha:
                 registro = filtrada.loc[opcoes[escolha]].to_dict()
+                registro_pdf = dict(registro)
+                registro_pdf.pop("motivos_entrada", None)
+                if registro_pdf.get("data_limite"):
+                    registro_pdf["data_limite"] = formatar_data_br(registro_pdf["data_limite"])
                 col_docx2, col_pdf2 = st.columns(2)
                 if col_docx2.button("Gerar Word", icon=":material/description:", key="prio_gerar_docx_ind", use_container_width=True):
                     conteudo = gerar_word_prioridades_individual(registro, usuario["username"])
@@ -163,7 +173,7 @@ def render(usuario: dict) -> None:
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", key="prio_baixar_docx_ind",
                     )
                 if col_pdf2.button("Gerar PDF", icon=":material/description:", key="prio_gerar_pdf_ind", use_container_width=True):
-                    conteudo = gerar_relatorio_prioridades_pdf(pd.DataFrame(), {}, individual=registro)
+                    conteudo = gerar_relatorio_prioridades_pdf(pd.DataFrame(), {}, individual=registro_pdf)
                     col_pdf2.download_button(
                         "Baixar PDF", data=conteudo,
                         file_name=nome_arquivo_prioridades("individual", str(registro.get("codigo") or registro.get("num_at") or "projeto")).replace(".docx", ".pdf"),

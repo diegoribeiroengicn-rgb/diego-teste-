@@ -8,7 +8,7 @@ import streamlit as st
 from datetime import datetime
 
 from gat import backup_externo
-from gat.config import MAX_BACKUPS, PERFIS_OPCOES
+from gat.config import MAX_BACKUPS, PERFIS_OPCOES, RESPONSAVEIS
 from gat.database import (
     criar_backup,
     criar_usuario,
@@ -24,6 +24,7 @@ from gat.database import (
     sincronizar_para_persistencia,
 )
 from gat.permissions import exigir_area, pode_area
+from gat.ui.formatos import formatar_datahora_br, formatar_datahoras_df
 from gat.ui.modals_usuarios import renderizar_editor_usuario
 
 _TIPOS_HISTORICO = ["Todas", "prestadores", "cessionarios", "reunioes", "planos_acao", "seguranca"]
@@ -75,6 +76,11 @@ def _renderizar_usuarios(usuario: dict) -> None:
         nova_senha = col2.text_input("Senha temporária", type="password")
         novo_perfil = col3.selectbox("Perfil", PERFIS_OPCOES)
         novo_nome = st.text_input("Nome completo")
+        novo_analista_vinculado = st.selectbox(
+            "Analista vinculado (RESPONSAVEIS) — apenas para perfil ANALISTA",
+            ["— Nenhum —"] + RESPONSAVEIS,
+            help="Necessário para o usuário conseguir ver seus próprios KPIs de prazo (item 16.1). Ignorado para perfis que não sejam ANALISTA.",
+        )
         criar = st.form_submit_button("Cadastrar usuário", icon=":material/person_add:", type="primary")
 
     if criar:
@@ -84,7 +90,8 @@ def _renderizar_usuarios(usuario: dict) -> None:
             st.error("A senha temporária deve ter pelo menos 6 caracteres.")
         else:
             try:
-                criar_usuario(novo_username.strip(), nova_senha, novo_nome, novo_perfil, usuario["username"])
+                analista_vinculado = novo_analista_vinculado if (novo_perfil == "ANALISTA" and novo_analista_vinculado != "— Nenhum —") else None
+                criar_usuario(novo_username.strip(), nova_senha, novo_nome, novo_perfil, usuario["username"], analista_vinculado)
                 st.success(f"Usuário '{novo_username}' cadastrado com sucesso.")
                 st.rerun()
             except Exception as exc:  # username duplicado, etc.
@@ -93,9 +100,10 @@ def _renderizar_usuarios(usuario: dict) -> None:
     st.markdown("##### Usuários cadastrados")
     df_usuarios = listar_usuarios()
     st.dataframe(
-        df_usuarios.rename(columns={
+        formatar_datahoras_df(df_usuarios, ["ultimo_acesso", "criado_em"]).rename(columns={
             "username": "Usuário", "nome_completo": "Nome", "perfil": "Perfil", "ativo": "Ativo",
             "deve_trocar_senha": "Deve trocar senha", "ultimo_acesso": "Último acesso", "criado_em": "Criado em",
+            "analista_vinculado": "Analista vinculado",
         }),
         use_container_width=True,
         hide_index=True,
@@ -123,7 +131,7 @@ def _renderizar_usuarios(usuario: dict) -> None:
             st.caption("Nenhum evento de segurança registrado para este usuário.")
         else:
             st.dataframe(
-                df_hist_usuario.rename(columns={
+                formatar_datahoras_df(df_hist_usuario, ["data_hora"]).rename(columns={
                     "campo": "Evento", "valor_novo": "Detalhes", "usuario": "Executado por", "data_hora": "Data/Hora",
                 })[["Evento", "Detalhes", "Executado por", "Data/Hora"]],
                 use_container_width=True,
@@ -172,7 +180,7 @@ def _renderizar_historico() -> None:
     st.markdown("##### Histórico de edições e auditoria de segurança")
     filtro_tabela = st.selectbox("Tabela", _TIPOS_HISTORICO)
     df_hist = listar_historico(None if filtro_tabela == "Todas" else filtro_tabela)
-    st.dataframe(df_hist, use_container_width=True, hide_index=True)
+    st.dataframe(formatar_datahoras_df(df_hist, ["data_hora"]), use_container_width=True, hide_index=True)
 
 
 def _renderizar_configuracoes(usuario: dict) -> None:
@@ -266,11 +274,13 @@ def _renderizar_persistencia_dados(usuario: dict) -> None:
     if backups:
         col_b1, col_b2, col_b3 = st.columns(3)
         col_b1.metric("Total de backups", len(backups))
-        col_b2.metric("Mais recente", backups[0]["criado_em"][:16].replace("T", " "))
-        col_b3.metric("Mais antigo mantido", backups[-1]["criado_em"][:16].replace("T", " "))
+        col_b2.metric("Mais recente", formatar_datahora_br(backups[0]["criado_em"]))
+        col_b3.metric("Mais antigo mantido", formatar_datahora_br(backups[-1]["criado_em"]))
         with st.expander("Ver todos os backups", icon=":material/history:"):
             st.dataframe(
-                pd.DataFrame(backups).rename(columns={"arquivo": "Arquivo", "tamanho_bytes": "Tamanho (bytes)", "criado_em": "Criado em"}),
+                formatar_datahoras_df(pd.DataFrame(backups), ["criado_em"]).rename(
+                    columns={"arquivo": "Arquivo", "tamanho_bytes": "Tamanho (bytes)", "criado_em": "Criado em"}
+                ),
                 use_container_width=True, hide_index=True,
             )
     else:

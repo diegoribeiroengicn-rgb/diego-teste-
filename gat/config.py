@@ -383,6 +383,8 @@ AREAS_PERMISSAO = {
     "analistas.notas": "Analistas — Visualizar notas/avaliações",
     "analistas.avaliar": "Analistas — Inserir/editar avaliações",
     "analistas.relatorios": "Analistas — Gerar relatórios/exportar",
+    "analistas.kpis_prazo": "Analistas — KPIs de prazo (próprios, se Analista; da equipe, se Gestor/Admin)",
+    "analistas.kpis_prazo.consolidado": "Analistas — KPIs de prazo, indicadores consolidados da equipe",
     "avaliacoes.editar": "Avaliação de Prestadores/Cessionários — Editar",
     "avaliacoes.relatorios": "Avaliação de Prestadores/Cessionários — Relatórios/exportar",
     "opr.prestadores": "OPR — Prestadores",
@@ -405,7 +407,7 @@ AREAS_RESTRITAS_PADRAO_BLOQUEADO = [
     "analistas.notas", "analistas.avaliar", "analistas.relatorios",
     "avaliacoes.editar", "avaliacoes.relatorios",
     "opr.exportar", "historico_atividades", "alertas.consolidado",
-    "manual_sistema.administrar",
+    "manual_sistema.administrar", "analistas.kpis_prazo.consolidado",
 ]
 
 # Templates padrão de permissão por perfil — usados apenas como ponto de
@@ -454,6 +456,8 @@ PERFIS_PADRAO: dict[str, dict[str, dict[str, bool]]] = {
             "analistas.notas": False,
             "analistas.avaliar": False,
             "analistas.relatorios": False,
+            "analistas.kpis_prazo": True,
+            "analistas.kpis_prazo.consolidado": False,
             "avaliacoes.editar": False,
             "avaliacoes.relatorios": False,
             "opr.prestadores": True,
@@ -501,6 +505,8 @@ PERFIS_PADRAO: dict[str, dict[str, dict[str, bool]]] = {
             "analistas.notas": False,
             "analistas.avaliar": False,
             "analistas.relatorios": False,
+            "analistas.kpis_prazo": False,
+            "analistas.kpis_prazo.consolidado": False,
             "avaliacoes.editar": False,
             "avaliacoes.relatorios": False,
             "opr.prestadores": True,

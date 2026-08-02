@@ -260,12 +260,81 @@ def cor_mapa_calor(row: pd.Series, dias_restantes: int | None) -> str:
     return mapa[situacao_prazo(dias_restantes)]
 
 
+MOTIVO_PRIORIDADE_NIVEL1 = "Prioridade Nível 1"
+MOTIVO_PRIORIDADE_NIVEL2 = "Prioridade Nível 2"
+MOTIVO_PRIORIDADE_NIVEL3 = "Prioridade Nível 3"
+MOTIVO_SLA_REDUZIDO = "SLA reduzido"
+MOTIVO_VENCE_2_DIAS = "Vence em 2 dias úteis"
+MOTIVO_VENCE_1_DIA = "Vence em 1 dia útil"
+MOTIVO_VENCE_HOJE = "Vence hoje"
+MOTIVO_PRAZO_VENCIDO = "Prazo vencido"
+
+_RANK_NIVEL_PRIORIDADE = {1: 4, 2: 5, 3: 6}
+
+
+def motivos_entrada_lista_prioridades(row: pd.Series, modulo: str) -> list[str]:
+    """
+    Item 9 (Cálculo automático de data prevista/Lista de Prioridades):
+    todos os motivos pelos quais uma análise está na Lista de Prioridades —
+    uma mesma análise pode ter mais de um motivo simultaneamente (ex.:
+    "Prioridade Nível 2" + "Vence em 1 dia útil"). Uma análise concluída
+    (status final) nunca tem motivo — já saiu da lista ativa (item 8).
+    """
+    status = str(row.get("status_analise") or "").strip().upper()
+    if status in STATUS_CONCLUIDOS_PRIORIDADE:
+        return []
+    motivos: list[str] = []
+    nivel = row.get("nivel_prioridade")
+    if pd.notna(nivel) and int(nivel) in NIVEIS_PRIORIDADE_LABELS:
+        motivos.append({1: MOTIVO_PRIORIDADE_NIVEL1, 2: MOTIVO_PRIORIDADE_NIVEL2, 3: MOTIVO_PRIORIDADE_NIVEL3}[int(nivel)])
+    if bool(row.get("sla_reduzido")):
+        motivos.append(MOTIVO_SLA_REDUZIDO)
+    dias_restantes = dias_restantes_prioridade(row, modulo)
+    if dias_restantes is not None:
+        if dias_restantes < 0:
+            motivos.append(MOTIVO_PRAZO_VENCIDO)
+        elif dias_restantes == 0:
+            motivos.append(MOTIVO_VENCE_HOJE)
+        elif dias_restantes == 1:
+            motivos.append(MOTIVO_VENCE_1_DIA)
+        elif dias_restantes == 2:
+            motivos.append(MOTIVO_VENCE_2_DIAS)
+    return motivos
+
+
+def _criticidade_lista_prioridades(row: pd.Series, dias_restantes: int | None) -> int:
+    """
+    Ordenação da Lista de Prioridades (item 10): quando uma análise possui
+    mais de um motivo, prevalece o mais crítico. Quanto menor o valor
+    retornado, mais crítico — a lista é ordenada de forma ascendente por
+    este valor, com a data prevista mais próxima como critério de
+    desempate (item 10, posição 9).
+    """
+    if dias_restantes is not None:
+        if dias_restantes < 0:
+            return 0
+        if dias_restantes == 0:
+            return 1
+        if dias_restantes == 1:
+            return 2
+        if dias_restantes == 2:
+            return 3
+    nivel = row.get("nivel_prioridade")
+    if pd.notna(nivel) and int(nivel) in _RANK_NIVEL_PRIORIDADE:
+        return _RANK_NIVEL_PRIORIDADE[int(nivel)]
+    if bool(row.get("sla_reduzido")):
+        return 7
+    return 8
+
+
 def montar_lista_prioridades(df_prestadores: pd.DataFrame, df_cessionarios: pd.DataFrame) -> pd.DataFrame:
     """
-    Lista de Prioridades (item 7) — único lugar do sistema em que
-    Prestadores e Cessionários aparecem juntos: reúne apenas os projetos
-    atualmente prioritários (nível de prioridade ou SLA reduzido, ainda em
-    andamento), com prazo, situação e cor do mapa de calor já calculados.
+    Lista de Prioridades — único lugar do sistema em que Prestadores e
+    Cessionários aparecem juntos: reúne os projetos ativos com nível de
+    prioridade, SLA reduzido, ou a até 2 dias úteis do vencimento/já
+    atrasados (entrada automática — item 8), com prazo, motivo(s) de
+    entrada, situação e cor do mapa de calor já calculados, ordenados pela
+    condição mais crítica (item 10).
     """
     linhas = []
     for df, modulo, coluna_nome, rotulo_tipo in (
@@ -275,12 +344,13 @@ def montar_lista_prioridades(df_prestadores: pd.DataFrame, df_cessionarios: pd.D
         if df.empty:
             continue
         for _, row in df.iterrows():
-            if not em_lista_prioridades(row):
+            motivos = motivos_entrada_lista_prioridades(row, modulo)
+            if not motivos:
                 continue
             dias_restantes = dias_restantes_prioridade(row, modulo)
             origem_prioridade = (
                 NIVEIS_PRIORIDADE_LABELS.get(int(row["nivel_prioridade"]), "—")
-                if pd.notna(row.get("nivel_prioridade")) else "SLA reduzido"
+                if pd.notna(row.get("nivel_prioridade")) else ("SLA reduzido" if row.get("sla_reduzido") else "—")
             )
             linhas.append({
                 "tipo": rotulo_tipo, "modulo": modulo, "id": row.get("id"),
@@ -290,17 +360,24 @@ def montar_lista_prioridades(df_prestadores: pd.DataFrame, df_cessionarios: pd.D
                 "origem_prioridade": origem_prioridade, "nivel_prioridade": row.get("nivel_prioridade"),
                 "sla_reduzido": bool(row.get("sla_reduzido")), "sla_dias": row.get("sla_dias"),
                 "sla_original": row.get("sla_original"), "data_solicitacao": row.get("data_solicitacao"),
+                "data_limite": row.get("data_limite"),
                 "justificativa_sla": row.get("justificativa_sla"),
                 "dias_restantes": dias_restantes, "situacao_prazo": situacao_prazo(dias_restantes),
                 "cor_mapa_calor": cor_mapa_calor(row, dias_restantes),
                 "status_analise": row.get("status_analise"),
                 "sla_alterado_por": row.get("sla_alterado_por"), "sla_alterado_em": row.get("sla_alterado_em"),
+                "motivos_entrada": motivos, "motivos_entrada_label": " + ".join(motivos),
+                "criticidade": _criticidade_lista_prioridades(row, dias_restantes),
             })
 
     if not linhas:
         return pd.DataFrame()
     resultado = pd.DataFrame(linhas)
-    return resultado.sort_values("dias_restantes", na_position="last").reset_index(drop=True)
+    resultado["_data_limite_ord"] = pd.to_datetime(resultado["data_limite"], errors="coerce")
+    resultado = resultado.sort_values(
+        by=["criticidade", "_data_limite_ord"], na_position="last",
+    ).drop(columns="_data_limite_ord").reset_index(drop=True)
+    return resultado
 
 
 STATUS_ATIVO_ANALISE = {"EM ANÁLISE", "EM HOLD"}

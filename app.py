@@ -46,6 +46,7 @@ from views import (
     gestao_historico,
     historico_atividades,
     inicio,
+    kpis_analistas_prazo,
     lembretes_pep,
     linha_tempo,
     lista_prioridades,
@@ -172,6 +173,8 @@ if pode_area(usuario, "analistas"):
     grupo_relatorios.append(_pagina(lambda: painel_analistas.render(usuario), "Painel de Analistas", ":material/groups_2:", "painel_analistas"))
 if pode_area(usuario, "analistas.notas"):
     grupo_relatorios.append(_pagina(lambda: avaliacao_analistas.render(usuario), "Avaliação de Analistas", ":material/military_tech:", "avaliacao_analistas"))
+if pode_area(usuario, "analistas.kpis_prazo"):
+    grupo_relatorios.append(_pagina(lambda: kpis_analistas_prazo.render(usuario), "KPIs de Prazo dos Analistas", ":material/schedule:", "kpis_analistas_prazo"))
 if pode_area(usuario, "relatorios"):
     grupo_relatorios.append(_pagina(lambda: relatorios_mensais.render(usuario), "Relatórios Mensais", ":material/summarize:", "relatorios_mensais"))
 if grupo_relatorios:

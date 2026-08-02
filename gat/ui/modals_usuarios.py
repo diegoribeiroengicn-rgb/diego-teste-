@@ -8,7 +8,7 @@ from typing import Any
 
 import streamlit as st
 
-from gat.config import AREAS_PERMISSAO, MODULOS_CONTROLADOS, MODULOS_LABELS, PERFIS_OPCOES
+from gat.config import AREAS_PERMISSAO, MODULOS_CONTROLADOS, MODULOS_LABELS, PERFIL_ANALISTA, PERFIS_OPCOES, RESPONSAVEIS
 from gat.database import (
     atualizar_usuario,
     ativar_usuario,
@@ -42,8 +42,21 @@ def renderizar_editor_usuario(executor: dict[str, Any], alvo: dict[str, Any]) ->
 
         ativo = st.checkbox("Usuário ativo", value=bool(alvo["ativo"]), key=f"edit_ativo_{username}")
 
+        analista_vinculado = None
+        if perfil == PERFIL_ANALISTA:
+            opcoes_analista = ["— Nenhum —"] + RESPONSAVEIS
+            atual = alvo.get("analista_vinculado")
+            escolha_analista = st.selectbox(
+                "Analista vinculado (RESPONSAVEIS)", opcoes_analista,
+                index=opcoes_analista.index(atual) if atual in opcoes_analista else 0,
+                key=f"edit_analista_vinc_{username}",
+                help="Identifica este usuário como o analista X para os KPIs de prazo — sem esse vínculo, o "
+                     "usuário não consegue ver seus próprios indicadores de prazo (item 16.1).",
+            )
+            analista_vinculado = None if escolha_analista == "— Nenhum —" else escolha_analista
+
         if st.button("Salvar dados básicos", icon=":material/save:", type="primary", key=f"salvar_basico_{username}"):
-            atualizar_usuario(username, nome, perfil, executor["username"])
+            atualizar_usuario(username, nome, perfil, executor["username"], analista_vinculado)
             if ativo and not alvo["ativo"]:
                 ativar_usuario(username, executor["username"])
             elif not ativo and alvo["ativo"]:

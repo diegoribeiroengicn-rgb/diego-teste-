@@ -8,6 +8,7 @@ import streamlit as st
 
 from gat.database import listar_atividades, listar_usuarios
 from gat.permissions import exigir_area
+from gat.ui.formatos import formatar_datahoras_df
 
 _TIPOS_EVENTO = [
     "LOGIN", "LOGOUT", "PAGINA", "PROJETO_CRIADO", "PROJETO_EDITADO",
@@ -66,7 +67,7 @@ def render(usuario: dict) -> None:
     col_m2.metric("Usuários distintos", df["usuario"].nunique())
     col_m3.metric("Logins no período", int((df["tipo_evento"] == "LOGIN").sum()))
 
-    df_exibicao = df.rename(columns={
+    df_exibicao = formatar_datahoras_df(df, ["data_hora"]).rename(columns={
         "usuario": "Usuário", "perfil": "Perfil", "tipo_evento": "Tipo de Atividade",
         "modulo": "Módulo/Página", "detalhe": "Detalhe", "data_hora": "Data/Hora",
     })[["Usuário", "Perfil", "Tipo de Atividade", "Módulo/Página", "Detalhe", "Data/Hora"]]
