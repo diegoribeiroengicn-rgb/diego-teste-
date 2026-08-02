@@ -232,36 +232,55 @@ def _calcular_campos_sla_persistidos(
 
 
 def _preparar_recalculo_data_limite(
-    chave_dlim: str, gatilho_atual: tuple, sugestao_limite, editando: bool,
+    chave_dlim: str, gatilho_atual: tuple, sugestao_limite, editando: bool, registro: dict[str, Any] | None,
 ) -> None:
     """
     Prepara o session_state do campo de data prevista ANTES de renderizar o
-    widget (item 1/4 da modificação de cálculo automático de data prevista):
-    em registros novos, preenche automaticamente; em edição, recalcula
-    automaticamente sempre que um campo que afeta o prazo (data de
-    solicitação, tipo, revisão, SLA reduzido, prioridade) muda — a menos que
-    o valor em tela já estivesse divergente do último cálculo (ou seja, já
-    havia sido ajustado manualmente), caso em que apenas sinaliza a
-    pendência de confirmação, renderizada por `_renderizar_confirmacao_recalculo`
-    (item 5: "Deseja recalculá-la com base no novo SLA?").
+    widget (correção do recálculo automático): em registros novos, preenche
+    automaticamente; em edição, recalcula IMEDIATAMENTE sempre que qualquer
+    campo que afete o prazo mudar (data de solicitação, entidade, tipo,
+    revisão, SLA padrão/reduzido, prioridade, reabertura da análise) — sem
+    exigir salvar/atualizar a página.
+
+    O status "manual" (se a data foi ajustada à mão, e por isso precisa de
+    confirmação antes de ser sobrescrita — item 5) vem da coluna persistida
+    `data_limite_ajustada_manualmente`, nunca de uma comparação de valores:
+    comparar com o cálculo atual é o que causava o bug em que registros
+    antigos/importados (cujo valor gravado nunca foi produzido por esta
+    fórmula) eram tratados como "já manuais" e travavam o recálculo
+    automático atrás de uma confirmação que ninguém pedia.
     """
     chave_gatilho = f"{chave_dlim}_gatilho"
-    chave_ultima_sugestao = f"{chave_dlim}_ultima_sugestao"
+    chave_manual = f"{chave_dlim}_manual"
+    chave_ultimo_valor = f"{chave_dlim}_ultimo_valor"
+
+    if chave_manual not in st.session_state:
+        st.session_state[chave_manual] = bool(registro.get("data_limite_ajustada_manualmente")) if (editando and registro) else False
+
     if chave_gatilho not in st.session_state:
         st.session_state[chave_gatilho] = gatilho_atual
-        st.session_state[chave_ultima_sugestao] = sugestao_limite
         if not editando:
             st.session_state[chave_dlim] = sugestao_limite
-        return
-    if st.session_state[chave_gatilho] != gatilho_atual:
-        valor_anterior = st.session_state.get(chave_dlim)
-        sugestao_anterior = st.session_state.get(chave_ultima_sugestao)
-        if valor_anterior == sugestao_anterior:
-            st.session_state[chave_dlim] = sugestao_limite
+            st.session_state[chave_ultimo_valor] = sugestao_limite
         else:
+            st.session_state[chave_ultimo_valor] = _parse_data(registro.get("data_limite")) if registro else None
+        return
+
+    valor_atual_widget = st.session_state.get(chave_dlim)
+
+    if st.session_state[chave_gatilho] != gatilho_atual:
+        if st.session_state[chave_manual]:
             st.session_state[f"{chave_dlim}_pendente_recalculo"] = sugestao_limite
+        else:
+            st.session_state[chave_dlim] = sugestao_limite
+            st.session_state[chave_ultimo_valor] = sugestao_limite
         st.session_state[chave_gatilho] = gatilho_atual
-    st.session_state[chave_ultima_sugestao] = sugestao_limite
+    elif valor_atual_widget != st.session_state.get(chave_ultimo_valor):
+        # O gatilho não mudou, mas o valor do campo é diferente do que
+        # nós mesmos definimos por último — o usuário editou a data
+        # diretamente (ajuste manual genuíno).
+        st.session_state[chave_manual] = True
+        st.session_state[chave_ultimo_valor] = valor_atual_widget
 
 
 def _renderizar_confirmacao_recalculo(chave_dlim: str, sla_efetivo: int) -> None:
@@ -269,6 +288,8 @@ def _renderizar_confirmacao_recalculo(chave_dlim: str, sla_efetivo: int) -> None
     prazo mudou e a data prevista atual já estava ajustada manualmente —
     nunca sobrescreve silenciosamente uma data pinada manualmente."""
     chave_pendente = f"{chave_dlim}_pendente_recalculo"
+    chave_manual = f"{chave_dlim}_manual"
+    chave_ultimo_valor = f"{chave_dlim}_ultimo_valor"
     nova_sugestao = st.session_state.get(chave_pendente)
     if nova_sugestao is None:
         return
@@ -280,7 +301,9 @@ def _renderizar_confirmacao_recalculo(chave_dlim: str, sla_efetivo: int) -> None
     col_sim, col_nao = st.columns(2)
     col_sim.button(
         "Sim, recalcular", type="primary", use_container_width=True, key=f"{chave_dlim}_recalc_sim",
-        on_click=lambda: st.session_state.update({chave_dlim: nova_sugestao, chave_pendente: None}),
+        on_click=lambda: st.session_state.update({
+            chave_dlim: nova_sugestao, chave_pendente: None, chave_manual: False, chave_ultimo_valor: nova_sugestao,
+        }),
     )
     col_nao.button(
         "Não, manter a data manual", use_container_width=True, key=f"{chave_dlim}_recalc_nao",
@@ -289,7 +312,7 @@ def _renderizar_confirmacao_recalculo(chave_dlim: str, sla_efetivo: int) -> None
 
 
 def _limpar_estado_recalculo_data_limite(chave_dlim: str) -> None:
-    for sufixo_chave in ("_gatilho", "_ultima_sugestao", "_pendente_recalculo"):
+    for sufixo_chave in ("_gatilho", "_manual", "_ultimo_valor", "_pendente_recalculo"):
         st.session_state.pop(f"{chave_dlim}{sufixo_chave}", None)
 
 
@@ -522,7 +545,9 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
     sugestao_limite_padrao = calcular_data_limite(data_solicitacao, sla_padrao)
     sugestao_limite = calcular_data_limite(data_solicitacao, sla_efetivo)
     chave_dlim = f"pr_dlim_{sufixo}"
-    _preparar_recalculo_data_limite(chave_dlim, (data_solicitacao, sla_efetivo), sugestao_limite, editando)
+    _preparar_recalculo_data_limite(
+        chave_dlim, (data_solicitacao, prestador, revisao, sla_efetivo, status_analise), sugestao_limite, editando, registro,
+    )
     with col4:
         data_limite = st.date_input(
             "Data de Entrega Acordada/Prevista *",
@@ -548,7 +573,7 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
     data_limite_original = _parse_data(registro.get("data_limite")) if editando else None
     repactuando = (
         editando and data_limite_original is not None and data_limite is not None
-        and data_limite != data_limite_original and data_limite != sugestao_limite
+        and data_limite != data_limite_original and st.session_state.get(f"{chave_dlim}_manual", False)
     )
     motivo_repactuacao = ""
     if repactuando:
@@ -645,7 +670,7 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
             "etg": etg,
             "prestador_cadastro_id": cadastro_selecionado["id"] if cadastro_selecionado else None,
             "obra_id": obra_id,
-            "data_limite_ajustada_manualmente": 1 if (data_limite and sugestao_limite and data_limite != sugestao_limite) else 0,
+            "data_limite_ajustada_manualmente": 1 if st.session_state.get(f"{chave_dlim}_manual", False) else 0,
             **campos_sla,
         }
         if editando:
@@ -805,7 +830,9 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
     sugestao_limite_padrao = calcular_data_limite(data_solicitacao, sla_padrao)
     sugestao_limite = calcular_data_limite(data_solicitacao, sla_efetivo)
     chave_dlim = f"ce_dlim_{sufixo}"
-    _preparar_recalculo_data_limite(chave_dlim, (data_solicitacao, tipo, int(revisao), sla_efetivo), sugestao_limite, editando)
+    _preparar_recalculo_data_limite(
+        chave_dlim, (data_solicitacao, cessionario, tipo, int(revisao), sla_efetivo, status_analise), sugestao_limite, editando, registro,
+    )
     with col4:
         data_limite = st.date_input(
             "Data de Entrega Acordada/Prevista *",
@@ -831,7 +858,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
     data_limite_original = _parse_data(registro.get("data_limite")) if editando else None
     repactuando = (
         editando and data_limite_original is not None and data_limite is not None
-        and data_limite != data_limite_original and data_limite != sugestao_limite
+        and data_limite != data_limite_original and st.session_state.get(f"{chave_dlim}_manual", False)
     )
     motivo_repactuacao = ""
     if repactuando:
@@ -930,7 +957,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
             "num_erros": int(num_erros),
             "etg": etg,
             "cessionario_cadastro_id": cadastro_cess_selecionado["id"] if cadastro_cess_selecionado else None,
-            "data_limite_ajustada_manualmente": 1 if (data_limite and sugestao_limite and data_limite != sugestao_limite) else 0,
+            "data_limite_ajustada_manualmente": 1 if st.session_state.get(f"{chave_dlim}_manual", False) else 0,
             **campos_sla,
         }
         if editando:
