@@ -15,15 +15,25 @@ from datetime import datetime
 
 import pandas as pd
 
+from gat.business_rules import classificacao_atraso, dias_restantes_prioridade, nivel_alerta_atraso
 from gat.config import COLUNAS_EXIBICAO_CESSIONARIOS, COLUNAS_EXIBICAO_PRESTADORES
 from gat.database import listar_cadastro_cessionarios, listar_obras_prestador
 
 COLUNA_TIPO_PROJETO = "Tipo de Projeto"
 
+_LABEL_CLASSIFICACAO_ATRASO = {
+    "ATIVO_ATRASADO": "Atrasado em análise", "ATIVO_OK": "Em análise (dentro do prazo)",
+    "CONCLUIDO_COM_ATRASO": "Concluído com atraso", "CONCLUIDO_NO_PRAZO": "Concluído no prazo",
+    "FORA_DA_CONTAGEM": "—",
+}
+
 
 def _colunas_prestadores_exportacao() -> dict[str, str]:
     colunas = dict(COLUNAS_EXIBICAO_PRESTADORES)
     colunas["nome_obra_vinculada"] = "Nome da Obra"
+    colunas["_classificacao_atraso_label"] = "Classificação de Atraso"
+    colunas["_dias_atraso"] = "Dias Úteis de Atraso"
+    colunas["_nivel_alerta_atraso"] = "Nível de Alerta"
     return colunas
 
 
@@ -32,24 +42,44 @@ def _colunas_cessionarios_exportacao() -> dict[str, str]:
     colunas["rvp_cadastro"] = "RVP (Cadastro Mestre)"
     colunas["rci_cadastro"] = "RCI (Cadastro Mestre)"
     colunas["luc_cadastro"] = "LUC (Cadastro Mestre)"
+    colunas["_classificacao_atraso_label"] = "Classificação de Atraso"
+    colunas["_dias_atraso"] = "Dias Úteis de Atraso"
+    colunas["_nivel_alerta_atraso"] = "Nível de Alerta"
     return colunas
 
 
+def _acrescentar_indicadores_atraso(df: pd.DataFrame, modulo: str) -> pd.DataFrame:
+    """Acrescenta a classificação de atraso (ativo/concluído x no prazo/
+    atrasado), os dias úteis de atraso e o nível de alerta (item 12 da
+    modificação de indicadores de atraso), sem alterar nenhuma coluna
+    existente do projeto — mesmo padrão aditivo já usado neste módulo."""
+    if df.empty or "status_entrega_calc" not in df.columns:
+        return df
+    df = df.copy()
+    classificacoes = df.apply(lambda r: classificacao_atraso(r.get("status_analise"), r.get("status_entrega_calc")), axis=1)
+    dias_restantes = df.apply(lambda r: dias_restantes_prioridade(r, modulo), axis=1)
+    df["_classificacao_atraso_label"] = classificacoes.map(_LABEL_CLASSIFICACAO_ATRASO)
+    df["_dias_atraso"] = dias_restantes.apply(lambda d: max(-int(d), 0) if pd.notna(d) else 0)
+    df["_nivel_alerta_atraso"] = dias_restantes.apply(nivel_alerta_atraso)
+    return df
+
+
 def preparar_prestadores_exportacao(df: pd.DataFrame) -> pd.DataFrame:
-    """Acrescenta o nome da obra vinculada (quando já houver vínculo), sem
-    alterar nenhuma coluna existente do projeto."""
+    """Acrescenta o nome da obra vinculada (quando já houver vínculo) e os
+    indicadores de atraso, sem alterar nenhuma coluna existente do
+    projeto."""
     df = df.copy()
     obras = listar_obras_prestador()
     mapa_obras = obras.set_index("id")["nome_obra"].to_dict() if not obras.empty else {}
     df["nome_obra_vinculada"] = df.get("obra_id", pd.Series(dtype="Int64")).map(mapa_obras)
-    return df
+    return _acrescentar_indicadores_atraso(df, "prestadores")
 
 
 def preparar_cessionarios_exportacao(df: pd.DataFrame) -> pd.DataFrame:
     """Acrescenta RVP/RCI/LUC do cadastro mestre do cessionário vinculado
     (colunas `*_cadastro`, distintas dos campos próprios do projeto — LUC,
-    N° RCI e N° RVP —, já presentes em `df`), sem alterar nenhuma coluna
-    existente do projeto."""
+    N° RCI e N° RVP —, já presentes em `df`) e os indicadores de atraso,
+    sem alterar nenhuma coluna existente do projeto."""
     df = df.copy()
     cadastro = listar_cadastro_cessionarios()
     if not cadastro.empty and "cessionario_cadastro_id" in df.columns:
@@ -61,7 +91,7 @@ def preparar_cessionarios_exportacao(df: pd.DataFrame) -> pd.DataFrame:
         df["rvp_cadastro"] = None
         df["rci_cadastro"] = None
         df["luc_cadastro"] = None
-    return df
+    return _acrescentar_indicadores_atraso(df, "cessionarios")
 
 
 def _dataframe_para_exportacao(df: pd.DataFrame, colunas: dict[str, str]) -> pd.DataFrame:

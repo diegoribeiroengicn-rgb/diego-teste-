@@ -6,9 +6,14 @@ import pandas as pd
 import streamlit as st
 
 from gat.business_rules import (
+    NIVEL_ALERTA_ATRASO_ICONES,
+    NIVEL_ALERTA_ATRASO_LABELS,
     acima_da_meta_revisao,
+    classificacao_atraso,
+    dias_restantes_prioridade,
     enriquecer_cessionarios,
     filtrar_por_competencia,
+    nivel_alerta_atraso,
     situacao_prazo,
     status_avaliacao_obrigatoria,
 )
@@ -42,9 +47,21 @@ def _rotulo_situacao_prazo(dias_restantes, revisao) -> str:
     return rotulo
 
 
+def _rotulo_nivel_alerta_atraso(status_analise, status_entrega_calc, dias_restantes) -> str:
+    classificacao = classificacao_atraso(status_analise, status_entrega_calc)
+    if classificacao == "CONCLUIDO_COM_ATRASO":
+        return "🟠 Concluído com atraso"
+    if classificacao == "CONCLUIDO_NO_PRAZO":
+        return "🟢 Concluído no prazo"
+    if classificacao == "FORA_DA_CONTAGEM":
+        return "—"
+    nivel = nivel_alerta_atraso(int(dias_restantes) if pd.notna(dias_restantes) else None)
+    return f"{NIVEL_ALERTA_ATRASO_ICONES[nivel]} {NIVEL_ALERTA_ATRASO_LABELS[nivel]}"
+
+
 _CHAVES_FILTRO = [
     "filtro_cess_resp", "filtro_cess_status", "filtro_cess_tipo",
-    "filtro_cess_pendentes", "filtro_cess_cancelados",
+    "filtro_cess_pendentes", "filtro_cess_cancelados", "filtro_cess_atraso",
     "filtro_cess_at", "filtro_cess_codigo", "filtro_cess_nome", "filtro_cess_revisao",
 ]
 
@@ -75,6 +92,8 @@ def render(usuario: dict) -> None:
     status_default = st.session_state.pop("filtro_cess_status_default", None)
     if status_default is not None:
         st.session_state["filtro_cess_status"] = status_default
+    if st.session_state.pop("filtro_atraso_cessionarios_default", False):
+        st.session_state["filtro_cess_atraso"] = True
 
     with st.expander("Filtros", icon=":material/filter_list:", expanded=False):
         col1, col2, col3, col4, col5 = st.columns(5)
@@ -83,6 +102,7 @@ def render(usuario: dict) -> None:
         f_tipo = col3.multiselect("Tipo", TIPO_CESSIONARIO_OPCOES, key="filtro_cess_tipo")
         f_pendentes = col4.checkbox("Somente Pendente de Reunião", key="filtro_cess_pendentes")
         f_cancelados = col5.checkbox("Incluir cancelados", value=False, key="filtro_cess_cancelados")
+        f_atraso = st.checkbox("🟥 Somente atrasados em análise", key="filtro_cess_atraso")
 
         col7, col8, col9, col10 = st.columns(4)
         f_at = col7.text_input("N° AT", key="filtro_cess_at", placeholder="Ex.: 1524 (busca exata ou parcial)")
@@ -124,13 +144,27 @@ def render(usuario: dict) -> None:
         df_filtrado = filtrar_por_competencia(df_filtrado, "data_solicitacao", mes, ano)
         st.caption(f"Competência: **{rotulo_competencia(mes, ano)}** (baseado na Data de Solicitação)")
 
+    if f_atraso:
+        mascara_atrasado = df_filtrado.apply(
+            lambda r: classificacao_atraso(r.get("status_analise"), r.get("status_entrega_calc")) == "ATIVO_ATRASADO", axis=1,
+        )
+        df_filtrado = df_filtrado[mascara_atrasado]
+
     df_filtrado = df_filtrado.reset_index(drop=True)
 
     if df_filtrado.empty:
         st.warning("Nenhum registro encontrado com os filtros aplicados.", icon=":material/search_off:")
         return
 
-    st.caption(f"{len(df_filtrado)} registro(s) encontrados. Ordenação padrão: Item (ordem de chegada).")
+    if f_atraso:
+        df_filtrado["_dias_atraso_ordenacao"] = df_filtrado.apply(lambda r: -dias_restantes_prioridade(r, "cessionarios"), axis=1)
+        df_filtrado["_ordem_sla_reduzido"] = (~df_filtrado["sla_reduzido"].astype(bool)).astype(int)
+        df_filtrado = df_filtrado.sort_values(
+            by=["_dias_atraso_ordenacao", "_ordem_sla_reduzido", "data_limite"], ascending=[False, True, True],
+        ).drop(columns=["_dias_atraso_ordenacao", "_ordem_sla_reduzido"]).reset_index(drop=True)
+        st.caption(f"{len(df_filtrado)} registro(s) atrasados. Ordenação: maior atraso primeiro, depois SLA reduzido.")
+    else:
+        st.caption(f"{len(df_filtrado)} registro(s) encontrados. Ordenação padrão: Item (ordem de chegada).")
 
     df_filtrado["_situacao_avaliacao"] = status_avaliacao_obrigatoria(df_filtrado, "CESSIONARIO", "cessionario", "codigo", "cessionarios")
     df_filtrado["Avaliação"] = df_filtrado["_situacao_avaliacao"].map(
@@ -139,9 +173,12 @@ def render(usuario: dict) -> None:
     df_filtrado["Situação do Prazo"] = df_filtrado.apply(
         lambda r: _rotulo_situacao_prazo(r["saldo_dias_uteis"], r.get("revisao")), axis=1
     )
+    df_filtrado["Nível de Atraso"] = df_filtrado.apply(
+        lambda r: _rotulo_nivel_alerta_atraso(r.get("status_analise"), r.get("status_entrega_calc"), r.get("saldo_dias_uteis")), axis=1
+    )
 
     colunas = list(COLUNAS_EXIBICAO_CESSIONARIOS.keys())
-    df_exibicao = df_filtrado[[*colunas[:3], "Avaliação", "Situação do Prazo", *colunas[3:]]].rename(columns=COLUNAS_EXIBICAO_CESSIONARIOS)
+    df_exibicao = df_filtrado[[*colunas[:3], "Avaliação", "Situação do Prazo", "Nível de Atraso", *colunas[3:]]].rename(columns=COLUNAS_EXIBICAO_CESSIONARIOS)
 
     def _abrir_edicao(registro: dict) -> None:
         exigir_area(usuario, "cessionarios.editar")

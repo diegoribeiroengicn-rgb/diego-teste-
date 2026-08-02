@@ -28,7 +28,13 @@ from __future__ import annotations
 
 import pandas as pd
 
-from gat.business_rules import dias_restantes_prioridade, em_lista_prioridades, limites_alerta_vencimento
+from gat.business_rules import (
+    classificacao_atraso,
+    dias_restantes_prioridade,
+    em_lista_prioridades,
+    limites_alerta_vencimento,
+    nivel_alerta_atraso,
+)
 from gat.database import listar_avaliacao_obrigatoria_isentos, listar_avaliacoes_checklist, listar_radar
 from gat.revisoes import calcular_intervalos_revisao
 
@@ -40,6 +46,7 @@ TIPO_AVALIACAO_CRITICA = "AVALIACAO_CRITICA"
 TIPO_ATRASO_REENVIO = "ATRASO_REENVIO"
 TIPO_AVALIACAO_OBRIGATORIA = "AVALIACAO_OBRIGATORIA"
 TIPO_PRAZO_PRIORITARIO = "PRAZO_PRIORITARIO"
+TIPO_ALERTA_MAXIMO = "ALERTA_MAXIMO"
 
 TIPO_ALERTA_LABELS = {
     TIPO_PENDENTE_REUNIAO: "Revisão ≥ REV2 sem liberação",
@@ -48,6 +55,7 @@ TIPO_ALERTA_LABELS = {
     TIPO_ATRASO_REENVIO: "Atraso no reenvio (retorno externo)",
     TIPO_AVALIACAO_OBRIGATORIA: "Avaliação obrigatória pendente",
     TIPO_PRAZO_PRIORITARIO: "Prazo prioritário próximo do vencimento",
+    TIPO_ALERTA_MAXIMO: "Alerta Máximo — mais de 2 dias úteis de atraso",
 }
 
 
@@ -112,6 +120,17 @@ def montar_alertas_modulo(df: pd.DataFrame, modulo: str, coluna_nome: str, colun
             registros.append({**base, "tipo_alerta": TIPO_PENDENTE_REUNIAO, "detalhe": None})
         if row.get("status_entrega_calc") == "ATRASADO":
             registros.append({**base, "tipo_alerta": TIPO_ATRASO_ANALISE, "detalhe": None})
+        if classificacao_atraso(row.get("status_analise"), row.get("status_entrega_calc")) == "ATIVO_ATRASADO":
+            dias_restantes_atraso = dias_restantes_prioridade(row, modulo)
+            if nivel_alerta_atraso(dias_restantes_atraso) == "ALERTA_MAXIMO":
+                dias_atraso = int(-dias_restantes_atraso) if dias_restantes_atraso is not None else None
+                registros.append({
+                    **base, "tipo_alerta": TIPO_ALERTA_MAXIMO,
+                    "detalhe": (
+                        f"ATENÇÃO: esta análise está com mais de 2 dias úteis de atraso ({dias_atraso} dia(s) útil(eis)) "
+                        "e exige atuação imediata."
+                    ),
+                })
         if chave_entidade in criticos:
             registros.append({**base, "tipo_alerta": TIPO_AVALIACAO_CRITICA, "detalhe": None})
         if (

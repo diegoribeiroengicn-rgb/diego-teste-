@@ -19,6 +19,7 @@ from gat.ui.charts import (
 )
 from gat.permissions import exigir_area, exigir_modulo
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
+from gat.ui.indicadores_atraso import renderizar_kpis_atraso
 from gat.ui.kpi_cards import renderizar_kpis
 
 
@@ -52,6 +53,9 @@ def render(usuario: dict) -> None:
     if df.empty:
         st.info("Nenhum registro ativo de cessionário para exibir indicadores nesta competência.")
         return
+
+    renderizar_kpis_atraso(df, "cessionarios", url_path_lista="cessionarios_projetos", chave_prefixo="dash_cess")
+    st.markdown("---")
 
     total_projetos = len(df)
     total_ats = df["num_at"].replace("", None).dropna().nunique()

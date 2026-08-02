@@ -303,6 +303,141 @@ def montar_lista_prioridades(df_prestadores: pd.DataFrame, df_cessionarios: pd.D
     return resultado.sort_values("dias_restantes", na_position="last").reset_index(drop=True)
 
 
+STATUS_ATIVO_ANALISE = {"EM ANÁLISE", "EM HOLD"}
+STATUS_CONCLUIDO_ENTREGA = {"LIBERADO", "LIBERADO C/ REST.", "NÃO LIBERADO"}
+
+NIVEL_ALERTA_ATRASO_LABELS = {
+    "DENTRO_DO_PRAZO": "Dentro do prazo",
+    "PROXIMO_VENCIMENTO": "Próximo do vencimento",
+    "ATRASO_ALTO": "1 dia útil de atraso",
+    "ATRASO_CRITICO": "2 dias úteis de atraso",
+    "ALERTA_MAXIMO": "Mais de 2 dias úteis de atraso",
+}
+NIVEL_ALERTA_ATRASO_ICONES = {
+    "DENTRO_DO_PRAZO": "🟢", "PROXIMO_VENCIMENTO": "🟡", "ATRASO_ALTO": "🟠",
+    "ATRASO_CRITICO": "🔴", "ALERTA_MAXIMO": "🟥",
+}
+
+
+def nivel_alerta_atraso(dias_restantes: int | None) -> str:
+    """
+    Escala de 5 níveis de atraso (item 8 da modificação de indicadores de
+    atraso): Dentro do prazo / Próximo do vencimento / 1 dia útil de
+    atraso (alerta alto) / 2 dias úteis de atraso (alerta crítico) / mais
+    de 2 dias úteis de atraso (Alerta Máximo). Limiar fixo (não escalonado
+    por SLA curto, ao contrário do aviso de vencimento da Lista de
+    Prioridades) — `dias_restantes` negativo indica atraso.
+    """
+    if dias_restantes is None:
+        return "DENTRO_DO_PRAZO"
+    if dias_restantes <= -3:
+        return "ALERTA_MAXIMO"
+    if dias_restantes == -2:
+        return "ATRASO_CRITICO"
+    if dias_restantes == -1:
+        return "ATRASO_ALTO"
+    if dias_restantes <= _LIMIAR_VENCE_EM_BREVE_DIAS_UTEIS:
+        return "PROXIMO_VENCIMENTO"
+    return "DENTRO_DO_PRAZO"
+
+
+def classificacao_atraso(status_analise: str | None, status_entrega_calc: str | None) -> str:
+    """
+    Classifica um projeto em uma das 4 categorias do indicador de atraso
+    (itens 2/3 da modificação): ATIVO_ATRASADO e ATIVO_OK cobrem análises
+    ainda em andamento (status ativo); CONCLUIDO_COM_ATRASO e
+    CONCLUIDO_NO_PRAZO cobrem análises já finalizadas (Liberado/Liberado
+    c/ Rest./Não Liberado) — a classificação de uma análise concluída
+    nunca muda depois, pois `status_entrega_calc` é calculado sobre a
+    data de análise (fixa), não sobre a data de hoje. Obsoleto e
+    Cancelado ficam fora da contagem de atrasos (não representam uma
+    entrega real), assim como já ocorre com Cancelado em `filtrar_ativos`.
+    """
+    status = (status_analise or "").strip().upper()
+    atrasado = status_entrega_calc == "ATRASADO"
+    if status in STATUS_ATIVO_ANALISE:
+        return "ATIVO_ATRASADO" if atrasado else "ATIVO_OK"
+    if status in STATUS_CONCLUIDO_ENTREGA:
+        return "CONCLUIDO_COM_ATRASO" if atrasado else "CONCLUIDO_NO_PRAZO"
+    return "FORA_DA_CONTAGEM"
+
+
+def resumo_indicadores_atraso(df: pd.DataFrame, modulo: str) -> dict[str, Any]:
+    """
+    Monta os indicadores do painel de KPIs de atraso (itens 4/5): projetos
+    em análise, dentro do prazo, próximos do vencimento, atrasados em
+    análise (com quebra por tipo — usada no drill-down do card), concluídos
+    no prazo, concluídos com atraso e o total geral de projetos atrasados
+    (soma de ativos atrasados + concluídos com atraso).
+    """
+    if df.empty:
+        return {
+            "em_analise": 0, "dentro_prazo": 0, "proximo_vencimento": 0, "atrasados_em_analise": 0,
+            "concluidos_no_prazo": 0, "concluidos_com_atraso": 0, "total_atrasados": 0,
+            "percentual_atrasados_em_analise": 0.0,
+        }
+
+    coluna_nome = "prestador" if modulo == "prestadores" else "cessionario"
+    classificacoes = df.apply(lambda r: classificacao_atraso(r.get("status_analise"), r.get("status_entrega_calc")), axis=1)
+    dias_restantes = df.apply(lambda r: dias_restantes_prioridade(r, modulo), axis=1)
+    niveis = dias_restantes.apply(nivel_alerta_atraso)
+
+    ativos = classificacoes.isin(["ATIVO_ATRASADO", "ATIVO_OK"])
+    total_ativos = int(ativos.sum())
+    em_analise = total_ativos
+    atrasados_em_analise = int((classificacoes == "ATIVO_ATRASADO").sum())
+    dentro_prazo = int(((classificacoes == "ATIVO_OK") & (niveis == "DENTRO_DO_PRAZO")).sum())
+    proximo_vencimento = int(((classificacoes == "ATIVO_OK") & (niveis == "PROXIMO_VENCIMENTO")).sum())
+    concluidos_no_prazo = int((classificacoes == "CONCLUIDO_NO_PRAZO").sum())
+    concluidos_com_atraso = int((classificacoes == "CONCLUIDO_COM_ATRASO").sum())
+
+    return {
+        "em_analise": em_analise, "dentro_prazo": dentro_prazo, "proximo_vencimento": proximo_vencimento,
+        "atrasados_em_analise": atrasados_em_analise, "concluidos_no_prazo": concluidos_no_prazo,
+        "concluidos_com_atraso": concluidos_com_atraso,
+        "total_atrasados": atrasados_em_analise + concluidos_com_atraso,
+        "percentual_atrasados_em_analise": round((atrasados_em_analise / total_ativos) * 100, 1) if total_ativos else 0.0,
+    }
+
+
+def montar_lista_atrasados(df: pd.DataFrame, modulo: str, coluna_nome: str) -> pd.DataFrame:
+    """
+    Lista de projetos atrasados em análise (item 11): somente os ainda não
+    concluídos, com prazo vencido, ordenados por maior atraso primeiro,
+    depois por Nível de Prioridade (1, depois 2, depois 3), depois SLA
+    reduzido, depois data limite mais antiga.
+    """
+    if df.empty:
+        return pd.DataFrame()
+
+    linhas = []
+    for _, row in df.iterrows():
+        classificacao = classificacao_atraso(row.get("status_analise"), row.get("status_entrega_calc"))
+        if classificacao != "ATIVO_ATRASADO":
+            continue
+        dias_restantes = dias_restantes_prioridade(row, modulo)
+        linhas.append({
+            "modulo": modulo, "id": row.get("id"), "nome_entidade": row.get(coluna_nome), "codigo": row.get("codigo"),
+            "num_at": row.get("num_at"), "disciplina": row.get("disciplina"), "revisao": row.get("revisao"),
+            "responsavel": row.get("responsavel"), "status_analise": row.get("status_analise"),
+            "sla_dias": row.get("sla_dias"), "data_limite": row.get("data_limite"),
+            "nivel_prioridade": row.get("nivel_prioridade"), "sla_reduzido": bool(row.get("sla_reduzido")),
+            "dias_restantes": dias_restantes, "dias_atraso": int(-dias_restantes) if dias_restantes is not None else 0,
+            "nivel_alerta": nivel_alerta_atraso(dias_restantes),
+        })
+
+    if not linhas:
+        return pd.DataFrame()
+
+    resultado = pd.DataFrame(linhas)
+    resultado["_ordem_nivel"] = resultado["nivel_prioridade"].map({1: 0, 2: 1, 3: 2}).fillna(3)
+    resultado["_ordem_sla_reduzido"] = (~resultado["sla_reduzido"]).astype(int)
+    return resultado.sort_values(
+        by=["dias_atraso", "_ordem_nivel", "_ordem_sla_reduzido", "data_limite"],
+        ascending=[False, True, True, True],
+    ).drop(columns=["_ordem_nivel", "_ordem_sla_reduzido"]).reset_index(drop=True)
+
+
 def acima_da_meta_revisao(revisao: int | None) -> bool:
     """True quando a revisão do projeto já ultrapassou a meta corporativa
     (acima da REV2) — usado para o destaque visual específico."""

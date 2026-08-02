@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia
+from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia, resumo_indicadores_atraso
 from gat.config import CORES
 from gat.database import listar_cessionarios, listar_prestadores, registrar_atividade
 from gat.export_projetos import gerar_csv_bytes, gerar_excel_bytes, montar_exportacao_consolidada, nome_arquivo_exportacao
@@ -20,6 +20,51 @@ from gat.ui.charts import (
 from gat.permissions import exigir_modulo, exigir_area, pode_area
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.kpi_cards import renderizar_kpis
+
+
+def _renderizar_kpis_atraso_consolidado(df_prest, df_cess) -> None:
+    r1 = resumo_indicadores_atraso(df_prest, "prestadores")
+    r2 = resumo_indicadores_atraso(df_cess, "cessionarios")
+    total_ativos = r1["em_analise"] + r2["em_analise"]
+    atrasados_em_analise = r1["atrasados_em_analise"] + r2["atrasados_em_analise"]
+    pct = round((atrasados_em_analise / total_ativos) * 100, 1) if total_ativos else 0.0
+
+    st.markdown("##### Indicadores de Atraso (Consolidado)")
+    renderizar_kpis([
+        ("Em Análise", str(total_ativos), CORES["azul_2"]),
+        ("Dentro do Prazo", str(r1["dentro_prazo"] + r2["dentro_prazo"]), CORES["verde"]),
+        ("Próximos do Vencimento", str(r1["proximo_vencimento"] + r2["proximo_vencimento"]), CORES["dourado"]),
+    ])
+    st.markdown(
+        f"""
+        <div style="border:2px solid {CORES['vermelho']};border-radius:10px;padding:14px 16px;background:#FEF2F2;">
+            <div style="font-size:0.8rem;color:#7F1D1D;font-weight:700;text-transform:uppercase;">
+                🟥 Atrasados em Análise — requer ação imediata
+            </div>
+            <div style="font-size:2.1rem;font-weight:800;color:{CORES['vermelho']};line-height:1.2;">
+                {atrasados_em_analise} <span style="font-size:1rem;font-weight:600;">
+                ({r1['atrasados_em_analise']} Prestadores · {r2['atrasados_em_analise']} Cessionários)</span>
+            </div>
+            <div style="font-size:0.8rem;color:#7F1D1D;">{pct}% dos projetos ativos</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    renderizar_kpis([
+        ("Concluídos no Prazo", str(r1["concluidos_no_prazo"] + r2["concluidos_no_prazo"]), CORES["verde"]),
+        ("Concluídos com Atraso", str(r1["concluidos_com_atraso"] + r2["concluidos_com_atraso"]), CORES["laranja"]),
+    ])
+    st.markdown(
+        f"""
+        <div style="border:1px solid {CORES['borda_forte']};border-radius:10px;padding:12px 16px;margin-top:4px;">
+            <div style="font-size:0.8rem;color:{CORES['texto_fraco']};font-weight:700;text-transform:uppercase;">
+                Total de Projetos Atrasados
+            </div>
+            <div style="font-size:1.7rem;font-weight:800;color:{CORES['texto']};">{r1['total_atrasados'] + r2['total_atrasados']}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render(usuario: dict) -> None:
@@ -63,6 +108,9 @@ def render(usuario: dict) -> None:
         pct_no_prazo = round((no_prazo / total_geral) * 100, 1)
 
     sem_pep_prest = int((~df_prest["tem_pep"]).sum()) if not df_prest.empty else 0
+
+    _renderizar_kpis_atraso_consolidado(df_prest, df_cess)
+    st.markdown("---")
 
     renderizar_kpis([
         ("Projetos Ativos (Total)", str(total_geral), CORES["navy"]),

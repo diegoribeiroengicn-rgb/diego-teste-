@@ -10,7 +10,7 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from gat.alertas_engine import TIPO_ALERTA_LABELS, TIPO_AVALIACAO_OBRIGATORIA, montar_alertas_modulo
+from gat.alertas_engine import TIPO_ALERTA_LABELS, TIPO_ALERTA_MAXIMO, TIPO_AVALIACAO_OBRIGATORIA, montar_alertas_modulo
 from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia, situacao_prazo
 from gat.calendario import dias_uteis_entre
 from gat.config import DISCIPLINAS, PERFIL_ADMIN, PERFIL_GESTOR, RESPONSAVEIS
@@ -71,6 +71,12 @@ def _acao_avaliacao_obrigatoria(usuario: dict, alerta: pd.Series, chave_acao: st
 
 def _cartao_alerta(usuario: dict, alerta: pd.Series, sufixo_chave: str) -> None:
     with st.container(border=True):
+        if alerta["tipo_alerta"] == TIPO_ALERTA_MAXIMO:
+            st.error(
+                f"🟥 **ALERTA MÁXIMO** — {alerta['nome']} (AT {_ou_traco(alerta.get('num_at'))}): "
+                f"{alerta.get('detalhe') or 'mais de 2 dias úteis de atraso, exige atuação imediata.'}",
+                icon=":material/emergency_home:",
+            )
         col_info, col_status = st.columns([4, 1])
         with col_info:
             st.markdown(f"**{alerta['nome']}** ({_ou_traco(alerta.get('disciplina'))}) — {alerta['motivo_label']}")
@@ -341,8 +347,14 @@ def render(usuario: dict, modulo: str | None = None) -> None:
         st.success("Nenhum alerta ativo no momento.")
     else:
         limite = 30
+        ativos = ativos.sort_values(
+            by="tipo_alerta", key=lambda s: (s != TIPO_ALERTA_MAXIMO), kind="stable",
+        )
         if len(ativos) > limite:
-            st.caption(f"Exibindo os {limite} alertas mais recentes de {len(ativos)}. Use os Filtros para refinar a lista.")
+            st.caption(
+                f"Exibindo os {limite} alertas mais recentes de {len(ativos)} (Alerta Máximo sempre em primeiro lugar). "
+                "Use os Filtros para refinar a lista."
+            )
             ativos = ativos.head(limite)
         for idx, (_, alerta) in enumerate(ativos.iterrows()):
             _cartao_alerta(usuario, alerta, f"{modulo}_{idx}")

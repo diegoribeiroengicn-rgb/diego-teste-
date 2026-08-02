@@ -18,6 +18,7 @@ from gat.ui.charts import (
 )
 from gat.permissions import exigir_area, exigir_modulo
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
+from gat.ui.indicadores_atraso import renderizar_kpis_atraso
 from gat.ui.kpi_cards import renderizar_kpis
 
 
@@ -83,6 +84,9 @@ def render(usuario: dict) -> None:
     if not df_aval.empty:
         media_por_prestador = df_aval.groupby("nome_prestador")["nota"].mean()
         prestadores_criticos = int(sum(1 for nota in media_por_prestador if classificar_nota(round(nota))[0] == "CRÍTICO"))
+
+    renderizar_kpis_atraso(df, "prestadores", url_path_lista="prestadores_projetos", chave_prefixo="dash_prest")
+    st.markdown("---")
 
     st.markdown("##### Volume")
     renderizar_kpis([
