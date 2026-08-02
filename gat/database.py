@@ -642,6 +642,81 @@ def _migracao_0011_remover_isencao_retroativa(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM avaliacao_obrigatoria_isentos")
 
 
+def _migracao_0013_manual_sistema(conn: sqlite3.Connection) -> None:
+    """
+    Novo módulo Manual do Sistema: capítulos organizados por versão
+    publicada, com filtro por perfil, anexos e confirmação de leitura. Uma
+    única vez, semeia os 28 capítulos iniciais (ver `gat/manual_conteudo.py`)
+    como a versão 1, já publicada e ativa — depois disso, o conteúdo passa a
+    ser gerido inteiramente pela Administração do Manual (editar, reordenar,
+    publicar novas versões), sem depender mais deste arquivo.
+    """
+    from gat.manual_conteudo import CAPITULOS_INICIAIS
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS manual_capitulos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ordem INTEGER NOT NULL,
+            titulo TEXT NOT NULL,
+            conteudo TEXT,
+            perfis_visiveis TEXT,
+            criado_em TEXT NOT NULL,
+            atualizado_em TEXT,
+            atualizado_por TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS manual_versoes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            numero_versao INTEGER NOT NULL,
+            notas TEXT,
+            publicado_em TEXT NOT NULL,
+            publicado_por TEXT NOT NULL,
+            ativa INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS manual_confirmacoes_leitura (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario TEXT NOT NULL,
+            versao INTEGER NOT NULL,
+            confirmado_em TEXT NOT NULL,
+            UNIQUE(usuario, versao)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS manual_anexos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            capitulo_id INTEGER NOT NULL REFERENCES manual_capitulos(id) ON DELETE CASCADE,
+            tipo TEXT NOT NULL,
+            nome_arquivo TEXT NOT NULL,
+            conteudo BLOB NOT NULL,
+            criado_em TEXT NOT NULL,
+            criado_por TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_manual_anexos_capitulo ON manual_anexos(capitulo_id)")
+
+    agora = datetime.now().isoformat()
+    for ordem, (titulo, conteudo) in enumerate(CAPITULOS_INICIAIS, start=1):
+        conn.execute(
+            "INSERT INTO manual_capitulos (ordem, titulo, conteudo, perfis_visiveis, criado_em) VALUES (?, ?, ?, NULL, ?)",
+            (ordem, titulo, conteudo, agora),
+        )
+    conn.execute(
+        "INSERT INTO manual_versoes (numero_versao, notas, publicado_em, publicado_por, ativa) VALUES (1, ?, ?, 'sistema', 1)",
+        ("Versão inicial do Manual do Sistema.", agora),
+    )
+
+
 def _migracao_0012_alertas_manuais(conn: sqlite3.Connection) -> None:
     """
     Alertas manuais (item 1 do módulo de SLA/Prioridades): alertas criados
@@ -697,6 +772,7 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (10, "SLA/prioridades: colunas de SLA original/atual, redução manual, nível de prioridade e justificativa", _migracao_0010_sla_prioridades),
     (11, "Remove a isenção retroativa da avaliação obrigatória (aplica de fato a remoção decidida anteriormente)", _migracao_0011_remover_isencao_retroativa),
     (12, "Alertas manuais: tabela alertas_manuais (criação/edição/encerramento com histórico em historico_edicoes)", _migracao_0012_alertas_manuais),
+    (13, "Manual do Sistema: capítulos, versões publicadas, confirmação de leitura e anexos, semeado com os 28 capítulos iniciais", _migracao_0013_manual_sistema),
 ]
 
 
@@ -2304,6 +2380,172 @@ def listar_alertas_manuais(modulo: str | None = None) -> pd.DataFrame:
     query += " ORDER BY criado_em DESC"
     with _conectar() as conn:
         return pd.read_sql_query(query, conn, params=params)
+
+
+# ---------------------------------------------------------------------------
+# Manual do Sistema
+# ---------------------------------------------------------------------------
+
+TIPOS_ANEXO_MANUAL = ["imagem", "video", "documento"]
+
+
+def listar_manual_capitulos(perfil: str | None = None) -> pd.DataFrame:
+    """Lista os capítulos na ordem de exibição. Quando `perfil` é informado
+    e não é ADMIN, filtra para capítulos sem restrição de perfil
+    (`perfis_visiveis` vazio/NULL = visível a todos) ou que incluam o
+    perfil na lista — o Administrador sempre vê o manual completo."""
+    with _conectar() as conn:
+        df = pd.read_sql_query("SELECT * FROM manual_capitulos ORDER BY ordem", conn)
+    if perfil and perfil != "ADMIN" and not df.empty:
+        def _visivel(valor) -> bool:
+            if not valor or (isinstance(valor, float) and pd.isna(valor)):
+                return True
+            return perfil in [p.strip() for p in str(valor).split(",") if p.strip()]
+        df = df[df["perfis_visiveis"].apply(_visivel)]
+    return df
+
+
+def obter_manual_capitulo(capitulo_id: int) -> dict[str, Any] | None:
+    with _conectar() as conn:
+        linha = conn.execute("SELECT * FROM manual_capitulos WHERE id = ?", (capitulo_id,)).fetchone()
+        return dict(linha) if linha else None
+
+
+def criar_manual_capitulo(titulo: str, conteudo: str, perfis_visiveis: str | None, usuario: str) -> int:
+    agora = datetime.now().isoformat()
+    with _conectar() as conn:
+        maior_ordem = conn.execute("SELECT COALESCE(MAX(ordem), 0) AS m FROM manual_capitulos").fetchone()["m"]
+        cursor = conn.execute(
+            "INSERT INTO manual_capitulos (ordem, titulo, conteudo, perfis_visiveis, criado_em, atualizado_por) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (int(maior_ordem) + 1, titulo, conteudo, perfis_visiveis, agora, usuario),
+        )
+        capitulo_id = cursor.lastrowid
+        _registrar_historico(conn, "manual_capitulos", capitulo_id, {}, {"titulo": titulo}, usuario)
+        return capitulo_id
+
+
+def atualizar_manual_capitulo(capitulo_id: int, titulo: str, conteudo: str, perfis_visiveis: str | None, usuario: str) -> None:
+    anterior = obter_manual_capitulo(capitulo_id)
+    agora = datetime.now().isoformat()
+    with _conectar() as conn:
+        conn.execute(
+            "UPDATE manual_capitulos SET titulo = ?, conteudo = ?, perfis_visiveis = ?, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
+            (titulo, conteudo, perfis_visiveis, agora, usuario, capitulo_id),
+        )
+        if anterior:
+            _registrar_historico(
+                conn, "manual_capitulos", capitulo_id,
+                {"titulo": anterior.get("titulo"), "conteudo": anterior.get("conteudo")},
+                {"titulo": titulo, "conteudo": conteudo}, usuario,
+            )
+
+
+def reordenar_manual_capitulos(ordem_ids: list[int], usuario: str) -> None:
+    """`ordem_ids` já na nova ordem desejada — a posição na lista define a
+    nova `ordem` (1, 2, 3...)."""
+    agora = datetime.now().isoformat()
+    with _conectar() as conn:
+        for nova_ordem, capitulo_id in enumerate(ordem_ids, start=1):
+            conn.execute(
+                "UPDATE manual_capitulos SET ordem = ?, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
+                (nova_ordem, agora, usuario, capitulo_id),
+            )
+
+
+def excluir_manual_capitulo(capitulo_id: int, usuario: str) -> None:
+    anterior = obter_manual_capitulo(capitulo_id)
+    with _conectar() as conn:
+        conn.execute("DELETE FROM manual_anexos WHERE capitulo_id = ?", (capitulo_id,))
+        conn.execute("DELETE FROM manual_capitulos WHERE id = ?", (capitulo_id,))
+        if anterior:
+            _registrar_historico(conn, "manual_capitulos", capitulo_id, {"titulo": anterior.get("titulo")}, {"titulo": None}, usuario)
+
+
+def versao_ativa_manual() -> dict[str, Any] | None:
+    with _conectar() as conn:
+        linha = conn.execute("SELECT * FROM manual_versoes WHERE ativa = 1 ORDER BY numero_versao DESC LIMIT 1").fetchone()
+        return dict(linha) if linha else None
+
+
+def listar_manual_versoes() -> pd.DataFrame:
+    with _conectar() as conn:
+        return pd.read_sql_query("SELECT * FROM manual_versoes ORDER BY numero_versao DESC", conn)
+
+
+def publicar_nova_versao_manual(notas: str, usuario: str) -> int:
+    """Arquiva a versão ativa atual e publica uma nova — o conteúdo dos
+    capítulos já é o vigente no momento da publicação (edições de capítulo
+    não exigem uma nova versão para ficar visíveis; a versão serve para
+    marcar marcos de publicação e disparar a confirmação de leitura)."""
+    agora = datetime.now().isoformat()
+    with _conectar() as conn:
+        atual = conn.execute("SELECT MAX(numero_versao) AS m FROM manual_versoes").fetchone()["m"]
+        nova_versao = int(atual or 0) + 1
+        conn.execute("UPDATE manual_versoes SET ativa = 0")
+        conn.execute(
+            "INSERT INTO manual_versoes (numero_versao, notas, publicado_em, publicado_por, ativa) VALUES (?, ?, ?, ?, 1)",
+            (nova_versao, notas, agora, usuario),
+        )
+        _registrar_historico(conn, "manual_versoes", nova_versao, {}, {"publicado_por": usuario, "notas": notas}, usuario)
+        return nova_versao
+
+
+def usuario_confirmou_leitura_manual(usuario: str, versao: int) -> bool:
+    with _conectar() as conn:
+        linha = conn.execute(
+            "SELECT 1 FROM manual_confirmacoes_leitura WHERE usuario = ? AND versao = ?", (usuario, versao)
+        ).fetchone()
+        return linha is not None
+
+
+def confirmar_leitura_manual(usuario: str, versao: int) -> None:
+    agora = datetime.now().isoformat()
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO manual_confirmacoes_leitura (usuario, versao, confirmado_em) VALUES (?, ?, ?)",
+            (usuario, versao, agora),
+        )
+
+
+def listar_confirmacoes_leitura_manual(versao: int | None = None) -> pd.DataFrame:
+    query = "SELECT * FROM manual_confirmacoes_leitura"
+    params: list[Any] = []
+    if versao is not None:
+        query += " WHERE versao = ?"
+        params.append(versao)
+    query += " ORDER BY confirmado_em DESC"
+    with _conectar() as conn:
+        return pd.read_sql_query(query, conn, params=params)
+
+
+def adicionar_anexo_manual(capitulo_id: int, tipo: str, nome_arquivo: str, conteudo: bytes, usuario: str) -> int:
+    agora = datetime.now().isoformat()
+    with _conectar() as conn:
+        cursor = conn.execute(
+            "INSERT INTO manual_anexos (capitulo_id, tipo, nome_arquivo, conteudo, criado_em, criado_por) VALUES (?, ?, ?, ?, ?, ?)",
+            (capitulo_id, tipo, nome_arquivo, conteudo, agora, usuario),
+        )
+        return cursor.lastrowid
+
+
+def listar_anexos_manual(capitulo_id: int) -> pd.DataFrame:
+    with _conectar() as conn:
+        return pd.read_sql_query(
+            "SELECT id, capitulo_id, tipo, nome_arquivo, criado_em, criado_por FROM manual_anexos WHERE capitulo_id = ? ORDER BY criado_em",
+            conn, params=[capitulo_id],
+        )
+
+
+def obter_anexo_manual(anexo_id: int) -> dict[str, Any] | None:
+    with _conectar() as conn:
+        linha = conn.execute("SELECT * FROM manual_anexos WHERE id = ?", (anexo_id,)).fetchone()
+        return dict(linha) if linha else None
+
+
+def remover_anexo_manual(anexo_id: int) -> None:
+    with _conectar() as conn:
+        conn.execute("DELETE FROM manual_anexos WHERE id = ?", (anexo_id,))
 
 
 def listar_avaliacao_obrigatoria_isentos(modulo: str) -> set[int]:

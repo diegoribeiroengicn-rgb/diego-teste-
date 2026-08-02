@@ -49,6 +49,7 @@ from views import (
     lembretes_pep,
     linha_tempo,
     lista_prioridades,
+    manual_sistema,
     meu_perfil,
     painel_analistas,
     planos_acao,
@@ -175,6 +176,11 @@ if pode_area(usuario, "relatorios"):
     grupo_relatorios.append(_pagina(lambda: relatorios_mensais.render(usuario), "Relatórios Mensais", ":material/summarize:", "relatorios_mensais"))
 if grupo_relatorios:
     paginas["Relatórios"] = grupo_relatorios
+
+if pode_area(usuario, "manual_sistema"):
+    paginas["Manual do Sistema"] = [
+        _pagina(lambda: manual_sistema.render(usuario), "Manual do Sistema", ":material/menu_book:", "manual_sistema"),
+    ]
 
 if pode_area(usuario, "administrar_usuarios") or pode_area(usuario, "configuracoes") or pode_area(usuario, "auditoria"):
     grupo_sistema = [
