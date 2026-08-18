@@ -4,7 +4,7 @@ Comunicação, com 15 perguntas Sim/Não/N-A e classificação automática."""
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 from typing import Any
 
 import streamlit as st
@@ -25,6 +25,7 @@ from gat.database import (
     obter_cadastro_prestador_por_codigo,
     registrar_atividade,
 )
+from gat.horario import hoje_br
 
 
 def _idx(opcoes: list[str], valor: Any) -> int:
@@ -85,7 +86,7 @@ def dialog_avaliacao_checklist(
 
     data_avaliacao = st.date_input(
         "Data da avaliação", format="DD/MM/YYYY",
-        value=datetime.fromisoformat(registro["data_avaliacao"][:10]).date() if editando and registro.get("data_avaliacao") else date.today(),
+        value=datetime.fromisoformat(registro["data_avaliacao"][:10]).date() if editando and registro.get("data_avaliacao") else hoje_br(),
         key=f"av_data_{sufixo}",
     )
 

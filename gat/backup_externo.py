@@ -29,12 +29,12 @@ from __future__ import annotations
 import base64
 import threading
 import time
-from datetime import datetime
 from typing import Any
 
 import requests
 
 from gat.config import SEED_DB_PATH
+from gat.horario import agora_br
 
 _API = "https://api.github.com"
 _BRANCH_PADRAO = "claude/gat-2026-governance-system-2p09ah"
@@ -84,7 +84,7 @@ def _registrar_status(sucesso: bool, mensagem: str) -> None:
     with _lock:
         _ultimo_status.update({
             "sucesso": sucesso, "mensagem": mensagem,
-            "em": datetime.now().isoformat(timespec="seconds"),
+            "em": agora_br().isoformat(timespec="seconds"),
         })
 
 
@@ -127,7 +127,7 @@ def enviar_backup_agora() -> bool:
             return False
 
         payload: dict[str, Any] = {
-            "message": f"Backup automático do banco de dados ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})",
+            "message": f"Backup automático do banco de dados ({agora_br().strftime('%Y-%m-%d %H:%M:%S')})",
             "content": base64.b64encode(conteudo_bytes).decode(),
             "branch": branch,
         }

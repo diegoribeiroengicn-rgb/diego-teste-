@@ -80,8 +80,10 @@ def _inteiro_ou_none(celula) -> int | None:
 
 
 def importar_prestadores(wb: openpyxl.Workbook, conn: sqlite3.Connection) -> tuple[int, int]:
+    from gat.horario import agora_br
+
     ws = wb["PROJ_PREST"]
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     importados = 0
     ignorados = 0
     for r in range(6, ws.max_row + 1):
@@ -133,8 +135,10 @@ def importar_prestadores(wb: openpyxl.Workbook, conn: sqlite3.Connection) -> tup
 
 
 def importar_cessionarios(wb: openpyxl.Workbook, conn: sqlite3.Connection) -> tuple[int, int]:
+    from gat.horario import agora_br
+
     ws = wb["PROJ_CESS"]
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     importados = 0
     ignorados = 0
     for r in range(6, ws.max_row + 1):
@@ -188,8 +192,10 @@ def importar_cessionarios(wb: openpyxl.Workbook, conn: sqlite3.Connection) -> tu
 def importar_avaliacoes(wb_avaliacao: openpyxl.Workbook | None, conn: sqlite3.Connection) -> tuple[int, int]:
     if wb_avaliacao is None:
         return 0, 0
+    from gat.horario import agora_br
+
     ws = wb_avaliacao["AVALIAÇÃO_PRESTADORES"]
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     importados = 0
     ignorados = 0
     for r in range(5, ws.max_row + 1):
@@ -287,7 +293,9 @@ def main() -> None:
     cess_ok, cess_skip = importar_cessionarios(wb, conn)
     aval_ok, aval_skip = importar_avaliacoes(wb_avaliacao, conn)
 
-    agora = datetime.now().isoformat()
+    from gat.horario import agora_br
+
+    agora = agora_br().isoformat()
     evento = "ATUALIZACAO_PLANILHA" if args.atualizar else "IMPORTACAO_INICIAL"
     for tabela, ok in (("prestadores", prest_ok), ("cessionarios", cess_ok), ("avaliacoes_prestadores", aval_ok)):
         if ok:

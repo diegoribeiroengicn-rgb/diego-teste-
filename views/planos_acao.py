@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date
-
 import streamlit as st
 
 from gat.config import CORES, RESPONSAVEIS, STATUS_PLANO_ACAO_OPCOES
 from gat.database import listar_planos_acao, obter_plano_acao
+from gat.horario import hoje_br
 from gat.permissions import exigir_area
 from gat.ui.formatos import formatar_datas_df
 from gat.ui.kpi_cards import renderizar_kpis
@@ -41,7 +40,7 @@ def render(usuario: dict) -> None:
         st.info("Nenhum plano de ação registrado ainda. Utilize o botão acima para iniciar.")
         return
 
-    hoje = date.today().isoformat()
+    hoje = hoje_br().isoformat()
     vencidos = int(((df["prazo"].fillna("9999-12-31") < hoje) & (df["status"] != "CONCLUÍDO")).sum())
 
     renderizar_kpis([

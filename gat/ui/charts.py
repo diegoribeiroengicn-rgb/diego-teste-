@@ -105,8 +105,8 @@ def grafico_evolucao_mensal_unico(df: pd.DataFrame, nome_serie: str, cor: str) -
 
 
 def _ano_atual_fallback() -> int:
-    from datetime import date
-    return date.today().year
+    from gat.horario import hoje_br
+    return hoje_br().year
 
 
 def grafico_por_categoria(df: pd.DataFrame, coluna: str, titulo: str, cor: str, top_n: int | None = None) -> go.Figure:

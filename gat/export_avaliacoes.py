@@ -19,12 +19,12 @@ from __future__ import annotations
 import io
 import json
 import zipfile
-from datetime import datetime
 from typing import Any
 
 import pandas as pd
 
 from gat.database import listar_avaliacoes_checklist, listar_fechamentos_avaliacao_analista, listar_historico
+from gat.horario import agora_br
 
 
 def montar_backup_avaliacoes_checklist(tipo_entidade: str | None = None) -> dict[str, pd.DataFrame]:
@@ -71,11 +71,11 @@ def gerar_zip_csv(tabelas: dict[str, pd.DataFrame]) -> bytes:
 
 def gerar_json_bytes(tabelas: dict[str, pd.DataFrame]) -> bytes:
     estrutura: dict[str, Any] = {
-        "gerado_em": datetime.now().isoformat(timespec="seconds"),
+        "gerado_em": agora_br().isoformat(timespec="seconds"),
         **{nome: json.loads(df.to_json(orient="records", date_format="iso")) for nome, df in tabelas.items()},
     }
     return json.dumps(estrutura, ensure_ascii=False, indent=2).encode("utf-8")
 
 
 def nome_arquivo_backup(prefixo: str, extensao: str) -> str:
-    return f"Backup_{prefixo}_{datetime.now().strftime('%Y-%m-%d_%H%M%S')}.{extensao}"
+    return f"Backup_{prefixo}_{agora_br().strftime('%Y-%m-%d_%H%M%S')}.{extensao}"

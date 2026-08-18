@@ -4,11 +4,10 @@ seguido, como especificado, pela etapa de Configuração dos Indicadores
 
 from __future__ import annotations
 
-from datetime import date
-
 import pandas as pd
 import streamlit as st
 
+from gat.horario import hoje_br
 from gat.pmo_business_rules import BIBLIOTECA_KPIS, KPI_ORDEM, KPI_PADRAO_HABILITADO
 from gat.pmo_database import atualizar_projeto, criar_projeto, definir_kpis_projeto, kpis_habilitados_projeto
 
@@ -76,7 +75,7 @@ def dialog_novo_projeto(usuario: str) -> None:
         col3.text_input("Gerente do projeto *", key="pmo_novo_gerente")
         col4.selectbox("Tipo do contrato", TIPOS_CONTRATO_PMO, key="pmo_novo_tipo")
         col5, col6 = st.columns(2)
-        col5.date_input("Data de início", value=date.today(), format="DD/MM/YYYY", key="pmo_novo_data_inicio")
+        col5.date_input("Data de início", value=hoje_br(), format="DD/MM/YYYY", key="pmo_novo_data_inicio")
         col6.date_input("Data prevista de término", value=None, format="DD/MM/YYYY", key="pmo_novo_data_termino")
         st.number_input("Valor contratual (opcional)", min_value=0.0, step=1000.0, format="%.2f", key="pmo_novo_valor")
         st.text_area("Observações", key="pmo_novo_obs")

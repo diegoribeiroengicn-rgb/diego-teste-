@@ -225,7 +225,8 @@ def dias_restantes_prioridade(row: pd.Series, modulo: str) -> int | None:
     módulos (Prestadores usa `dias_uteis_decorridos`, Cessionários já
     calcula o `saldo_dias_uteis` diretamente)."""
     if modulo == "prestadores":
-        sla = int(row.get("sla_dias") or SLA_PRESTADORES_DIAS_UTEIS)
+        sla_dias = row.get("sla_dias")
+        sla = int(sla_dias) if pd.notna(sla_dias) else SLA_PRESTADORES_DIAS_UTEIS
         decorridos = row.get("dias_uteis_decorridos")
         return int(sla - decorridos) if pd.notna(decorridos) else None
     saldo = row.get("saldo_dias_uteis")
@@ -717,9 +718,8 @@ def enriquecer_situacao_pep(df: pd.DataFrame, coluna_pep: str) -> pd.DataFrame:
     Data de Solicitação (data de entrada do projeto no GAT) até hoje,
     permanecendo dinâmica enquanto o campo PEP estiver vazio.
     """
-    from datetime import date
-
     from gat.calendario import _to_date
+    from gat.horario import hoje_br
 
     if df.empty:
         df["tem_pep"] = pd.Series(dtype=bool)
@@ -728,7 +728,7 @@ def enriquecer_situacao_pep(df: pd.DataFrame, coluna_pep: str) -> pd.DataFrame:
         return df
 
     df = df.copy()
-    hoje = date.today()
+    hoje = hoje_br()
 
     def _linha(linha):
         valor_pep = linha.get(coluna_pep)

@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date
-
 import streamlit as st
 
 from gat.config import MESES_PT
 from gat.database import listar_anos_disponiveis
+from gat.horario import hoje_br
 
 _TODOS = "Todos"
 
@@ -28,7 +27,7 @@ def seletor_competencia(key_prefix: str, rotulo: str = "Competência") -> tuple[
 
 
 def competencia_atual() -> tuple[int, int]:
-    hoje = date.today()
+    hoje = hoje_br()
     return hoje.month, hoje.year
 
 

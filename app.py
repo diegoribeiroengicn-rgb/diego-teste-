@@ -13,8 +13,6 @@ Ponto de entrada da aplicação Streamlit. Responsável por:
 
 from __future__ import annotations
 
-from datetime import datetime
-
 import streamlit as st
 
 from gat.auth import (
@@ -28,6 +26,7 @@ from gat.auth import (
 from gat.config import MODULOS_CONTROLADOS
 from gat.database import definir_tema_usuario, init_db, registrar_atividade
 from gat.export_excel import gerar_relatorio_excel
+from gat.horario import agora_br
 from gat.permissions import pode_area, pode_modulo
 from gat.styles import TEMA_CLARO, TEMA_ESCURO, cabecalho_institucional, injetar_css_global, logo_base64
 from views import (
@@ -248,7 +247,7 @@ with st.sidebar:
         st.download_button(
             "Exportar Relatório Excel",
             data=gerar_relatorio_excel(modulos_permitidos),
-            file_name=f"GAT_2026_Relatorio_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+            file_name=f"GAT_2026_Relatorio_{agora_br().strftime('%Y%m%d_%H%M')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             icon=":material/download:",
             type="primary",
@@ -265,5 +264,5 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 # Cabeçalho institucional + conteúdo da página selecionada
 # ---------------------------------------------------------------------------
-cabecalho_institucional(subtitulo=f"{usuario['nome_completo'] or usuario['username']} · {datetime.now().strftime('%d/%m/%Y')}")
+cabecalho_institucional(subtitulo=f"{usuario['nome_completo'] or usuario['username']} · {agora_br().strftime('%d/%m/%Y')}")
 pagina_atual.run()

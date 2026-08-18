@@ -11,13 +11,13 @@ carregamento de dashboards/gráficos.
 from __future__ import annotations
 
 import io
-from datetime import datetime
 
 import pandas as pd
 
 from gat.business_rules import classificacao_atraso, dias_restantes_prioridade, nivel_alerta_atraso
 from gat.config import COLUNAS_EXIBICAO_CESSIONARIOS, COLUNAS_EXIBICAO_PRESTADORES
 from gat.database import listar_cadastro_cessionarios, listar_obras_prestador
+from gat.horario import agora_br
 
 COLUNA_TIPO_PROJETO = "Tipo de Projeto"
 
@@ -145,7 +145,7 @@ def gerar_csv_bytes(df: pd.DataFrame) -> bytes:
 
 def nome_arquivo_exportacao(tipo: str, extensao: str, filtrado: bool, rotulo_periodo: str | None = None) -> str:
     """`tipo` já deve vir capitalizado (`Prestadores`/`Cessionarios`/`Consolidado`)."""
-    data_hoje = datetime.now().strftime("%Y-%m-%d")
+    data_hoje = agora_br().strftime("%Y-%m-%d")
     partes = [f"Projetos_{tipo}"]
     if filtrado:
         partes.append("Filtrado")

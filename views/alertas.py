@@ -5,8 +5,6 @@ crítica/baixa e atraso no reenvio (retorno externo fora do SLA)."""
 
 from __future__ import annotations
 
-from datetime import date
-
 import pandas as pd
 import streamlit as st
 
@@ -28,6 +26,7 @@ from gat.database import (
     reabrir_alerta_manual,
     retirar_do_radar,
 )
+from gat.horario import hoje_br
 from gat.permissions import exigir_area, pode_area, pode_modulo
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.formatos import formatar_data_br, formatar_datahora_br, formatar_datahoras_df
@@ -201,7 +200,7 @@ def _cartao_alerta_manual(usuario: dict, alerta: pd.Series, pode_gerenciar: bool
         with col_prio:
             st.caption(f"{_ICONE_PRIORIDADE.get(alerta.get('prioridade'), '')} Prioridade: **{_ou_traco(alerta.get('prioridade'))}**")
             if alerta.get("vencimento"):
-                dias = dias_uteis_entre(date.today(), alerta["vencimento"])
+                dias = dias_uteis_entre(hoje_br(), alerta["vencimento"])
                 chave = situacao_prazo(dias)
                 st.caption(f"{_ICONE_SITUACAO_PRAZO_MANUAL.get(chave, '')} Vence em {formatar_data_br(alerta['vencimento'])}")
 

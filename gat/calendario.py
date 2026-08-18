@@ -9,6 +9,8 @@ from datetime import date, datetime, timedelta
 
 import numpy as np
 
+from gat.horario import hoje_br
+
 # Lista oficial de feriados extraída da aba FERIADOS_2026 da planilha GAT,
 # incluindo feriados nacionais e pontos facultativos considerados pela
 # Tecnoplano no cálculo de dias úteis.
@@ -129,7 +131,7 @@ def dias_uteis_decorridos(data_solicitacao, data_analise=None, hold_dias: int = 
     inicio = _to_date(data_solicitacao)
     if inicio is None:
         return 0
-    fim = _to_date(data_analise) or date.today()
+    fim = _to_date(data_analise) or hoje_br()
     return max(dias_uteis_entre(inicio, fim) - (hold_dias or 0), 0)
 
 

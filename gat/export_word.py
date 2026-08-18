@@ -20,7 +20,6 @@ import logging
 import os
 import re
 import shutil
-from datetime import datetime
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -31,6 +30,7 @@ from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
 from gat.config import LOGO_PATH
+from gat.horario import agora_br
 
 _logger = logging.getLogger(__name__)
 
@@ -140,7 +140,7 @@ def cabecalho_institucional(
 
     p_geracao = doc.add_paragraph()
     p_geracao.add_run("Gerado em: ").bold = True
-    p_geracao.add_run(datetime.now().strftime("%d/%m/%Y às %H:%M"))
+    p_geracao.add_run(agora_br().strftime("%d/%m/%Y às %H:%M"))
     p_geracao.add_run("    ·    Responsável: ").bold = True
     p_geracao.add_run(usuario_responsavel or "—")
     for run in p_geracao.runs:

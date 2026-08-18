@@ -13,7 +13,6 @@ as próprias funções e tabelas do GAT, sempre com identificação de origem
 
 from __future__ import annotations
 
-from datetime import date, datetime
 from typing import Any
 
 import pandas as pd
@@ -33,6 +32,7 @@ from gat.database import (
     reabrir_alerta_manual,
     registrar_historico,
 )
+from gat.horario import agora_br, hoje_br
 from gat.pmo_business_rules import (
     KPI_ORDEM,
     KPI_PADRAO_HABILITADO,
@@ -64,7 +64,7 @@ def criar_projeto(dados: dict[str, Any], kpis_habilitados: list[str] | None, usu
     * gera automaticamente o alerta "Cronograma pendente de recebimento.",
       obrigatório para todo projeto novo enquanto não houver cronograma.
     """
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     campos = {c: dados.get(c) for c in COLUNAS_PROJETO}
     habilitados = set(kpis_habilitados or [k for k, padrao in KPI_PADRAO_HABILITADO.items() if padrao])
     with conectar() as conn:
@@ -86,7 +86,7 @@ def criar_projeto(dados: dict[str, Any], kpis_habilitados: list[str] | None, usu
 
 def atualizar_projeto(projeto_id: int, dados: dict[str, Any], usuario: str) -> None:
     campos = {c: dados.get(c) for c in COLUNAS_PROJETO}
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with conectar() as conn:
         antigo = conn.execute("SELECT * FROM pmo_projetos WHERE id = ?", (projeto_id,)).fetchone()
         antigo_dict = dict(antigo) if antigo else {}
@@ -116,7 +116,7 @@ def atualizar_status_calculado(
 def definir_status_projeto(projeto_id: int, status: str, usuario: str) -> None:
     with conectar() as conn:
         antigo = conn.execute("SELECT status FROM pmo_projetos WHERE id = ?", (projeto_id,)).fetchone()
-        agora = datetime.now().isoformat()
+        agora = agora_br().isoformat()
         conn.execute(
             "UPDATE pmo_projetos SET status = ?, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
             (status, agora, usuario, projeto_id),
@@ -166,7 +166,7 @@ def definir_kpis_projeto(projeto_id: int, chaves_habilitadas: set[str], usuario:
     projeto): apenas liga/desliga a flag `habilitado`.
     """
     atuais = listar_kpis_projeto(projeto_id)
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with conectar() as conn:
         for _, linha in atuais.iterrows():
             chave = linha["kpi_chave"]
@@ -208,7 +208,7 @@ def anexar_cronograma(
     as atividades com o caminho crítico calculado. Encerra automaticamente
     o alerta de cronograma pendente.
     """
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with conectar() as conn:
         conn.execute(
             "UPDATE pmo_cronograma_arquivos SET ativo = 0, removido_por = ?, removido_em = ? "
@@ -245,7 +245,7 @@ def remover_cronograma_ativo(projeto_id: int, usuario: str) -> None:
     """Remove (soft — preserva o arquivo e as atividades para histórico) o
     cronograma ativo do projeto e reativa automaticamente o alerta de
     cronograma pendente, reiniciando a contagem dos lembretes."""
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with conectar() as conn:
         arquivo = conn.execute(
             "SELECT id FROM pmo_cronograma_arquivos WHERE projeto_id = ? AND ativo = 1", (projeto_id,)
@@ -303,8 +303,8 @@ def _criar_alerta_cronograma_pendente(projeto_id: int, usuario: str) -> int:
         },
         usuario,
     )
-    agora = datetime.now().isoformat()
-    proximo = proximo_lembrete_cronograma(date.today()).isoformat()
+    agora = agora_br().isoformat()
+    proximo = proximo_lembrete_cronograma(hoje_br()).isoformat()
     with conectar() as conn:
         conn.execute(
             "INSERT INTO pmo_alertas_cronograma (projeto_id, alerta_manual_id, status, criado_em, proximo_lembrete_em) "
@@ -324,7 +324,7 @@ def _encerrar_alerta_cronograma(projeto_id: int, usuario: str) -> None:
     estado = obter_alerta_cronograma(projeto_id)
     if estado is None or estado["status"] != "ATIVO":
         return
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with conectar() as conn:
         conn.execute(
             "UPDATE pmo_alertas_cronograma SET status = 'ENCERRADO', encerrado_em = ?, anexado_por = ?, anexado_em = ? "
@@ -346,7 +346,7 @@ def _reativar_alerta_cronograma(projeto_id: int, usuario: str) -> None:
         return
     if estado["status"] == "ATIVO":
         return
-    proximo = proximo_lembrete_cronograma(date.today()).isoformat()
+    proximo = proximo_lembrete_cronograma(hoje_br()).isoformat()
     with conectar() as conn:
         conn.execute(
             "UPDATE pmo_alertas_cronograma SET status = 'ATIVO', qtd_lembretes = 0, ultimo_lembrete_em = NULL, "
@@ -372,15 +372,15 @@ def verificar_e_gerar_lembretes_cronograma(usuario_sistema: str = "sistema") -> 
     acontece de forma automática sempre que alguém abre uma tela do PMO.
     Retorna a quantidade de lembretes gerados nesta chamada.
     """
-    hoje = date.today().isoformat()
+    hoje = hoje_br().isoformat()
     with conectar() as conn:
         pendentes = conn.execute(
             "SELECT * FROM pmo_alertas_cronograma WHERE status = 'ATIVO' AND proximo_lembrete_em <= ?", (hoje,)
         ).fetchall()
     gerados = 0
     for linha in pendentes:
-        agora = datetime.now().isoformat()
-        proximo = proximo_lembrete_cronograma(date.today()).isoformat()
+        agora = agora_br().isoformat()
+        proximo = proximo_lembrete_cronograma(hoje_br()).isoformat()
         with conectar() as conn:
             conn.execute(
                 "INSERT INTO pmo_cronograma_lembretes (projeto_id, enviado_em, mensagem) VALUES (?, ?, ?)",
@@ -414,7 +414,7 @@ COLUNAS_MEDICAO = [
 
 
 def inserir_medicao(projeto_id: int, dados: dict[str, Any], usuario: str) -> int:
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     campos = {c: dados.get(c) for c in COLUNAS_MEDICAO}
     with conectar() as conn:
         cursor = conn.execute(
@@ -429,7 +429,7 @@ def inserir_medicao(projeto_id: int, dados: dict[str, Any], usuario: str) -> int
 
 def atualizar_medicao(medicao_id: int, dados: dict[str, Any], usuario: str) -> None:
     campos = {c: dados.get(c) for c in COLUNAS_MEDICAO}
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with conectar() as conn:
         antigo = conn.execute("SELECT * FROM pmo_medicoes WHERE id = ?", (medicao_id,)).fetchone()
         set_clause = ", ".join(f"{c} = ?" for c in campos)
@@ -474,7 +474,7 @@ COLUNAS_ENTREGAVEL = ["nome", "previsto", "entregue", "data_prevista", "data_ent
 
 
 def inserir_entregavel(projeto_id: int, dados: dict[str, Any], usuario: str) -> int:
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     campos = {c: dados.get(c) for c in COLUNAS_ENTREGAVEL}
     with conectar() as conn:
         cursor = conn.execute(
@@ -489,7 +489,7 @@ def inserir_entregavel(projeto_id: int, dados: dict[str, Any], usuario: str) -> 
 
 def atualizar_entregavel(entregavel_id: int, dados: dict[str, Any], usuario: str) -> None:
     campos = {c: dados.get(c) for c in COLUNAS_ENTREGAVEL}
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with conectar() as conn:
         antigo = conn.execute("SELECT * FROM pmo_entregaveis WHERE id = ?", (entregavel_id,)).fetchone()
         set_clause = ", ".join(f"{c} = ?" for c in campos)
@@ -513,7 +513,7 @@ COLUNAS_RISCO = ["descricao", "probabilidade", "impacto", "status", "responsavel
 
 
 def inserir_risco(projeto_id: int, dados: dict[str, Any], usuario: str) -> int:
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     campos = {c: dados.get(c) for c in COLUNAS_RISCO}
     with conectar() as conn:
         cursor = conn.execute(
@@ -528,7 +528,7 @@ def inserir_risco(projeto_id: int, dados: dict[str, Any], usuario: str) -> int:
 
 def atualizar_risco(risco_id: int, dados: dict[str, Any], usuario: str) -> None:
     campos = {c: dados.get(c) for c in COLUNAS_RISCO}
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with conectar() as conn:
         antigo = conn.execute("SELECT * FROM pmo_riscos WHERE id = ?", (risco_id,)).fetchone()
         set_clause = ", ".join(f"{c} = ?" for c in campos)
@@ -552,7 +552,7 @@ COLUNAS_COMUNICACAO = ["data", "tipo", "descricao", "responsavel"]
 
 
 def inserir_comunicacao(projeto_id: int, dados: dict[str, Any], usuario: str) -> int:
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     campos = {c: dados.get(c) for c in COLUNAS_COMUNICACAO}
     with conectar() as conn:
         cursor = conn.execute(

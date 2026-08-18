@@ -13,7 +13,7 @@ from __future__ import annotations
 import shutil
 import sqlite3
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
@@ -34,6 +34,7 @@ from gat.config import (
     PERFIS_PADRAO,
     SEED_DB_PATH,
 )
+from gat.horario import FUSO_BRASILIA, agora_br, hoje_br
 
 # ---------------------------------------------------------------------------
 # Conexão
@@ -191,7 +192,7 @@ def criar_backup() -> Path | None:
     if not DB_PATH.exists():
         return None
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    timestamp = agora_br().strftime("%Y-%m-%d_%H%M%S")
     destino = BACKUP_DIR / f"backup_gat_2026_{timestamp}_v{APP_VERSION}.db"
     try:
         shutil.copy2(DB_PATH, destino)
@@ -214,7 +215,7 @@ def listar_backups() -> list[dict[str, Any]]:
     """Lista os backups existentes (mais recente primeiro) — usado em Administração."""
     backups = sorted(BACKUP_DIR.glob("backup_gat_2026_*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
     return [
-        {"arquivo": p.name, "tamanho_bytes": p.stat().st_size, "criado_em": datetime.fromtimestamp(p.stat().st_mtime).isoformat(timespec="seconds")}
+        {"arquivo": p.name, "tamanho_bytes": p.stat().st_size, "criado_em": datetime.fromtimestamp(p.stat().st_mtime, FUSO_BRASILIA).replace(tzinfo=None).isoformat(timespec="seconds")}
         for p in backups
     ]
 
@@ -236,7 +237,7 @@ def _backup_diario_e_por_atualizacao() -> None:
         return
     versao_anterior = obter_configuracao("app_versao_ultimo_backup", "")
     ultimo_backup_dia = obter_configuracao("data_ultimo_backup_diario", "")
-    hoje = date.today().isoformat()
+    hoje = hoje_br().isoformat()
     if versao_anterior == APP_VERSION and ultimo_backup_dia == hoje:
         return
     if criar_backup() is not None:
@@ -430,7 +431,7 @@ def _migracao_0004_cadastro_mestre(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_prestadores_obra_id ON prestadores(obra_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cessionarios_cadastro_id ON cessionarios(cessionario_cadastro_id)")
 
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
 
     conn.execute(
         """
@@ -545,7 +546,7 @@ def _migracao_0008_avaliacao_obrigatoria_isentos(conn: sqlite3.Connection) -> No
         """
     )
 
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     for modulo, tabela, tipo_entidade, coluna_nome in (
         ("prestadores", "prestadores", "PRESTADOR", "prestador"),
         ("cessionarios", "cessionarios", "CESSIONARIO", "cessionario"),
@@ -910,7 +911,7 @@ def _migracao_0017_manual_pmo(conn: sqlite3.Connection) -> None:
     """
     from gat.pmo_manual_conteudo import CAPITULOS_PMO
 
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     maior_ordem = conn.execute("SELECT COALESCE(MAX(ordem), 0) FROM manual_capitulos").fetchone()[0]
     for indice, (titulo, conteudo) in enumerate(CAPITULOS_PMO, start=1):
         existe = conn.execute("SELECT id FROM manual_capitulos WHERE titulo = ?", (titulo,)).fetchone()
@@ -985,7 +986,7 @@ def _migracao_0013_manual_sistema(conn: sqlite3.Connection) -> None:
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_manual_anexos_capitulo ON manual_anexos(capitulo_id)")
 
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     for ordem, (titulo, conteudo) in enumerate(CAPITULOS_INICIAIS, start=1):
         conn.execute(
             "INSERT INTO manual_capitulos (ordem, titulo, conteudo, perfis_visiveis, criado_em) VALUES (?, ?, ?, NULL, ?)",
@@ -1115,7 +1116,7 @@ def _migracao_0020_manual_arquivo(conn: sqlite3.Connection) -> None:
     """
     from gat.arquivo_manual_conteudo import CAPITULOS_ARQUIVO
 
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     maior_ordem = conn.execute("SELECT COALESCE(MAX(ordem), 0) FROM manual_capitulos").fetchone()[0]
     for indice, (titulo, conteudo) in enumerate(CAPITULOS_ARQUIVO, start=1):
         existe = conn.execute("SELECT id FROM manual_capitulos WHERE titulo = ?", (titulo,)).fetchone()
@@ -1145,7 +1146,7 @@ def _migracao_0022_manual_tema(conn: sqlite3.Connection) -> None:
     """
     from gat.tema_manual_conteudo import CAPITULOS_TEMA
 
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     maior_ordem = conn.execute("SELECT COALESCE(MAX(ordem), 0) FROM manual_capitulos").fetchone()[0]
     for indice, (titulo, conteudo) in enumerate(CAPITULOS_TEMA, start=1):
         existe = conn.execute("SELECT id FROM manual_capitulos WHERE titulo = ?", (titulo,)).fetchone()
@@ -1202,7 +1203,7 @@ def _migracao_0024_manual_resumo_conclusao(conn: sqlite3.Connection) -> None:
     anterior."""
     from gat.resumo_conclusao_manual_conteudo import CAPITULOS_RESUMO_CONCLUSAO
 
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     maior_ordem = conn.execute("SELECT COALESCE(MAX(ordem), 0) FROM manual_capitulos").fetchone()[0]
     for indice, (titulo, conteudo) in enumerate(CAPITULOS_RESUMO_CONCLUSAO, start=1):
         existe = conn.execute("SELECT id FROM manual_capitulos WHERE titulo = ?", (titulo,)).fetchone()
@@ -1273,7 +1274,7 @@ def _aplicar_migracoes() -> None:
             )
 
     for versao, descricao, migrar in pendentes:
-        agora = datetime.now().isoformat(timespec="seconds")
+        agora = agora_br().isoformat(timespec="seconds")
         try:
             with _conectar() as conn:
                 migrar(conn)
@@ -1552,7 +1553,7 @@ def init_db() -> None:
             cursor = conn.execute(
                 "INSERT INTO usuarios (username, senha_hash, nome_completo, perfil, ativo, deve_trocar_senha, criado_em) "
                 "VALUES (?, ?, ?, ?, 1, 0, ?)",
-                ("admin", senha_hash, "Administrador GAT", PERFIL_ADMIN, datetime.now().isoformat()),
+                ("admin", senha_hash, "Administrador GAT", PERFIL_ADMIN, agora_br().isoformat()),
             )
             _semear_permissoes_perfil(conn, cursor.lastrowid, PERFIL_ADMIN)
 
@@ -1616,7 +1617,7 @@ def criar_usuario(username: str, senha: str, nome_completo: str, perfil: str, ex
     o login a um nome de RESPONSAVEIS — é o que permite ao próprio usuário
     ver seus KPIs de prazo sem enxergar os de colegas (item 16.1)."""
     senha_hash = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with _conectar() as conn:
         cursor = conn.execute(
             "INSERT INTO usuarios (username, senha_hash, nome_completo, perfil, ativo, deve_trocar_senha, criado_em, analista_vinculado) "
@@ -1707,7 +1708,7 @@ def concluir_troca_senha_obrigatoria(username: str, nova_senha: str) -> None:
 
 def registrar_ultimo_acesso(username: str) -> None:
     with _conectar() as conn:
-        conn.execute("UPDATE usuarios SET ultimo_acesso = ? WHERE username = ?", (datetime.now().isoformat(), username))
+        conn.execute("UPDATE usuarios SET ultimo_acesso = ? WHERE username = ?", (agora_br().isoformat(), username))
 
 
 def atualizar_usuario(username: str, nome_completo: str, perfil: str, executor: str, analista_vinculado: str | None = None) -> None:
@@ -1816,7 +1817,7 @@ def _registrar_evento_seguranca(conn: sqlite3.Connection, evento: str, usuario_a
     conn.execute(
         "INSERT INTO historico_edicoes (tabela, registro_id, campo, valor_anterior, valor_novo, usuario, data_hora) "
         "VALUES ('seguranca', 0, ?, NULL, ?, ?, ?)",
-        (evento, f"[{usuario_alvo}] {detalhes}", executor, datetime.now().isoformat()),
+        (evento, f"[{usuario_alvo}] {detalhes}", executor, agora_br().isoformat()),
     )
 
 
@@ -1867,7 +1868,7 @@ def relatorio_validacao_importacao() -> dict[str, dict[str, Any]]:
 
 def _registrar_historico(conn: sqlite3.Connection, tabela: str, registro_id: int, antigo: dict, novo: dict, usuario: str) -> None:
     """Compara os dicionários antigo/novo e grava uma linha de histórico por campo alterado."""
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     for campo, valor_novo in novo.items():
         valor_antigo = antigo.get(campo) if antigo else None
         if str(valor_antigo) != str(valor_novo):
@@ -1900,7 +1901,7 @@ def listar_historico(tabela: str | None = None, registro_id: int | None = None) 
 
 
 def registrar_repactuacao_prazo(tabela: str, registro_id: int, data_anterior: str | None, data_nova: str | None, motivo: str, usuario: str) -> None:
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with _conectar() as conn:
         conn.execute(
             "INSERT INTO repactuacoes_prazo (tabela, registro_id, data_anterior, data_nova, motivo, usuario, data_hora) "
@@ -1923,7 +1924,7 @@ def listar_repactuacoes_prazo(tabela: str, registro_id: int) -> pd.DataFrame:
 
 
 def inserir_prestador(dados: dict[str, Any], usuario: str) -> int:
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     campos = {c: dados.get(c) for c in COLUNAS_PRESTADORES}
     with _conectar() as conn:
         if not campos.get("item"):
@@ -1944,7 +1945,7 @@ def atualizar_prestador(registro_id: int, dados: dict[str, Any], usuario: str) -
         antigo = conn.execute("SELECT * FROM prestadores WHERE id = ?", (registro_id,)).fetchone()
         antigo_dict = dict(antigo) if antigo else {}
         campos = {c: dados.get(c) for c in COLUNAS_PRESTADORES}
-        agora = datetime.now().isoformat()
+        agora = agora_br().isoformat()
         set_clause = ", ".join(f"{c} = ?" for c in campos)
         conn.execute(
             f"UPDATE prestadores SET {set_clause}, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
@@ -1977,7 +1978,7 @@ def obter_prestador(registro_id: int) -> dict[str, Any] | None:
 
 
 def inserir_cessionario(dados: dict[str, Any], usuario: str) -> int:
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     campos = {c: dados.get(c) for c in COLUNAS_CESSIONARIOS}
     with _conectar() as conn:
         if not campos.get("item"):
@@ -1998,7 +1999,7 @@ def atualizar_cessionario(registro_id: int, dados: dict[str, Any], usuario: str)
         antigo = conn.execute("SELECT * FROM cessionarios WHERE id = ?", (registro_id,)).fetchone()
         antigo_dict = dict(antigo) if antigo else {}
         campos = {c: dados.get(c) for c in COLUNAS_CESSIONARIOS}
-        agora = datetime.now().isoformat()
+        agora = agora_br().isoformat()
         set_clause = ", ".join(f"{c} = ?" for c in campos)
         conn.execute(
             f"UPDATE cessionarios SET {set_clause}, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
@@ -2041,7 +2042,7 @@ def marcar_popup_resumo_disparado(tabela: str, registro_id: int) -> None:
     este registro — impede que ele volte a aparecer automaticamente em
     salvamentos futuros que não alterem status/data de conclusão."""
     _validar_tabela_resumo(tabela)
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with _conectar() as conn:
         conn.execute(
             f"UPDATE {tabela} SET resumo_popup_disparado_em = ? WHERE id = ? AND resumo_popup_disparado_em IS NULL",
@@ -2057,7 +2058,7 @@ def salvar_selecao_resumo(tabela: str, registro_id: int, mfiles: bool, drive: bo
     seleção (item 14 da solicitação).
     """
     _validar_tabela_resumo(tabela)
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with _conectar() as conn:
         atual = conn.execute(
             f"SELECT resumo_mfiles, resumo_drive, resumo_email, resumo_qtd_geracoes "
@@ -2092,7 +2093,7 @@ def registrar_download_resumo(tabela: str, registro_id: int, usuario: str) -> No
     """Item 13: soma mais uma geração/download ao contador sem alterar a
     seleção de canais vigente (botão "Baixar novamente")."""
     _validar_tabela_resumo(tabela)
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with _conectar() as conn:
         atual = conn.execute(f"SELECT resumo_mfiles, resumo_drive, resumo_email FROM {tabela} WHERE id = ?", (registro_id,)).fetchone()
         conn.execute(
@@ -2164,7 +2165,7 @@ def inserir_cadastro_prestador(dados: dict[str, Any], usuario: str) -> int:
         campos["codigo"] = codigo
         campos["status"] = campos.get("status") or "ATIVO"
         campos["possui_pep"] = campos.get("possui_pep") or "NAO"
-        agora = datetime.now().isoformat()
+        agora = agora_br().isoformat()
         cursor = conn.execute(
             f"INSERT INTO cadastro_prestadores ({', '.join(campos.keys())}, criado_em, criado_por, atualizado_em, atualizado_por) "
             f"VALUES ({', '.join(['?'] * len(campos))}, ?, ?, ?, ?)",
@@ -2188,7 +2189,7 @@ def atualizar_cadastro_prestador(registro_id: int, dados: dict[str, Any], usuari
         campos["codigo"] = codigo
         campos["status"] = campos.get("status") or "ATIVO"
         campos["possui_pep"] = campos.get("possui_pep") or "NAO"
-        agora = datetime.now().isoformat()
+        agora = agora_br().isoformat()
         set_clause = ", ".join(f"{c} = ?" for c in campos)
         conn.execute(
             f"UPDATE cadastro_prestadores SET {set_clause}, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
@@ -2220,7 +2221,7 @@ def definir_status_cadastro_prestador(registro_id: int, status: str, usuario: st
     with _conectar() as conn:
         antigo = conn.execute("SELECT status FROM cadastro_prestadores WHERE id = ?", (registro_id,)).fetchone()
         antigo_dict = dict(antigo) if antigo else {}
-        agora = datetime.now().isoformat()
+        agora = agora_br().isoformat()
         conn.execute(
             "UPDATE cadastro_prestadores SET status = ?, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
             (status, agora, usuario, registro_id),
@@ -2242,7 +2243,7 @@ def inserir_obra_prestador(dados: dict[str, Any], usuario: str) -> int:
         campos = {c: dados.get(c) for c in COLUNAS_OBRAS_PRESTADOR}
         campos["e_canteiro"] = 1 if campos.get("e_canteiro") else 0
         campos["status"] = campos.get("status") or "ATIVA"
-        agora = datetime.now().isoformat()
+        agora = agora_br().isoformat()
         cursor = conn.execute(
             f"INSERT INTO obras_prestador ({', '.join(campos.keys())}, criado_em, criado_por, atualizado_em, atualizado_por) "
             f"VALUES ({', '.join(['?'] * len(campos))}, ?, ?, ?, ?)",
@@ -2260,7 +2261,7 @@ def atualizar_obra_prestador(registro_id: int, dados: dict[str, Any], usuario: s
         campos = {c: dados.get(c) for c in COLUNAS_OBRAS_PRESTADOR}
         campos["e_canteiro"] = 1 if campos.get("e_canteiro") else 0
         campos["status"] = campos.get("status") or "ATIVA"
-        agora = datetime.now().isoformat()
+        agora = agora_br().isoformat()
         set_clause = ", ".join(f"{c} = ?" for c in campos)
         conn.execute(
             f"UPDATE obras_prestador SET {set_clause}, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
@@ -2306,7 +2307,7 @@ def inserir_cadastro_cessionario(dados: dict[str, Any], usuario: str) -> int:
         campos = {c: dados.get(c) for c in COLUNAS_CADASTRO_CESSIONARIOS}
         campos["codigo"] = codigo
         campos["status"] = campos.get("status") or "ATIVO"
-        agora = datetime.now().isoformat()
+        agora = agora_br().isoformat()
         cursor = conn.execute(
             f"INSERT INTO cadastro_cessionarios ({', '.join(campos.keys())}, criado_em, criado_por, atualizado_em, atualizado_por) "
             f"VALUES ({', '.join(['?'] * len(campos))}, ?, ?, ?, ?)",
@@ -2329,7 +2330,7 @@ def atualizar_cadastro_cessionario(registro_id: int, dados: dict[str, Any], usua
         campos = {c: dados.get(c) for c in COLUNAS_CADASTRO_CESSIONARIOS}
         campos["codigo"] = codigo
         campos["status"] = campos.get("status") or "ATIVO"
-        agora = datetime.now().isoformat()
+        agora = agora_br().isoformat()
         set_clause = ", ".join(f"{c} = ?" for c in campos)
         conn.execute(
             f"UPDATE cadastro_cessionarios SET {set_clause}, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
@@ -2361,7 +2362,7 @@ def definir_status_cadastro_cessionario(registro_id: int, status: str, usuario: 
     with _conectar() as conn:
         antigo = conn.execute("SELECT status FROM cadastro_cessionarios WHERE id = ?", (registro_id,)).fetchone()
         antigo_dict = dict(antigo) if antigo else {}
-        agora = datetime.now().isoformat()
+        agora = agora_br().isoformat()
         conn.execute(
             "UPDATE cadastro_cessionarios SET status = ?, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
             (status, agora, usuario, registro_id),
@@ -2375,7 +2376,7 @@ def definir_status_cadastro_cessionario(registro_id: int, status: str, usuario: 
 
 
 def inserir_avaliacao(dados: dict[str, Any], usuario: str) -> int:
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     campos = {c: dados.get(c) for c in COLUNAS_AVALIACOES}
     with _conectar() as conn:
         cursor = conn.execute(
@@ -2457,7 +2458,7 @@ def _nome_projeto(conn: sqlite3.Connection, modulo: str, projeto_id: int) -> str
 
 
 def inserir_reuniao(dados: dict[str, Any], projetos: list[tuple[str, int]], participantes: list[str], usuario: str) -> int:
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     campos = {c: dados.get(c) for c in COLUNAS_REUNIAO}
     campos["origem"] = dados.get("origem") or _ORIGEM_PADRAO
     with _conectar() as conn:
@@ -2488,7 +2489,7 @@ def atualizar_reuniao(reuniao_id: int, dados: dict[str, Any], projetos: list[tup
         antigo_dict = dict(antigo) if antigo else {}
         campos = {c: dados.get(c) for c in COLUNAS_REUNIAO}
         campos["origem"] = dados.get("origem") or (antigo_dict.get("origem") or _ORIGEM_PADRAO)
-        agora = datetime.now().isoformat()
+        agora = agora_br().isoformat()
         set_clause = ", ".join(f"{c} = ?" for c in campos)
         conn.execute(
             f"UPDATE reunioes SET {set_clause}, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
@@ -2559,7 +2560,7 @@ COLUNAS_PLANO_ACAO = ["reuniao_id", "descricao", "responsavel", "prazo", "status
 
 
 def inserir_plano_acao(dados: dict[str, Any], usuario: str) -> int:
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     campos = {c: dados.get(c) for c in COLUNAS_PLANO_ACAO}
     campos["origem"] = dados.get("origem") or _ORIGEM_PADRAO
     with _conectar() as conn:
@@ -2582,7 +2583,7 @@ def atualizar_plano_acao(plano_id: int, dados: dict[str, Any], usuario: str) -> 
         set_clause = ", ".join(f"{c} = ?" for c in campos)
         conclusao = {}
         if campos.get("status") == "CONCLUÍDO" and antigo_dict.get("status") != "CONCLUÍDO":
-            conclusao = {"concluido_em": datetime.now().isoformat(), "concluido_por": usuario}
+            conclusao = {"concluido_em": agora_br().isoformat(), "concluido_por": usuario}
             set_clause += ", concluido_em = ?, concluido_por = ?"
         conn.execute(
             f"UPDATE planos_acao SET {set_clause} WHERE id = ?",
@@ -2624,7 +2625,7 @@ def salvar_observacao_mensal(competencia: str, texto: str, usuario: str) -> None
             "INSERT INTO observacoes_mensais (competencia, texto, atualizado_em, atualizado_por) VALUES (?, ?, ?, ?) "
             "ON CONFLICT(competencia) DO UPDATE SET texto = excluded.texto, atualizado_em = excluded.atualizado_em, "
             "atualizado_por = excluded.atualizado_por",
-            (competencia, texto, datetime.now().isoformat(), usuario),
+            (competencia, texto, agora_br().isoformat(), usuario),
         )
 
 
@@ -2656,7 +2657,7 @@ COLUNAS_AVALIACAO_CHECKLIST = [
 
 
 def inserir_avaliacao_checklist(dados: dict[str, Any], usuario: str) -> int:
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with _conectar() as conn:
         cursor = conn.execute(
             "INSERT INTO avaliacoes_checklist ("
@@ -2752,7 +2753,7 @@ COLUNAS_AVALIACAO_ANALISTA = [
 
 
 def inserir_avaliacao_analista(dados: dict[str, Any], usuario: str) -> int:
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with _conectar() as conn:
         cursor = conn.execute(
             "INSERT INTO avaliacoes_analistas ("
@@ -2831,7 +2832,7 @@ def fechar_avaliacao_analista(dados: dict[str, Any], usuario: str) -> int:
     fechada (`UNIQUE(analista, mes, ano)`); nesse caso, use
     `recalcular_fechamento_avaliacao_analista`, restrito ao Administrador.
     """
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with _conectar() as conn:
         campos = {c: dados.get(c) for c in COLUNAS_FECHAMENTO_AVALIACAO_ANALISTA}
         cursor = conn.execute(
@@ -2866,7 +2867,7 @@ def recalcular_fechamento_avaliacao_analista(analista: str, mes: int, ano: int, 
         conn.execute(
             f"UPDATE fechamentos_avaliacao_analista SET {set_clause}, data_fechamento = ?, usuario_fechamento = ? "
             "WHERE analista = ? AND mes = ? AND ano = ?",
-            (*campos.values(), datetime.now().isoformat(), usuario_admin, analista, mes, ano),
+            (*campos.values(), agora_br().isoformat(), usuario_admin, analista, mes, ano),
         )
         _registrar_evento_seguranca(
             conn, "RECALCULO_AVALIACAO_ANALISTA", analista, usuario_admin,
@@ -2892,7 +2893,7 @@ def status_radar(modulo: str, projeto_id: int, tipo_alerta: str) -> str:
 
 
 def _upsert_alerta(modulo: str, projeto_id: int, tipo_alerta: str, campos: dict[str, Any], usuario: str, status_anterior: str | None = None) -> None:
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     campos = {**campos, "atualizado_em": agora, "atualizado_por": usuario}
     colunas = list(campos.keys())
     with _conectar() as conn:
@@ -2927,7 +2928,7 @@ def marcar_tratado_alerta(modulo: str, projeto_id: int, tipo_alerta: str, provid
         modulo, projeto_id, tipo_alerta,
         {
             "status": "TRATADO", "providencia": providencia, "responsavel_tratamento": responsavel,
-            "data_tratamento": datetime.now().isoformat(), "observacao": observacao,
+            "data_tratamento": agora_br().isoformat(), "observacao": observacao,
         },
         usuario, status_anterior,
     )
@@ -2963,7 +2964,7 @@ _CAMPOS_ALERTA_MANUAL = [
 
 
 def criar_alerta_manual(dados: dict[str, Any], usuario: str) -> int:
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     campos = {chave: dados.get(chave) for chave in _CAMPOS_ALERTA_MANUAL}
     with _conectar() as conn:
         cursor = conn.execute(
@@ -2986,7 +2987,7 @@ def atualizar_alerta_manual(alerta_id: int, dados: dict[str, Any], usuario: str)
     anterior = obter_alerta_manual(alerta_id)
     if anterior is None:
         return
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     campos = {chave: dados.get(chave) for chave in _CAMPOS_ALERTA_MANUAL}
     with _conectar() as conn:
         conn.execute(
@@ -2998,7 +2999,7 @@ def atualizar_alerta_manual(alerta_id: int, dados: dict[str, Any], usuario: str)
 
 
 def encerrar_alerta_manual(alerta_id: int, motivo: str, usuario: str) -> None:
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with _conectar() as conn:
         conn.execute(
             "UPDATE alertas_manuais SET status = 'ENCERRADO', motivo_encerramento = ?, "
@@ -3062,7 +3063,7 @@ def obter_manual_capitulo(capitulo_id: int) -> dict[str, Any] | None:
 
 
 def criar_manual_capitulo(titulo: str, conteudo: str, perfis_visiveis: str | None, usuario: str) -> int:
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with _conectar() as conn:
         maior_ordem = conn.execute("SELECT COALESCE(MAX(ordem), 0) AS m FROM manual_capitulos").fetchone()["m"]
         cursor = conn.execute(
@@ -3077,7 +3078,7 @@ def criar_manual_capitulo(titulo: str, conteudo: str, perfis_visiveis: str | Non
 
 def atualizar_manual_capitulo(capitulo_id: int, titulo: str, conteudo: str, perfis_visiveis: str | None, usuario: str) -> None:
     anterior = obter_manual_capitulo(capitulo_id)
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with _conectar() as conn:
         conn.execute(
             "UPDATE manual_capitulos SET titulo = ?, conteudo = ?, perfis_visiveis = ?, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
@@ -3094,7 +3095,7 @@ def atualizar_manual_capitulo(capitulo_id: int, titulo: str, conteudo: str, perf
 def reordenar_manual_capitulos(ordem_ids: list[int], usuario: str) -> None:
     """`ordem_ids` já na nova ordem desejada — a posição na lista define a
     nova `ordem` (1, 2, 3...)."""
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with _conectar() as conn:
         for nova_ordem, capitulo_id in enumerate(ordem_ids, start=1):
             conn.execute(
@@ -3128,7 +3129,7 @@ def publicar_nova_versao_manual(notas: str, usuario: str) -> int:
     capítulos já é o vigente no momento da publicação (edições de capítulo
     não exigem uma nova versão para ficar visíveis; a versão serve para
     marcar marcos de publicação e disparar a confirmação de leitura)."""
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with _conectar() as conn:
         atual = conn.execute("SELECT MAX(numero_versao) AS m FROM manual_versoes").fetchone()["m"]
         nova_versao = int(atual or 0) + 1
@@ -3150,7 +3151,7 @@ def usuario_confirmou_leitura_manual(usuario: str, versao: int) -> bool:
 
 
 def confirmar_leitura_manual(usuario: str, versao: int) -> None:
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with _conectar() as conn:
         conn.execute(
             "INSERT OR IGNORE INTO manual_confirmacoes_leitura (usuario, versao, confirmado_em) VALUES (?, ?, ?)",
@@ -3170,7 +3171,7 @@ def listar_confirmacoes_leitura_manual(versao: int | None = None) -> pd.DataFram
 
 
 def adicionar_anexo_manual(capitulo_id: int, tipo: str, nome_arquivo: str, conteudo: bytes, usuario: str) -> int:
-    agora = datetime.now().isoformat()
+    agora = agora_br().isoformat()
     with _conectar() as conn:
         cursor = conn.execute(
             "INSERT INTO manual_anexos (capitulo_id, tipo, nome_arquivo, conteudo, criado_em, criado_por) VALUES (?, ?, ?, ?, ?, ?)",
@@ -3218,7 +3219,7 @@ def registrar_atividade(usuario: str, perfil: str | None, tipo_evento: str, modu
     with _conectar() as conn:
         conn.execute(
             "INSERT INTO atividades_usuario (usuario, perfil, tipo_evento, modulo, detalhe, data_hora) VALUES (?, ?, ?, ?, ?, ?)",
-            (usuario, perfil, tipo_evento, modulo, detalhe, datetime.now().isoformat()),
+            (usuario, perfil, tipo_evento, modulo, detalhe, agora_br().isoformat()),
         )
 
 

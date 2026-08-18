@@ -35,6 +35,7 @@ from gat.config import (
     STATUS_ANALISE_OPCOES,
     TIPO_CESSIONARIO_OPCOES,
 )
+from gat.horario import agora_br, hoje_br
 from gat.database import (
     atualizar_avaliacao,
     atualizar_cessionario,
@@ -218,7 +219,7 @@ def _calcular_campos_sla_persistidos(
         or int(registro.get("sla_dias") or -1) != int(sla_efetivo)
     )
     if mudou and prioritaria:
-        sla_alterado_por, sla_alterado_em = usuario, datetime.now().isoformat()
+        sla_alterado_por, sla_alterado_em = usuario, agora_br().isoformat()
     else:
         sla_alterado_por = registro.get("sla_alterado_por") if editando else None
         sla_alterado_em = registro.get("sla_alterado_em") if editando else None
@@ -581,7 +582,7 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
     st.markdown("##### Datas e prazos")
     col3, col4, col5 = st.columns(3)
     with col3:
-        data_solicitacao = st.date_input("Data de Solicitação *", value=_parse_data(registro.get("data_solicitacao")) if registro else date.today(), format="DD/MM/YYYY", key=f"pr_dsol_{sufixo}")
+        data_solicitacao = st.date_input("Data de Solicitação *", value=_parse_data(registro.get("data_solicitacao")) if registro else hoje_br(), format="DD/MM/YYYY", key=f"pr_dsol_{sufixo}")
     sugestao_limite_padrao = calcular_data_limite(data_solicitacao, sla_padrao)
     sugestao_limite = calcular_data_limite(data_solicitacao, sla_efetivo)
     chave_dlim = f"pr_dlim_{sufixo}"
@@ -877,7 +878,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
     st.markdown("##### Datas e prazos")
     col3, col4, col5 = st.columns(3)
     with col3:
-        data_solicitacao = st.date_input("Data de Solicitação *", value=_parse_data(registro.get("data_solicitacao")) if registro else date.today(), format="DD/MM/YYYY", key=f"ce_dsol_{sufixo}")
+        data_solicitacao = st.date_input("Data de Solicitação *", value=_parse_data(registro.get("data_solicitacao")) if registro else hoje_br(), format="DD/MM/YYYY", key=f"ce_dsol_{sufixo}")
     sugestao_limite_padrao = calcular_data_limite(data_solicitacao, sla_padrao)
     sugestao_limite = calcular_data_limite(data_solicitacao, sla_efetivo)
     chave_dlim = f"ce_dlim_{sufixo}"
@@ -1065,7 +1066,7 @@ def dialog_avaliacao(usuario: str, registro: dict[str, Any] | None = None) -> No
         nome_projeto = st.text_input("Nome do Projeto", value=registro.get("nome_projeto", "") if registro else "", key=f"av_projeto_{sufixo}")
         at_referencia = st.text_input("AT de Referência", value=registro.get("at_referencia", "") if registro else "", key=f"av_at_{sufixo}")
     with col2:
-        data_avaliacao = st.date_input("Data da Avaliação *", value=_parse_data(registro.get("data_avaliacao")) if registro else date.today(), format="DD/MM/YYYY", key=f"av_data_{sufixo}")
+        data_avaliacao = st.date_input("Data da Avaliação *", value=_parse_data(registro.get("data_avaliacao")) if registro else hoje_br(), format="DD/MM/YYYY", key=f"av_data_{sufixo}")
         nota = st.slider("Nota (1-15)", min_value=1, max_value=15, value=int(registro.get("nota", 8)) if registro else 8, key=f"av_nota_{sufixo}")
         analista_responsavel = st.selectbox("Analista Responsável", RESPONSAVEIS, index=_idx(RESPONSAVEIS, registro.get("analista_responsavel") if registro else None), key=f"av_analista_{sufixo}")
 

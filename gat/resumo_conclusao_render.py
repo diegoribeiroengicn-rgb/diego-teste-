@@ -12,12 +12,12 @@ ambiente de implantação.
 from __future__ import annotations
 
 import io
-from datetime import datetime
 from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
 from gat.config import BASE_DIR, CORES, CORES_STATUS_ANALISE, LOGO_PATH
+from gat.horario import agora_br
 
 _FONTES_DIR = BASE_DIR / "assets" / "fonts"
 _FONTE_REGULAR = _FONTES_DIR / "DejaVuSans.ttf"
@@ -152,7 +152,7 @@ def gerar_card_resumo(dados: dict[str, Any]) -> Image.Image:
 
     rodape_y = int(altura_total) - _MARGEM - 24
     draw.line([(x0, rodape_y - 16), (_LARGURA - _MARGEM, rodape_y - 16)], fill=_COR_BORDA, width=2)
-    texto_rodape = f"Gerado automaticamente pelo GAT 2026 em {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+    texto_rodape = f"Gerado automaticamente pelo GAT 2026 em {agora_br().strftime('%d/%m/%Y %H:%M')}"
     draw.text((x0, rodape_y), texto_rodape, font=fonte_rodape, fill=_COR_TEXTO_FRACO)
 
     return imagem

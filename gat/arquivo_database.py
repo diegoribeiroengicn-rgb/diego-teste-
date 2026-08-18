@@ -12,8 +12,6 @@ o valor anterior de cada coluna.
 
 from __future__ import annotations
 
-from datetime import datetime
-
 import pandas as pd
 
 from gat.arquivo_business_rules import (
@@ -24,6 +22,7 @@ from gat.arquivo_business_rules import (
     TIPO_RESTAURACAO,
 )
 from gat.database import conectar
+from gat.horario import agora_br
 
 _COLUNAS_DESCRICAO: dict[str, list[str]] = {
     "pmo_projetos": ["nome", "cliente", "contratada"],
@@ -53,7 +52,7 @@ def _registrar_auditoria(conn, tabela: str, registro_id: int, tipo_operacao: str
         INSERT INTO arquivo_auditoria (tabela, registro_id, tipo_operacao, usuario, data_hora, justificativa, descricao_registro, origem)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (tabela, registro_id, tipo_operacao, usuario, datetime.now().isoformat(timespec="seconds"), justificativa, descricao_registro, origem),
+        (tabela, registro_id, tipo_operacao, usuario, agora_br().isoformat(timespec="seconds"), justificativa, descricao_registro, origem),
     )
 
 
@@ -71,7 +70,7 @@ def arquivar_registro(tabela: str, registro_id: int, usuario: str, motivo: str |
         registro = dict(registro)
         if registro.get("arquivado_em"):
             return
-        agora = datetime.now().isoformat(timespec="seconds")
+        agora = agora_br().isoformat(timespec="seconds")
         conn.execute(
             f"UPDATE {tabela} SET arquivado_em = ?, arquivado_por = ?, motivo_arquivamento = ?, arquivado_teste = ? WHERE id = ?",
             (agora, usuario, motivo, 1 if teste else 0, registro_id),
@@ -170,7 +169,7 @@ def listar_codigos_gat_arquivados() -> pd.DataFrame:
 
 
 def arquivar_projeto_gat(codigo: str, usuario: str, motivo: str | None = None, teste: bool = False) -> int:
-    agora = datetime.now().isoformat(timespec="seconds")
+    agora = agora_br().isoformat(timespec="seconds")
     total = 0
     with conectar() as conn:
         for tabela in ("prestadores", "cessionarios"):

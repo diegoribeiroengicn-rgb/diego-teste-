@@ -4,8 +4,6 @@ genérica de `gat/export_word.py` já usada pelo GAT e pelo PMO)."""
 
 from __future__ import annotations
 
-from datetime import datetime
-
 import pandas as pd
 
 from gat.arquivo_business_rules import TIPO_ARQUIVAMENTO, TIPO_EXCLUSAO, TIPO_RESTAURACAO
@@ -18,6 +16,7 @@ from gat.export_word import (
     secao,
     tabela_dataframe,
 )
+from gat.horario import agora_br
 
 TITULOS_RELATORIO_ARQUIVO = {
     TIPO_ARQUIVAMENTO: "Relatório de Arquivamentos",
@@ -53,4 +52,4 @@ def gerar_relatorio_arquivo(tipo_operacao: str, auditoria: pd.DataFrame, usuario
 
 
 def nome_arquivo_relatorio_arquivo(tipo_operacao: str) -> str:
-    return nome_arquivo("arquivo", tipo_operacao.lower(), datetime.now().strftime("%Y%m%d_%H%M%S"))
+    return nome_arquivo("arquivo", tipo_operacao.lower(), agora_br().strftime("%Y%m%d_%H%M%S"))

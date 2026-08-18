@@ -21,6 +21,7 @@ from gat.database import (
     listar_prestadores,
     listar_reunioes,
 )
+from gat.horario import hoje_br
 
 
 def _parse_data(valor: Any) -> date | None:
@@ -57,7 +58,7 @@ def dialog_reuniao(usuario: str, registro: dict[str, Any] | None = None) -> None
 
     col1, col2 = st.columns(2)
     with col1:
-        data_prevista = st.date_input("Data Prevista", value=_parse_data(registro.get("data_prevista")) if registro else date.today(), format="DD/MM/YYYY", key=f"reu_dprev_{sufixo}")
+        data_prevista = st.date_input("Data Prevista", value=_parse_data(registro.get("data_prevista")) if registro else hoje_br(), format="DD/MM/YYYY", key=f"reu_dprev_{sufixo}")
     with col2:
         data_realizada = st.date_input("Data Realizada", value=_parse_data(registro.get("data_realizada")) if registro else None, format="DD/MM/YYYY", key=f"reu_dreal_{sufixo}")
 

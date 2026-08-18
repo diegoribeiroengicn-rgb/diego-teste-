@@ -5,8 +5,6 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from datetime import datetime
-
 from gat import backup_externo
 from gat.arquivo_business_rules import perfil_pode_arquivar_e_restaurar
 from gat.config import MAX_BACKUPS, PERFIS_OPCOES, RESPONSAVEIS
@@ -24,6 +22,7 @@ from gat.database import (
     restaurar_banco_de_bytes,
     sincronizar_para_persistencia,
 )
+from gat.horario import agora_br
 from gat.permissions import exigir_area, pode_area
 from gat.ui.formatos import formatar_datahora_br, formatar_datahoras_df
 from gat.ui.modals_arquivo import dialog_arquivar
@@ -251,7 +250,7 @@ def _renderizar_persistencia_dados(usuario: dict) -> None:
         st.caption("Baixe o banco de dados agora e guarde o arquivo em um local seguro (seu computador, e-mail, nuvem).")
         conteudo_db = exportar_banco_bytes()
         if conteudo_db:
-            nome_arquivo_backup = f"backup_gat_2026_{datetime.now().strftime('%Y-%m-%d_%H%M%S')}.db"
+            nome_arquivo_backup = f"backup_gat_2026_{agora_br().strftime('%Y-%m-%d_%H%M%S')}.db"
             st.download_button(
                 "Baixar backup agora", data=conteudo_db, file_name=nome_arquivo_backup,
                 mime="application/octet-stream", icon=":material/download:", type="primary", use_container_width=True,

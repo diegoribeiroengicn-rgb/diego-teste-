@@ -7,8 +7,6 @@ KPIs e Configuração do Projeto."""
 
 from __future__ import annotations
 
-from datetime import date
-
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -16,6 +14,7 @@ import streamlit as st
 import gat.pmo_database as pmodb
 from gat.arquivo_business_rules import perfil_pode_arquivar_e_restaurar
 from gat.config import CORES
+from gat.horario import hoje_br
 from gat.permissions import exigir_area
 from gat.pmo_business_rules import (
     BIBLIOTECA_KPIS,
@@ -74,7 +73,7 @@ def _recalcular_status(projeto: dict) -> dict:
     atividade_critica_atrasada = False
     percentual_planejado_hoje = None
     if not atividades.empty:
-        hoje = pd.Timestamp.today().normalize()
+        hoje = pd.Timestamp(hoje_br())
         datas_fim = pd.to_datetime(atividades["data_fim"], errors="coerce")
         atrasada = (atividades["caminho_critico"] == 1) & (datas_fim < hoje) & (atividades["percentual_concluido"].fillna(0) < 100)
         atividade_critica_atrasada = bool(atrasada.any())
@@ -146,7 +145,7 @@ def _tab_dashboard(projeto: dict, habilitados: set[str]) -> None:
     resumo_fin = pmodb.resumo_financeiro(projeto["id"])
     medicoes = pmodb.listar_medicoes(projeto["id"])
     entregaveis = pmodb.listar_entregaveis(projeto["id"])
-    hoje = pd.Timestamp.today().normalize()
+    hoje = pd.Timestamp(hoje_br())
     pct_planejado_hoje = percentual_planejado_ate(atividades, hoje) if not atividades.empty else 0
     pct_realizado = calcular_percentual_execucao(atividades)
 
@@ -303,7 +302,7 @@ def _tab_curva_s(projeto: dict, usuario: dict) -> None:
     fig.update_layout(yaxis_title="% Acumulado", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig, use_container_width=True)
 
-    hoje = pd.Timestamp.today().normalize()
+    hoje = pd.Timestamp(hoje_br())
     pct_planejado_hoje = percentual_planejado_ate(atividades, hoje)
     desvio = pct_realizado - pct_planejado_hoje
     col1, col2, col3 = st.columns(3)
@@ -340,8 +339,8 @@ _SITUACOES_MEDICAO = ["EM ANÁLISE", "APROVADA", "APROVADA COM RESSALVA", "REPRO
 def _tab_medicoes(projeto: dict, usuario: dict) -> None:
     with st.expander("Nova medição", icon=":material/add:"):
         col1, col2 = st.columns(2)
-        mes = col1.selectbox("Mês", list(range(1, 13)), index=date.today().month - 1, key="pmo_med_mes")
-        ano = col2.number_input("Ano", min_value=2020, max_value=2100, value=date.today().year, key="pmo_med_ano")
+        mes = col1.selectbox("Mês", list(range(1, 13)), index=hoje_br().month - 1, key="pmo_med_mes")
+        ano = col2.number_input("Ano", min_value=2020, max_value=2100, value=hoje_br().year, key="pmo_med_ano")
         col3, col4 = st.columns(2)
         percentual = col3.number_input("% da medição", min_value=0.0, max_value=100.0, step=1.0, key="pmo_med_pct")
         valor_medido = col4.number_input("Valor medido (R$)", min_value=0.0, step=1000.0, key="pmo_med_valor")
@@ -419,7 +418,7 @@ def _tab_entregaveis(projeto: dict, usuario: dict) -> None:
                 if not linha["entregue"] and st.button("Marcar entregue", key=f"pmo_ent_marcar_{linha['id']}", use_container_width=True):
                     pmodb.atualizar_entregavel(int(linha["id"]), {
                         "nome": linha["nome"], "previsto": linha["previsto"], "entregue": 1,
-                        "data_prevista": linha["data_prevista"], "data_entrega": date.today().isoformat(),
+                        "data_prevista": linha["data_prevista"], "data_entrega": hoje_br().isoformat(),
                         "percentual_documental": 100.0, "observacoes": linha["observacoes"],
                     }, usuario["username"])
                     st.rerun()
@@ -479,7 +478,7 @@ def _tab_riscos(projeto: dict, usuario: dict) -> None:
 def _tab_comunicacoes(projeto: dict, usuario: dict) -> None:
     with st.expander("Nova comunicação", icon=":material/add:"):
         col1, col2 = st.columns(2)
-        data_com = col1.date_input("Data", value=date.today(), format="DD/MM/YYYY", key="pmo_com_data")
+        data_com = col1.date_input("Data", value=hoje_br(), format="DD/MM/YYYY", key="pmo_com_data")
         tipo = col2.selectbox("Tipo", ["Reunião", "Ofício", "E-mail", "Ata", "Outro"], key="pmo_com_tipo")
         descricao = st.text_area("Descrição", key="pmo_com_desc")
         responsavel = st.text_input("Responsável", key="pmo_com_resp")
@@ -514,7 +513,7 @@ def _tab_reunioes(projeto: dict, usuario: dict) -> None:
         titulo = st.text_input("Título", key="pmo_reuniao_titulo")
         pauta = st.text_area("Pauta", key="pmo_reuniao_pauta")
         col1, col2 = st.columns(2)
-        data_prevista = col1.date_input("Data prevista", value=date.today(), format="DD/MM/YYYY", key="pmo_reuniao_data")
+        data_prevista = col1.date_input("Data prevista", value=hoje_br(), format="DD/MM/YYYY", key="pmo_reuniao_data")
         participantes_texto = col2.text_input("Participantes (separados por vírgula)", key="pmo_reuniao_participantes")
         ata = st.text_area("Ata (opcional)", key="pmo_reuniao_ata")
         if st.button("Registrar reunião", icon=":material/save:", type="primary", key="pmo_reuniao_salvar"):
