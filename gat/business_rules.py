@@ -219,8 +219,12 @@ def em_lista_prioridades(row: pd.Series) -> bool:
     (Prestadores/Cessionários) em vigor E a análise ainda está em
     andamento; sai automaticamente assim que a análise é concluída
     (liberada, não liberada, obsoleta ou cancelada) — a urgência de prazo
-    deixa de existir.
+    deixa de existir. Também sai enquanto o projeto estiver em HOLD aberto
+    (ver `gat.calendario.em_hold`) — HOLD pausa o SLA, então não faz
+    sentido cobrar prazo prioritário de uma análise parada.
     """
+    if booleano_seguro(row.get("em_hold")):
+        return False
     prioritario = booleano_seguro(row.get("sla_reduzido")) or pd.notna(row.get("nivel_prioridade"))
     if not prioritario:
         return False
@@ -288,7 +292,12 @@ def motivos_entrada_lista_prioridades(row: pd.Series, modulo: str) -> list[str]:
     uma mesma análise pode ter mais de um motivo simultaneamente (ex.:
     "Prioridade Nível 2" + "Vence em 1 dia útil"). Uma análise concluída
     (status final) nunca tem motivo — já saiu da lista ativa (item 8).
+    Uma análise em HOLD aberto também não tem motivo — apareceria com um
+    prazo/urgência congelado, dando a falsa impressão de que o analista
+    estaria deixando de trabalhar nela, quando na verdade está pausada.
     """
+    if booleano_seguro(row.get("em_hold")):
+        return []
     status = texto_seguro(row.get("status_analise")).strip().upper()
     if status in STATUS_CONCLUIDOS_PRIORIDADE:
         return []

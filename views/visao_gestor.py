@@ -6,6 +6,8 @@ combina o que cada um já calcula (ver gat/visao_gestor.py)."""
 
 from __future__ import annotations
 
+from typing import Any
+
 import pandas as pd
 import streamlit as st
 
@@ -22,8 +24,9 @@ from gat.config import (
     RESPONSAVEIS,
     STATUS_ANALISE_OPCOES,
 )
-from gat.database import listar_cessionarios, listar_prestadores, registrar_atividade
+from gat.database import listar_cessionarios, listar_obras_prestador, listar_prestadores, registrar_atividade
 from gat.kpis_analistas_prazo import calcular_kpis_prazo_analista
+from gat.normalizacao import texto_seguro
 from gat.permissions import exigir_area
 from gat.relatorios_visao_gestor import (
     gerar_excel_visao_gestor,
@@ -219,11 +222,27 @@ def _renderizar_quem_faz_o_que(df: pd.DataFrame, painel: pd.DataFrame, lista_pri
                 st.caption("Nenhuma análise ativa no momento.")
 
 
-def _renderizar_o_que_deveria_analisar(lista_prioridades: pd.DataFrame, analistas: list[str]) -> None:
+def _renderizar_o_que_deveria_analisar(lista_prioridades: pd.DataFrame, analistas: list[str], df_base: pd.DataFrame) -> None:
+    """
+    Identifica cada demanda pelo Prestador/Cessionário — código, nome,
+    obra (só Prestadores) e disciplina — em vez do número da AT, que exige
+    interpretação adicional e não comunica de imediato qual é a demanda.
+    O número da AT continua disponível, apenas como informação secundária
+    ao final da linha; a lógica de prioridade/SLA/HOLD não muda em nada,
+    só a identificação visual."""
     st.markdown("#### :material/checklist: O que o analista deveria estar analisando (Lista de Prioridades)")
     if lista_prioridades.empty:
         st.success("Nenhuma análise prioritária no momento.")
         return
+
+    obras = listar_obras_prestador()
+    mapa_obras = obras.set_index("id")["nome_obra"].to_dict() if not obras.empty else {}
+    mapa_obra_por_id: dict[Any, str] = {}
+    if not df_base.empty and "obra_id" in df_base.columns:
+        prestadores_base = df_base[df_base.get("tipo_modulo") == "Prestador"]
+        mapa_obra_por_id = {
+            r["id"]: mapa_obras.get(r.get("obra_id"), "") for _, r in prestadores_base.iterrows() if pd.notna(r.get("obra_id"))
+        }
 
     for analista in analistas:
         sub = lista_prioridades[lista_prioridades["responsavel"] == analista]
@@ -237,9 +256,22 @@ def _renderizar_o_que_deveria_analisar(lista_prioridades: pd.DataFrame, analista
                 "DENTRO DO PRAZO": "dentro do prazo", "VENCE EM BREVE": "vence em breve",
                 "VENCE HOJE": "vence hoje", "ATRASADO": f"vencida há {abs(linha.get('dias_restantes') or 0)} dia(s) útil(eis)",
             }.get(situacao, situacao.lower())
+
+            codigo = texto_seguro(linha.get("codigo")).strip() or "—"
+            nome = texto_seguro(linha.get("nome_entidade")).strip() or "—"
+            disciplina = texto_seguro(linha.get("disciplina")).strip() or "—"
+            partes_identificacao = [f"{codigo} — {nome}"]
+            if linha.get("tipo") == "Prestador":
+                obra = texto_seguro(mapa_obra_por_id.get(linha.get("id"))).strip()
+                if obra:
+                    partes_identificacao.append(obra)
+            partes_identificacao.append(disciplina)
+            identificacao = " | ".join(partes_identificacao)
+            num_at = texto_seguro(linha.get("num_at")).strip() or "—"
+
             st.markdown(
-                f"{posicao}º **AT-{linha.get('num_at') or '—'}** — {nivel} — {situacao_label} "
-                f"({linha.get('motivos_entrada_label') or '—'})"
+                f"{posicao}º **{identificacao}** — {nivel} — {situacao_label} "
+                f"({linha.get('motivos_entrada_label') or '—'}) · *AT {num_at}*"
             )
         st.markdown("")
 
@@ -388,7 +420,7 @@ def render(usuario: dict) -> None:
     with aba1:
         _renderizar_quem_faz_o_que(df_filtrado, painel, lista_prioridades_filtrada, alertas_filtrados)
     with aba2:
-        _renderizar_o_que_deveria_analisar(lista_prioridades_filtrada, analistas_presentes)
+        _renderizar_o_que_deveria_analisar(lista_prioridades_filtrada, analistas_presentes, df_filtrado)
     with aba3:
         _renderizar_comparativo(df_filtrado, lista_prioridades_filtrada, analistas_presentes)
     with aba4:
