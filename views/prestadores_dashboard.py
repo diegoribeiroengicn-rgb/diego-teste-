@@ -85,9 +85,6 @@ def render(usuario: dict) -> None:
         media_por_prestador = df_aval.groupby("nome_prestador")["nota"].mean()
         prestadores_criticos = int(sum(1 for nota in media_por_prestador if classificar_nota(round(nota))[0] == "CRÍTICO"))
 
-    renderizar_kpis_atraso(df, "prestadores", url_path_lista="prestadores_projetos", chave_prefixo="dash_prest")
-    st.markdown("---")
-
     st.markdown("##### Volume")
     renderizar_kpis([
         ("Total de Projetos", str(total_projetos), CORES["navy"]),
@@ -151,3 +148,6 @@ def render(usuario: dict) -> None:
         st.plotly_chart(grafico_disciplina(df), use_container_width=True)
     with col6:
         st.plotly_chart(grafico_aging(df, "dias_uteis_decorridos"), use_container_width=True)
+
+    st.markdown("---")
+    renderizar_kpis_atraso(df, "prestadores", url_path_lista="prestadores_projetos", chave_prefixo="dash_prest")

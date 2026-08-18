@@ -54,9 +54,6 @@ def render(usuario: dict) -> None:
         st.info("Nenhum registro ativo de cessionário para exibir indicadores nesta competência.")
         return
 
-    renderizar_kpis_atraso(df, "cessionarios", url_path_lista="cessionarios_projetos", chave_prefixo="dash_cess")
-    st.markdown("---")
-
     total_projetos = len(df)
     total_ats = df["num_at"].replace("", None).dropna().nunique()
     total_documentos = int(df["num_documentos"].fillna(0).sum())
@@ -151,3 +148,6 @@ def render(usuario: dict) -> None:
         st.plotly_chart(grafico_por_categoria(df, "cessionario", "Projetos por Cessionário (Top 10)", CORES["ceu"], top_n=10), use_container_width=True)
     with col8:
         st.plotly_chart(grafico_aging(df, "saldo_dias_uteis"), use_container_width=True)
+
+    st.markdown("---")
+    renderizar_kpis_atraso(df, "cessionarios", url_path_lista="cessionarios_projetos", chave_prefixo="dash_cess")

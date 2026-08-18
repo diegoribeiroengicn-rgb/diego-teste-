@@ -79,10 +79,7 @@ def render(usuario: dict) -> None:
     total_sem_pep = int((~df_prest["tem_pep"]).sum() if not df_prest.empty else 0)
 
     st.markdown("##### Indicadores gerais")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Projetos Ativos", total_ativos_prest + total_ativos_cess)
-    col2.metric("Atrasados", total_atrasados)
-    col3.metric("Pendente de Reunião", total_pendente_reuniao)
+    st.metric("Projetos Ativos", total_ativos_prest + total_ativos_cess)
     # PEP ausente é um alerta discreto, não um indicador principal — não tem
     # card próprio aqui; aparece na linha/detalhe do projeto e na área de
     # Alertas/Lembretes.
@@ -179,3 +176,10 @@ def render(usuario: dict) -> None:
                     _navegar_para("cessionarios_projetos")
                 if acao == "lembretes" and st.button("Ver Lembretes (Sem PEP)", icon=":material/pending_actions:", use_container_width=True):
                     _navegar_para("gestao_lembretes")
+
+    if pode_prest or pode_cess:
+        st.markdown("---")
+        st.markdown("##### Acompanhamento de Prazos")
+        col_at1, col_at2 = st.columns(2)
+        col_at1.metric("Atrasados", total_atrasados)
+        col_at2.metric("Pendente de Reunião", total_pendente_reuniao)
