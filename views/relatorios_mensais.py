@@ -20,6 +20,7 @@ from gat.database import (
     listar_anos_disponiveis,
     listar_cessionarios,
     listar_prestadores,
+    listar_resumos_para_relatorio,
     obter_configuracao,
     obter_observacao_mensal,
     registrar_atividade,
@@ -191,6 +192,36 @@ def render(usuario: dict) -> None:
                 mime="application/pdf", icon=":material/picture_as_pdf:", use_container_width=True,
             ):
                 registrar_atividade(usuario["username"], usuario.get("perfil"), "EXPORTACAO", modulo=modulo_label, detalhe=f"PDF {competencia_label}")
+
+    st.markdown("#####")
+    st.markdown("##### Resumo de Conclusão")
+    st.caption(
+        "Consulta de onde cada análise concluída foi disponibilizada (M-Files/Drive/E-mail) — apenas "
+        "informativo, sem novos indicadores obrigatórios."
+    )
+    resumos = listar_resumos_para_relatorio()
+    if not resumos.empty:
+        resumos = filtrar_por_competencia(resumos, "data_analise", mes, ano)
+    if resumos.empty:
+        st.caption("Nenhuma análise com Resumo de Conclusão gerado nesta competência.")
+    else:
+        col_r1, col_r2, col_r3, col_r4 = st.columns(4)
+        col_r1.metric("Postado no M-Files", int(resumos["resumo_mfiles"].sum()))
+        col_r2.metric("Postado no Drive", int(resumos["resumo_drive"].sum()))
+        col_r3.metric("Enviado por e-mail", int(resumos["resumo_email"].sum()))
+        col_r4.metric("Total de análises com Resumo", len(resumos))
+        resumos = resumos.assign(tabela=resumos["tabela"].map({"prestadores": "Prestadores", "cessionarios": "Cessionários"}))
+        st.dataframe(
+            resumos.rename(columns={
+                "tabela": "Módulo", "codigo": "Código", "entidade": "Prestador/Cessionário",
+                "obra_referencia": "Obra/Tipo", "disciplina": "Disciplina", "revisao": "Revisão",
+                "status_analise": "Status", "data_analise": "Conclusão", "responsavel": "Responsável",
+                "resumo_mfiles": "M-Files", "resumo_drive": "Drive", "resumo_email": "E-mail",
+                "resumo_qtd_geracoes": "Gerações/Downloads", "resumo_ultima_geracao_em": "Última geração",
+                "resumo_gerado_por": "Gerado por",
+            }),
+            use_container_width=True, hide_index=True,
+        )
 
     st.markdown("#####")
     st.markdown("##### One Page Report — Resumo Executivo Mensal")

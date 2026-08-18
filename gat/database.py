@@ -1157,6 +1157,63 @@ def _migracao_0022_manual_tema(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migracao_0023_resumo_conclusao(conn: sqlite3.Connection) -> None:
+    """
+    Resumo de Conclusão da Análise: colunas de estado (canais marcados,
+    controle do pop-up de primeira oferta, contagem/registro da última
+    geração) em prestadores/cessionarios + tabela de histórico completo de
+    disponibilização/edições/downloads. Puramente aditiva — não recria nem
+    altera nenhuma tabela ou regra existente.
+    """
+    for tabela in ("prestadores", "cessionarios"):
+        _garantir_coluna(conn, tabela, "resumo_mfiles", "INTEGER NOT NULL DEFAULT 0")
+        _garantir_coluna(conn, tabela, "resumo_drive", "INTEGER NOT NULL DEFAULT 0")
+        _garantir_coluna(conn, tabela, "resumo_email", "INTEGER NOT NULL DEFAULT 0")
+        _garantir_coluna(conn, tabela, "resumo_popup_disparado_em", "TEXT")
+        _garantir_coluna(conn, tabela, "resumo_ultima_geracao_em", "TEXT")
+        _garantir_coluna(conn, tabela, "resumo_gerado_por", "TEXT")
+        _garantir_coluna(conn, tabela, "resumo_qtd_geracoes", "INTEGER NOT NULL DEFAULT 0")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS resumo_conclusao_historico (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tabela TEXT NOT NULL,
+            registro_id INTEGER NOT NULL,
+            evento TEXT NOT NULL,
+            mfiles INTEGER NOT NULL DEFAULT 0,
+            drive INTEGER NOT NULL DEFAULT 0,
+            email INTEGER NOT NULL DEFAULT 0,
+            selecao_anterior TEXT,
+            usuario TEXT NOT NULL,
+            data_hora TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_resumo_conclusao_historico_registro "
+        "ON resumo_conclusao_historico(tabela, registro_id)"
+    )
+
+
+def _migracao_0024_manual_resumo_conclusao(conn: sqlite3.Connection) -> None:
+    """Acrescenta o capítulo 'Resumo de Conclusão da Análise' ao Manual do
+    Sistema, ao final da lista já existente, sem alterar nenhum capítulo
+    anterior."""
+    from gat.resumo_conclusao_manual_conteudo import CAPITULOS_RESUMO_CONCLUSAO
+
+    agora = datetime.now().isoformat()
+    maior_ordem = conn.execute("SELECT COALESCE(MAX(ordem), 0) FROM manual_capitulos").fetchone()[0]
+    for indice, (titulo, conteudo) in enumerate(CAPITULOS_RESUMO_CONCLUSAO, start=1):
+        existe = conn.execute("SELECT id FROM manual_capitulos WHERE titulo = ?", (titulo,)).fetchone()
+        if existe:
+            continue
+        conn.execute(
+            "INSERT INTO manual_capitulos (ordem, titulo, conteudo, perfis_visiveis, criado_em) VALUES (?, ?, ?, NULL, ?)",
+            (maior_ordem + indice, titulo, conteudo, agora),
+        )
+
+
 _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (1, "Índices de busca por N° AT e nome em Prestadores e Cessionários", _migracao_0001_indices_busca),
     (2, "Índices para avaliações (checklist/analistas), alertas com radar e histórico de atividades", _migracao_0002_indices_avaliacoes_alertas),
@@ -1180,6 +1237,8 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (20, "Módulo Arquivo: capítulo 'Módulo Arquivo' no Manual do Sistema", _migracao_0020_manual_arquivo),
     (21, "Preferência de Tema Claro/Escuro por usuário (usuarios.tema_preferido)", _migracao_0021_tema_usuario),
     (22, "Manual do Sistema: capítulos 'Tema Claro e Tema Escuro' e 'Padrão visual do sistema'", _migracao_0022_manual_tema),
+    (23, "Resumo de Conclusão da Análise: colunas de estado em Prestadores/Cessionários + tabela resumo_conclusao_historico", _migracao_0023_resumo_conclusao),
+    (24, "Manual do Sistema: capítulo 'Resumo de Conclusão da Análise'", _migracao_0024_manual_resumo_conclusao),
 ]
 
 
@@ -1964,6 +2023,129 @@ def obter_cessionario(registro_id: int) -> dict[str, Any] | None:
     with _conectar() as conn:
         linha = conn.execute("SELECT * FROM cessionarios WHERE id = ?", (registro_id,)).fetchone()
         return dict(linha) if linha else None
+
+
+# ---------------------------------------------------------------------------
+# Resumo de Conclusão da Análise (Prestadores/Cessionários)
+# ---------------------------------------------------------------------------
+_TABELAS_RESUMO = {"prestadores", "cessionarios"}
+
+
+def _validar_tabela_resumo(tabela: str) -> None:
+    if tabela not in _TABELAS_RESUMO:
+        raise ValueError(f"Tabela inválida para Resumo de Conclusão: {tabela!r}")
+
+
+def marcar_popup_resumo_disparado(tabela: str, registro_id: int) -> None:
+    """Registra que o pop-up de Resumo de Conclusão já foi oferecido para
+    este registro — impede que ele volte a aparecer automaticamente em
+    salvamentos futuros que não alterem status/data de conclusão."""
+    _validar_tabela_resumo(tabela)
+    agora = datetime.now().isoformat()
+    with _conectar() as conn:
+        conn.execute(
+            f"UPDATE {tabela} SET resumo_popup_disparado_em = ? WHERE id = ? AND resumo_popup_disparado_em IS NULL",
+            (agora, registro_id),
+        )
+
+
+def salvar_selecao_resumo(tabela: str, registro_id: int, mfiles: bool, drive: bool, email: bool, usuario: str) -> None:
+    """
+    Persiste a seleção de canais (M-Files/Drive/E-mail) do Resumo de
+    Conclusão, incrementa o contador de gerações e grava um evento no
+    histórico — distinguindo a primeira geração de uma edição posterior da
+    seleção (item 14 da solicitação).
+    """
+    _validar_tabela_resumo(tabela)
+    agora = datetime.now().isoformat()
+    with _conectar() as conn:
+        atual = conn.execute(
+            f"SELECT resumo_mfiles, resumo_drive, resumo_email, resumo_qtd_geracoes "
+            f"FROM {tabela} WHERE id = ?",
+            (registro_id,),
+        ).fetchone()
+        ja_gerado_antes = bool(atual and atual["resumo_qtd_geracoes"])
+        selecao_anterior = None
+        if ja_gerado_antes:
+            from gat.resumo_conclusao import rotulos_canais_selecionados
+            rotulos = rotulos_canais_selecionados(bool(atual["resumo_mfiles"]), bool(atual["resumo_drive"]), bool(atual["resumo_email"]))
+            selecao_anterior = ", ".join(rotulos) if rotulos else "Nenhum canal"
+
+        conn.execute(
+            f"UPDATE {tabela} SET resumo_mfiles = ?, resumo_drive = ?, resumo_email = ?, "
+            f"resumo_ultima_geracao_em = ?, resumo_gerado_por = ?, resumo_qtd_geracoes = resumo_qtd_geracoes + 1 "
+            f"WHERE id = ?",
+            (int(mfiles), int(drive), int(email), agora, usuario, registro_id),
+        )
+        conn.execute(
+            "INSERT INTO resumo_conclusao_historico "
+            "(tabela, registro_id, evento, mfiles, drive, email, selecao_anterior, usuario, data_hora) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (
+                tabela, registro_id, "EDICAO_CANAIS" if ja_gerado_antes else "GERACAO_INICIAL",
+                int(mfiles), int(drive), int(email), selecao_anterior, usuario, agora,
+            ),
+        )
+
+
+def registrar_download_resumo(tabela: str, registro_id: int, usuario: str) -> None:
+    """Item 13: soma mais uma geração/download ao contador sem alterar a
+    seleção de canais vigente (botão "Baixar novamente")."""
+    _validar_tabela_resumo(tabela)
+    agora = datetime.now().isoformat()
+    with _conectar() as conn:
+        atual = conn.execute(f"SELECT resumo_mfiles, resumo_drive, resumo_email FROM {tabela} WHERE id = ?", (registro_id,)).fetchone()
+        conn.execute(
+            f"UPDATE {tabela} SET resumo_ultima_geracao_em = ?, resumo_gerado_por = ?, "
+            f"resumo_qtd_geracoes = resumo_qtd_geracoes + 1 WHERE id = ?",
+            (agora, usuario, registro_id),
+        )
+        conn.execute(
+            "INSERT INTO resumo_conclusao_historico "
+            "(tabela, registro_id, evento, mfiles, drive, email, selecao_anterior, usuario, data_hora) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (
+                tabela, registro_id, "DOWNLOAD_REPETIDO",
+                int(atual["resumo_mfiles"]) if atual else 0, int(atual["resumo_drive"]) if atual else 0,
+                int(atual["resumo_email"]) if atual else 0, None, usuario, agora,
+            ),
+        )
+
+
+def listar_historico_resumo(tabela: str, registro_id: int) -> pd.DataFrame:
+    _validar_tabela_resumo(tabela)
+    with _conectar() as conn:
+        return pd.read_sql_query(
+            "SELECT * FROM resumo_conclusao_historico WHERE tabela = ? AND registro_id = ? ORDER BY data_hora DESC",
+            conn, params=(tabela, registro_id),
+        )
+
+
+def listar_resumos_para_relatorio(tabela: str | None = None) -> pd.DataFrame:
+    """Base para o relatório do item 17: uma linha por análise já concluída
+    (status final com resumo gerado ao menos uma vez), com os canais
+    marcados e a data de conclusão — sem criar nenhum KPI obrigatório."""
+    consultas = []
+    with _conectar() as conn:
+        if tabela in (None, "prestadores"):
+            consultas.append(pd.read_sql_query(
+                "SELECT 'prestadores' AS tabela, id AS registro_id, codigo, prestador AS entidade, "
+                "obra_referencia, disciplina, revisao, status_analise, data_analise, responsavel, "
+                "resumo_mfiles, resumo_drive, resumo_email, resumo_qtd_geracoes, resumo_ultima_geracao_em, resumo_gerado_por "
+                "FROM prestadores WHERE arquivado_em IS NULL AND resumo_qtd_geracoes > 0",
+                conn,
+            ))
+        if tabela in (None, "cessionarios"):
+            consultas.append(pd.read_sql_query(
+                "SELECT 'cessionarios' AS tabela, id AS registro_id, codigo, cessionario AS entidade, "
+                "tipo AS obra_referencia, disciplina, revisao, status_analise, data_analise, responsavel, "
+                "resumo_mfiles, resumo_drive, resumo_email, resumo_qtd_geracoes, resumo_ultima_geracao_em, resumo_gerado_por "
+                "FROM cessionarios WHERE arquivado_em IS NULL AND resumo_qtd_geracoes > 0",
+                conn,
+            ))
+    if not consultas:
+        return pd.DataFrame()
+    return pd.concat(consultas, ignore_index=True)
 
 
 # ---------------------------------------------------------------------------

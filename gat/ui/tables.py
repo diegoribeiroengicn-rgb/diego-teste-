@@ -11,7 +11,11 @@ import pandas as pd
 import streamlit as st
 
 from gat.arquivo_business_rules import perfil_pode_arquivar_e_restaurar
+from gat.resumo_conclusao import eh_status_final_resumo
 from gat.ui.modals_arquivo import dialog_arquivar
+from gat.ui.modals_resumo import dialog_resumo_conclusao
+
+_TABELAS_COM_RESUMO_CONCLUSAO = {"prestadores", "cessionarios"}
 
 
 def tabela_com_edicao(
@@ -64,17 +68,29 @@ def tabela_com_edicao(
     if linhas_selecionadas:
         posicao = linhas_selecionadas[0]
         registro_id = int(df_ids.iloc[posicao])
+        registro_selecionado = obter_registro(registro_id)
         mostrar_arquivar = tabela_arquivo is not None and usuario is not None and perfil_pode_arquivar_e_restaurar(usuario.get("perfil"))
-        colunas = st.columns([1, 1, 4]) if mostrar_arquivar else st.columns([1, 5])
-        col_a, col_arq = colunas[0], (colunas[1] if mostrar_arquivar else None)
-        with col_a:
+        mostrar_resumo = (
+            tabela_arquivo in _TABELAS_COM_RESUMO_CONCLUSAO and usuario is not None
+            and eh_status_final_resumo(registro_selecionado.get("status_analise"))
+        )
+        n_botoes = 1 + int(mostrar_arquivar) + int(mostrar_resumo)
+        preenchimento = 5 if n_botoes == 1 else 4
+        colunas = st.columns([1] * n_botoes + [preenchimento])
+        indice = 0
+        with colunas[indice]:
             if st.button("Editar selecionado", icon=":material/edit:", type="primary", key=f"btn_editar_{chave}", use_container_width=True):
-                abrir_dialog_edicao(obter_registro(registro_id))
+                abrir_dialog_edicao(registro_selecionado)
+        indice += 1
+        if mostrar_resumo:
+            with colunas[indice]:
+                if st.button("Resumo de Conclusão", icon=":material/description:", key=f"btn_resumo_{chave}", use_container_width=True):
+                    dialog_resumo_conclusao(tabela_arquivo, registro_id, usuario["username"])
+            indice += 1
         if mostrar_arquivar:
-            with col_arq:
+            with colunas[indice]:
                 if st.button("Arquivar selecionado", icon=":material/archive:", key=f"btn_arquivar_{chave}", use_container_width=True):
-                    registro = obter_registro(registro_id)
-                    descricao = descricao_arquivo(registro) if descricao_arquivo else f"{chave} #{registro_id}"
+                    descricao = descricao_arquivo(registro_selecionado) if descricao_arquivo else f"{chave} #{registro_id}"
                     dialog_arquivar(tabela_arquivo, registro_id, descricao, usuario["username"])
     else:
         st.caption("Selecione uma linha na tabela para editar o registro.")

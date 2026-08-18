@@ -48,10 +48,13 @@ from gat.database import (
     listar_cadastro_prestadores,
     listar_obras_prestador,
     listar_repactuacoes_prazo,
+    marcar_popup_resumo_disparado,
     nome_exibicao_obra,
     registrar_atividade,
     registrar_repactuacao_prazo,
 )
+from gat.resumo_conclusao import deve_disparar_popup_resumo
+from gat.ui.modals_resumo import renderizar_nucleo_resumo
 
 
 def _parse_data(valor: Any) -> date | None:
@@ -401,6 +404,37 @@ def _renderizar_confirmacao_prioridade(pendencia: dict[str, Any], chave_confirma
         st.rerun()
 
 
+def _detectar_pendencia_resumo(tabela: str, dados: dict[str, Any], projeto_id: int, registro_anterior: dict[str, Any] | None) -> dict[str, Any] | None:
+    """
+    Resumo de Conclusão da Análise: oferece o pop-up quando a análise
+    alcança pela primeira vez um status final com Data de Entrega/Conclusão
+    informada (seção 2/15 da solicitação). Ao decidir oferecer, já marca
+    `resumo_popup_disparado_em` — mesmo que o analista feche sem concluir o
+    fluxo, o pop-up não volta a interromper salvamentos futuros que não
+    tragam essa transição; o recurso continua acessível manualmente depois.
+    """
+    disparado_antes = registro_anterior.get("resumo_popup_disparado_em") if registro_anterior else None
+    if not deve_disparar_popup_resumo(dados.get("status_analise"), dados.get("data_analise"), disparado_antes):
+        return None
+    marcar_popup_resumo_disparado(tabela, projeto_id)
+    return {"tabela": tabela, "registro_id": projeto_id}
+
+
+def _renderizar_confirmacao_resumo(pendencia: dict[str, Any], chave_confirmacao: str, usuario: str) -> None:
+    from gat.database import obter_cessionario, obter_prestador
+
+    st.success("Análise salva com sucesso.", icon=":material/check_circle:")
+    tabela, registro_id = pendencia["tabela"], pendencia["registro_id"]
+    dados_atuais = obter_prestador(registro_id) if tabela == "prestadores" else obter_cessionario(registro_id)
+    if not dados_atuais:
+        st.session_state.pop(chave_confirmacao, None)
+        return
+    renderizar_nucleo_resumo(tabela, registro_id, dados_atuais, usuario, chave_prefixo=f"resumo_auto_{tabela}_{registro_id}")
+    if st.button("Fazer isso depois", key=f"{chave_confirmacao}_depois"):
+        st.session_state.pop(chave_confirmacao, None)
+        st.rerun()
+
+
 # ---------------------------------------------------------------------------
 # Modal de Prestadores (Aba A)
 # ---------------------------------------------------------------------------
@@ -421,6 +455,12 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
     pendencia_prioridade = st.session_state.get(chave_confirmacao_prioridade)
     if pendencia_prioridade:
         _renderizar_confirmacao_prioridade(pendencia_prioridade, chave_confirmacao_prioridade, usuario)
+        return
+
+    chave_confirmacao_resumo = f"pr_confirmar_resumo_{sufixo}"
+    pendencia_resumo = st.session_state.get(chave_confirmacao_resumo)
+    if pendencia_resumo:
+        _renderizar_confirmacao_resumo(pendencia_resumo, chave_confirmacao_resumo, usuario)
         return
 
     st.caption("Edite os campos e clique em **Salvar**. A data limite sugerida e o prazo são calculados automaticamente pelo calendário oficial de feriados do RJ." if editando else
@@ -702,6 +742,11 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
             st.session_state[chave_confirmacao_prioridade] = pendencia_prioridade
             _renderizar_confirmacao_prioridade(pendencia_prioridade, chave_confirmacao_prioridade, usuario)
             return
+        pendencia_resumo = _detectar_pendencia_resumo("prestadores", dados, projeto_id_salvo, registro)
+        if pendencia_resumo:
+            st.session_state[chave_confirmacao_resumo] = pendencia_resumo
+            _renderizar_confirmacao_resumo(pendencia_resumo, chave_confirmacao_resumo, usuario)
+            return
         st.rerun()
 
 
@@ -725,6 +770,12 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
     pendencia_prioridade = st.session_state.get(chave_confirmacao_prioridade)
     if pendencia_prioridade:
         _renderizar_confirmacao_prioridade(pendencia_prioridade, chave_confirmacao_prioridade, usuario)
+        return
+
+    chave_confirmacao_resumo = f"ce_confirmar_resumo_{sufixo}"
+    pendencia_resumo = st.session_state.get(chave_confirmacao_resumo)
+    if pendencia_resumo:
+        _renderizar_confirmacao_resumo(pendencia_resumo, chave_confirmacao_resumo, usuario)
         return
 
     st.caption("Edite os campos e clique em **Salvar**. O saldo de dias úteis é calculado automaticamente pelo calendário oficial de feriados do RJ." if editando else
@@ -988,6 +1039,11 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
         if pendencia_prioridade:
             st.session_state[chave_confirmacao_prioridade] = pendencia_prioridade
             _renderizar_confirmacao_prioridade(pendencia_prioridade, chave_confirmacao_prioridade, usuario)
+            return
+        pendencia_resumo = _detectar_pendencia_resumo("cessionarios", dados, projeto_id_salvo, registro)
+        if pendencia_resumo:
+            st.session_state[chave_confirmacao_resumo] = pendencia_resumo
+            _renderizar_confirmacao_resumo(pendencia_resumo, chave_confirmacao_resumo, usuario)
             return
         st.rerun()
 
