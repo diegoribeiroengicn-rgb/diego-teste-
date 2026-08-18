@@ -25,6 +25,7 @@ from gat.config import (
     STATUS_NAO_LIBERADO,
     STATUS_PENDENTE_REUNIAO,
 )
+from gat.normalizacao import booleano_seguro, calculo_seguro, inteiro_ou_none, inteiro_seguro, logger, texto_seguro
 
 
 def classificar_nota(nota: int) -> tuple[str, str]:
@@ -213,24 +214,24 @@ def em_lista_prioridades(row: pd.Series) -> bool:
     (liberada, não liberada, obsoleta ou cancelada) — a urgência de prazo
     deixa de existir.
     """
-    prioritario = bool(row.get("sla_reduzido")) or pd.notna(row.get("nivel_prioridade"))
+    prioritario = booleano_seguro(row.get("sla_reduzido")) or pd.notna(row.get("nivel_prioridade"))
     if not prioritario:
         return False
-    status = str(row.get("status_analise") or "").strip().upper()
+    status = texto_seguro(row.get("status_analise")).strip().upper()
     return status not in STATUS_CONCLUIDOS_PRIORIDADE
 
 
 def dias_restantes_prioridade(row: pd.Series, modulo: str) -> int | None:
     """Dias úteis restantes até o prazo vigente, unificado entre os dois
     módulos (Prestadores usa `dias_uteis_decorridos`, Cessionários já
-    calcula o `saldo_dias_uteis` diretamente)."""
+    calcula o `saldo_dias_uteis` diretamente). Tolerante a `sla_dias`/
+    `dias_uteis_decorridos`/`saldo_dias_uteis` ausentes, `NaN`, `NaT` ou
+    vindos como texto (registros legados) — nunca levanta `ValueError`."""
     if modulo == "prestadores":
-        sla_dias = row.get("sla_dias")
-        sla = int(sla_dias) if pd.notna(sla_dias) else SLA_PRESTADORES_DIAS_UTEIS
-        decorridos = row.get("dias_uteis_decorridos")
-        return int(sla - decorridos) if pd.notna(decorridos) else None
-    saldo = row.get("saldo_dias_uteis")
-    return int(saldo) if pd.notna(saldo) else None
+        sla = inteiro_seguro(row.get("sla_dias"), SLA_PRESTADORES_DIAS_UTEIS)
+        decorridos = inteiro_ou_none(row.get("dias_uteis_decorridos"))
+        return sla - decorridos if decorridos is not None else None
+    return inteiro_ou_none(row.get("saldo_dias_uteis"))
 
 
 def limites_alerta_vencimento(sla_dias: int) -> tuple[int, int, int]:
@@ -281,7 +282,7 @@ def motivos_entrada_lista_prioridades(row: pd.Series, modulo: str) -> list[str]:
     "Prioridade Nível 2" + "Vence em 1 dia útil"). Uma análise concluída
     (status final) nunca tem motivo — já saiu da lista ativa (item 8).
     """
-    status = str(row.get("status_analise") or "").strip().upper()
+    status = texto_seguro(row.get("status_analise")).strip().upper()
     if status in STATUS_CONCLUIDOS_PRIORIDADE:
         return []
     motivos: list[str] = []
@@ -431,7 +432,7 @@ def classificacao_atraso(status_analise: str | None, status_entrega_calc: str | 
     Cancelado ficam fora da contagem de atrasos (não representam uma
     entrega real), assim como já ocorre com Cancelado em `filtrar_ativos`.
     """
-    status = (status_analise or "").strip().upper()
+    status = texto_seguro(status_analise).strip().upper()
     atrasado = status_entrega_calc == "ATRASADO"
     if status in STATUS_ATIVO_ANALISE:
         return "ATIVO_ATRASADO" if atrasado else "ATIVO_OK"
@@ -456,8 +457,15 @@ def resumo_indicadores_atraso(df: pd.DataFrame, modulo: str) -> dict[str, Any]:
         }
 
     coluna_nome = "prestador" if modulo == "prestadores" else "cessionario"
-    classificacoes = df.apply(lambda r: classificacao_atraso(r.get("status_analise"), r.get("status_entrega_calc")), axis=1)
-    dias_restantes = df.apply(lambda r: dias_restantes_prioridade(r, modulo), axis=1)
+    classificacoes = df.apply(
+        lambda r: calculo_seguro(
+            classificacao_atraso, r.get("status_analise"), r.get("status_entrega_calc"), contexto="classificacao_atraso",
+        ),
+        axis=1,
+    )
+    dias_restantes = df.apply(
+        lambda r: calculo_seguro(dias_restantes_prioridade, r, modulo, contexto="dias_restantes_prioridade"), axis=1,
+    )
     niveis = dias_restantes.apply(nivel_alerta_atraso)
 
     ativos = classificacoes.isin(["ATIVO_ATRASADO", "ATIVO_OK"])
@@ -490,16 +498,20 @@ def montar_lista_atrasados(df: pd.DataFrame, modulo: str, coluna_nome: str) -> p
 
     linhas = []
     for _, row in df.iterrows():
-        classificacao = classificacao_atraso(row.get("status_analise"), row.get("status_entrega_calc"))
-        if classificacao != "ATIVO_ATRASADO":
+        try:
+            classificacao = classificacao_atraso(row.get("status_analise"), row.get("status_entrega_calc"))
+            if classificacao != "ATIVO_ATRASADO":
+                continue
+            dias_restantes = dias_restantes_prioridade(row, modulo)
+        except (ValueError, TypeError, OverflowError, KeyError, AttributeError) as exc:
+            logger.warning("montar_lista_atrasados: registro id=%r ignorado (%s)", row.get("id"), exc)
             continue
-        dias_restantes = dias_restantes_prioridade(row, modulo)
         linhas.append({
             "modulo": modulo, "id": row.get("id"), "nome_entidade": row.get(coluna_nome), "codigo": row.get("codigo"),
             "num_at": row.get("num_at"), "disciplina": row.get("disciplina"), "revisao": row.get("revisao"),
             "responsavel": row.get("responsavel"), "status_analise": row.get("status_analise"),
             "sla_dias": row.get("sla_dias"), "data_limite": row.get("data_limite"),
-            "nivel_prioridade": row.get("nivel_prioridade"), "sla_reduzido": bool(row.get("sla_reduzido")),
+            "nivel_prioridade": row.get("nivel_prioridade"), "sla_reduzido": booleano_seguro(row.get("sla_reduzido")),
             "dias_restantes": dias_restantes, "dias_atraso": int(-dias_restantes) if dias_restantes is not None else 0,
             "nivel_alerta": nivel_alerta_atraso(dias_restantes),
         })
@@ -569,7 +581,7 @@ def indicadores_meta_rev2(df: pd.DataFrame, meta_percentual: float | None = None
 
 def is_cancelado(status_analise: str) -> bool:
     """Verifica se um projeto está com status CANCELADO."""
-    return (status_analise or "").strip().upper() == STATUS_CANCELADO
+    return texto_seguro(status_analise).strip().upper() == STATUS_CANCELADO
 
 
 def is_pendente_reuniao(status_analise: str, revisao: int, meta: int = META_REVISAO_APROVACAO) -> bool:
@@ -577,7 +589,7 @@ def is_pendente_reuniao(status_analise: str, revisao: int, meta: int = META_REVI
     Um projeto é considerado "Pendente de Reunião" (gargalo crítico) quando
     está NÃO LIBERADO e já atingiu ou ultrapassou a meta de revisão (REV2).
     """
-    status = (status_analise or "").strip().upper()
+    status = texto_seguro(status_analise).strip().upper()
     try:
         rev = int(revisao)
     except (TypeError, ValueError):
@@ -589,7 +601,7 @@ def categoria_governanca(status_analise: str, revisao: int) -> str:
     """Retorna a categoria de governança de um registro para exibição no painel."""
     if is_pendente_reuniao(status_analise, revisao):
         return STATUS_PENDENTE_REUNIAO
-    return (status_analise or "").strip().upper() or "SEM STATUS"
+    return texto_seguro(status_analise).strip().upper() or "SEM STATUS"
 
 
 def filtrar_ativos(df: pd.DataFrame, coluna_status: str = "status_analise") -> pd.DataFrame:

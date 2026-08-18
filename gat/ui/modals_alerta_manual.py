@@ -18,6 +18,7 @@ from gat.database import (
     listar_usuarios,
     registrar_atividade,
 )
+from gat.normalizacao import inteiro_seguro
 
 
 def _idx(opcoes: list[str], valor: Any) -> int:
@@ -74,7 +75,7 @@ def dialog_alerta_manual(
             key=f"am_disciplina_{sufixo}",
         )
     with col5:
-        revisao = st.number_input("Revisão", min_value=0, step=1, value=int(_val("revisao", 0) or 0), key=f"am_revisao_{sufixo}")
+        revisao = st.number_input("Revisão", min_value=0, step=1, value=inteiro_seguro(_val("revisao", 0), 0), key=f"am_revisao_{sufixo}")
     with col6:
         especialista = st.selectbox(
             "Especialista responsável", ["—"] + RESPONSAVEIS,

@@ -20,6 +20,7 @@ from gat.business_rules import (
 from gat.config import COLUNAS_EXIBICAO_CESSIONARIOS, RESPONSAVEIS, STATUS_ANALISE_OPCOES, TIPO_CESSIONARIO_OPCOES
 from gat.database import listar_cessionarios, obter_cessionario, registrar_atividade
 from gat.export_projetos import gerar_csv_bytes, gerar_excel_bytes, montar_exportacao_cessionarios, nome_arquivo_exportacao
+from gat.normalizacao import calculo_seguro
 from gat.permissions import exigir_area, exigir_modulo, pode_area
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.formatos import formatar_datas_df
@@ -163,8 +164,11 @@ def render(usuario: dict) -> None:
         return
 
     if f_atraso:
-        df_filtrado["_dias_atraso_ordenacao"] = df_filtrado.apply(lambda r: -dias_restantes_prioridade(r, "cessionarios"), axis=1)
-        df_filtrado["_ordem_sla_reduzido"] = (~df_filtrado["sla_reduzido"].astype(bool)).astype(int)
+        dias_restantes = df_filtrado.apply(
+            lambda r: calculo_seguro(dias_restantes_prioridade, r, "cessionarios", contexto="dias_restantes_prioridade"), axis=1,
+        )
+        df_filtrado["_dias_atraso_ordenacao"] = -dias_restantes.fillna(0).astype(int)
+        df_filtrado["_ordem_sla_reduzido"] = (~df_filtrado["sla_reduzido"].fillna(False).astype(bool)).astype(int)
         df_filtrado = df_filtrado.sort_values(
             by=["_dias_atraso_ordenacao", "_ordem_sla_reduzido", "data_limite"], ascending=[False, True, True],
         ).drop(columns=["_dias_atraso_ordenacao", "_ordem_sla_reduzido"]).reset_index(drop=True)

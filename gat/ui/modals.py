@@ -36,6 +36,7 @@ from gat.config import (
     TIPO_CESSIONARIO_OPCOES,
 )
 from gat.horario import agora_br, hoje_br
+from gat.normalizacao import inteiro_seguro
 from gat.database import (
     atualizar_avaliacao,
     atualizar_cessionario,
@@ -56,6 +57,7 @@ from gat.database import (
 )
 from gat.resumo_conclusao import deve_disparar_popup_resumo
 from gat.ui.modals_resumo import renderizar_nucleo_resumo
+from gat.ui.pos_mutacao import atualizar_apos_mutacao
 
 
 def _parse_data(valor: Any) -> date | None:
@@ -216,7 +218,7 @@ def _calcular_campos_sla_persistidos(
         not editando
         or bool(registro.get("sla_reduzido")) != sla_reduzido
         or (registro.get("nivel_prioridade") if editando else None) != nivel_prioridade
-        or int(registro.get("sla_dias") or -1) != int(sla_efetivo)
+        or inteiro_seguro(registro.get("sla_dias"), -1) != int(sla_efetivo)
     )
     if mudou and prioritaria:
         sla_alterado_por, sla_alterado_em = usuario, agora_br().isoformat()
@@ -547,7 +549,7 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
         if nivel_prioridade == 1:
             dias_nivel1 = st.number_input(
                 "Dias úteis (Nível 1)", min_value=1, max_value=3, step=1,
-                value=int(registro.get("sla_dias") or 3) if editando and registro.get("nivel_prioridade") == 1 else 3,
+                value=inteiro_seguro(registro.get("sla_dias"), 3) if editando and registro.get("nivel_prioridade") == 1 else 3,
                 key=f"pr_diasnivel1_{sufixo}",
             )
     with col_p2:
@@ -561,7 +563,7 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
         if sla_reduzido:
             dias_reduzidos = st.number_input(
                 "Quantidade de dias úteis para entrega", min_value=1, step=1,
-                value=int(registro.get("sla_dias") or SLA_PRESTADORES_DIAS_UTEIS) if editando and registro.get("sla_reduzido") else SLA_PRESTADORES_DIAS_UTEIS,
+                value=inteiro_seguro(registro.get("sla_dias"), SLA_PRESTADORES_DIAS_UTEIS) if editando and registro.get("sla_reduzido") else SLA_PRESTADORES_DIAS_UTEIS,
                 key=f"pr_diasreduzidos_{sufixo}",
             )
 
@@ -748,7 +750,7 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
             st.session_state[chave_confirmacao_resumo] = pendencia_resumo
             _renderizar_confirmacao_resumo(pendencia_resumo, chave_confirmacao_resumo, usuario)
             return
-        st.rerun()
+        atualizar_apos_mutacao()
 
 
 # ---------------------------------------------------------------------------
@@ -860,7 +862,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
         if sla_reduzido:
             dias_reduzidos = st.number_input(
                 "Quantidade de dias úteis para entrega", min_value=1, step=1,
-                value=int(registro.get("sla_dias") or sla_padrao) if editando and registro.get("sla_reduzido") else sla_padrao,
+                value=inteiro_seguro(registro.get("sla_dias"), sla_padrao) if editando and registro.get("sla_reduzido") else sla_padrao,
                 key=f"ce_diasreduzidos_{sufixo}",
             )
     with col_p2:
@@ -1046,7 +1048,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
             st.session_state[chave_confirmacao_resumo] = pendencia_resumo
             _renderizar_confirmacao_resumo(pendencia_resumo, chave_confirmacao_resumo, usuario)
             return
-        st.rerun()
+        atualizar_apos_mutacao()
 
 
 # ---------------------------------------------------------------------------
@@ -1109,7 +1111,7 @@ def dialog_avaliacao(usuario: str, registro: dict[str, Any] | None = None) -> No
             inserir_avaliacao(dados, usuario)
             st.toast("Nova avaliação registrada com sucesso.", icon=":material/check_circle:")
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
-        st.rerun()
+        atualizar_apos_mutacao()
 
 
 def _idx(opcoes: list[str], valor: str | None) -> int:

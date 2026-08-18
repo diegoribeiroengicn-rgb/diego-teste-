@@ -17,6 +17,7 @@ from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, 
 from gat.calendario import calcular_hold_dias, dias_uteis_entre
 from gat.config import DISCIPLINAS, RESPONSAVEIS
 from gat.database import listar_avaliacoes_checklist, listar_cessionarios, listar_prestadores, listar_reunioes_do_projeto, registrar_atividade
+from gat.normalizacao import inteiro_ou_none, inteiro_seguro
 from gat.permissions import exigir_area, pode_modulo
 from gat.relatorio_prestador import gerar_relatorio_prestador, nome_arquivo_relatorio
 from gat.revisoes import calcular_intervalos_revisao, consolidado_por_entidade, projetos_por_entidade, situacao_sla_externo
@@ -65,7 +66,9 @@ def _sequencia_completa_projeto(modulo: str, coluna_nome: str, tipo_entidade: st
     for idx, revisao in df_grupo.iterrows():
         st.markdown(f"###### REV{int(revisao['revisao']):02d}")
         hold_dias = calcular_hold_dias(revisao.get("hold_inicio"), revisao.get("hold_fim"))
-        dias_analise_interna = int(revisao.get("dias_uteis_decorridos") or revisao.get("saldo_dias_uteis") or 0)
+        dias_analise_interna = inteiro_ou_none(revisao.get("dias_uteis_decorridos"))
+        if dias_analise_interna is None:
+            dias_analise_interna = inteiro_seguro(revisao.get("saldo_dias_uteis"), 0)
 
         _etapa("Postagem (Data de Solicitação)", revisao.get("data_solicitacao"), None, None)
         _etapa("Análise Tecnoplano (tempo de análise interna)", None, dias_analise_interna, revisao.get("responsavel"))

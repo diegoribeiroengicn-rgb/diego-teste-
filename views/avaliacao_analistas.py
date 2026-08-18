@@ -27,6 +27,7 @@ from gat.export_avaliacoes import (
     montar_backup_avaliacoes_analistas,
     nome_arquivo_backup,
 )
+from gat.normalizacao import inteiro_seguro
 from gat.permissions import exigir_area, pode_area
 from gat.relatorios_mensais import avaliacoes_obrigatorias_do_mes, produtividade_analistas
 from gat.ui.formatos import formatar_datahora_br
@@ -244,7 +245,7 @@ def _dialog_avaliacao(usuario: dict, registro: dict | None = None) -> None:
     cols = st.columns(2)
     for i, (chave, rotulo) in enumerate(CRITERIOS_AVALIACAO_ANALISTA):
         with cols[i % 2]:
-            valores[chave] = st.slider(rotulo, 1, 5, value=int(registro.get(chave) or 3) if editando else 3, key=f"aa_{chave}_{sufixo}")
+            valores[chave] = st.slider(rotulo, 1, 5, value=inteiro_seguro(registro.get(chave), 3) if editando else 3, key=f"aa_{chave}_{sufixo}")
 
     justificativa = st.text_area("Justificativa", value=registro.get("justificativa", "") if editando else "", key=f"aa_just_{sufixo}")
     observacoes = st.text_area("Observações complementares", value=registro.get("observacoes", "") if editando else "", key=f"aa_obs_{sufixo}")

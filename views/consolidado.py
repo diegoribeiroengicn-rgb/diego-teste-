@@ -1,4 +1,12 @@
-"""View: Painel Geral Consolidado (Dashboard GAT)."""
+"""View: Painel Geral Consolidado (Dashboard GAT).
+
+A ordem de apresentação é deliberadamente executiva: primeiro o panorama
+operacional (volume, distribuição, produção), só depois os prazos e
+atrasos — que ficam reunidos ao final, na seção "Acompanhamento de
+Prazos", com um tom visual gerencial (sem cartões vermelhos gigantes ou
+texto em caixa alta dominando a tela). Os atrasos continuam com os mesmos
+cálculos e todos os indicadores anteriores — mudou apenas a posição e a
+intensidade visual, nunca o conteúdo."""
 
 from __future__ import annotations
 
@@ -22,48 +30,48 @@ from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.kpi_cards import renderizar_kpis
 
 
-def _renderizar_kpis_atraso_consolidado(df_prest, df_cess) -> None:
+def _renderizar_acompanhamento_prazos(
+    df_prest, df_cess, total_atrasados: int, pendentes_reuniao: int, pct_no_prazo: float, base_aging, coluna_disp: str,
+) -> None:
+    """Seção final da Visão Geral — reúne todos os indicadores de prazo e
+    atraso já existentes (cálculos inalterados), com apresentação discreta
+    e gerencial em vez de destaque alarmista: cartões no mesmo padrão
+    visual das demais métricas da página, sem caixa alta nem blocos
+    vermelhos ocupando a largura inteira."""
     r1 = resumo_indicadores_atraso(df_prest, "prestadores")
     r2 = resumo_indicadores_atraso(df_cess, "cessionarios")
     total_ativos = r1["em_analise"] + r2["em_analise"]
     atrasados_em_analise = r1["atrasados_em_analise"] + r2["atrasados_em_analise"]
     pct = round((atrasados_em_analise / total_ativos) * 100, 1) if total_ativos else 0.0
 
-    st.markdown("##### Indicadores de Atraso (Consolidado)")
+    st.markdown("---")
+    st.markdown("#### Acompanhamento de Prazos")
+    st.caption("Situação de prazos e atrasos das análises ativas e concluídas — Prestadores e Cessionários.")
+
+    col_g1, col_g2 = st.columns(2)
+    with col_g1:
+        st.plotly_chart(gauge_sla(pct_no_prazo, "% Dentro do Prazo"), use_container_width=True)
+    with col_g2:
+        st.plotly_chart(grafico_aging(base_aging, coluna_disp), use_container_width=True)
+
+    renderizar_kpis([
+        ("Atrasados (Total)", str(total_atrasados), CORES["vermelho"]),
+        ("Pendente de Reunião", str(pendentes_reuniao), CORES["laranja"]),
+    ])
     renderizar_kpis([
         ("Em Análise", str(total_ativos), CORES["azul_2"]),
         ("Dentro do Prazo", str(r1["dentro_prazo"] + r2["dentro_prazo"]), CORES["verde"]),
         ("Próximos do Vencimento", str(r1["proximo_vencimento"] + r2["proximo_vencimento"]), CORES["dourado"]),
     ])
-    st.markdown(
-        f"""
-        <div style="border:2px solid {CORES['vermelho']};border-radius:10px;padding:14px 16px;background:#FEF2F2;">
-            <div style="font-size:0.8rem;color:#7F1D1D;font-weight:700;text-transform:uppercase;">
-                🟥 Atrasados em Análise — requer ação imediata
-            </div>
-            <div style="font-size:2.1rem;font-weight:800;color:{CORES['vermelho']};line-height:1.2;">
-                {atrasados_em_analise} <span style="font-size:1rem;font-weight:600;">
-                ({r1['atrasados_em_analise']} Prestadores · {r2['atrasados_em_analise']} Cessionários)</span>
-            </div>
-            <div style="font-size:0.8rem;color:#7F1D1D;">{pct}% dos projetos ativos</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
     renderizar_kpis([
+        ("Atrasados em Análise", str(atrasados_em_analise), CORES["vermelho"]),
         ("Concluídos no Prazo", str(r1["concluidos_no_prazo"] + r2["concluidos_no_prazo"]), CORES["verde"]),
         ("Concluídos com Atraso", str(r1["concluidos_com_atraso"] + r2["concluidos_com_atraso"]), CORES["laranja"]),
     ])
-    st.markdown(
-        f"""
-        <div style="border:1px solid {CORES['borda_forte']};border-radius:10px;padding:12px 16px;margin-top:4px;">
-            <div style="font-size:0.8rem;color:{CORES['texto_fraco']};font-weight:700;text-transform:uppercase;">
-                Total de Projetos Atrasados
-            </div>
-            <div style="font-size:1.7rem;font-weight:800;color:{CORES['texto']};">{r1['total_atrasados'] + r2['total_atrasados']}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    st.caption(
+        f"{pct}% dos projetos ativos estão atrasados em análise "
+        f"({r1['atrasados_em_analise']} Prestadores · {r2['atrasados_em_analise']} Cessionários). "
+        f"Total de projetos atrasados (ativos + concluídos com atraso): {r1['total_atrasados'] + r2['total_atrasados']}."
     )
 
 
@@ -109,37 +117,29 @@ def render(usuario: dict) -> None:
 
     sem_pep_prest = int((~df_prest["tem_pep"]).sum()) if not df_prest.empty else 0
 
-    _renderizar_kpis_atraso_consolidado(df_prest, df_cess)
-    st.markdown("---")
-
+    # --- Panorama operacional (primeira informação da página) ---------------
+    st.markdown("##### Panorama Operacional")
     renderizar_kpis([
         ("Projetos Ativos (Total)", str(total_geral), CORES["navy"]),
         ("Prestadores Ativos", str(total_prest), CORES["azul_2"]),
         ("Cessionários Ativos", str(total_cess), CORES["ceu"]),
-        ("Atrasados", str(total_atrasados), CORES["vermelho"]),
-        ("Pendente de Reunião", str(pendentes_reuniao), CORES["laranja"]),
     ])
-
     renderizar_kpis([
         ("Projetos sem PEP — Prestadores", str(sem_pep_prest), CORES["dourado"]),
     ])
 
+    # --- Produção e distribuição da demanda ---------------------------------
     st.markdown("####")
-    col_g1, col_g2 = st.columns([2, 1])
+    st.markdown("##### Produção e Distribuição")
+    col_g1, col_g2 = st.columns(2)
     with col_g1:
-        st.plotly_chart(grafico_evolucao_mensal(df_prest, df_cess), use_container_width=True)
-    with col_g2:
-        st.plotly_chart(gauge_sla(pct_no_prazo, "% Dentro do Prazo"), use_container_width=True)
-
-    col_g3, col_g4 = st.columns(2)
-    with col_g3:
         df_consolidado_status = pd.concat(
             [df_prest[["status_analise"]] if not df_prest.empty else pd.DataFrame(columns=["status_analise"]),
              df_cess[["status_analise"]] if not df_cess.empty else pd.DataFrame(columns=["status_analise"])],
             ignore_index=True,
         )
         st.plotly_chart(grafico_status_donut(df_consolidado_status, "status_analise", "Distribuição por Status de Análise"), use_container_width=True)
-    with col_g4:
+    with col_g2:
         df_consolidado_resp = pd.concat(
             [df_prest[["responsavel"]] if not df_prest.empty else pd.DataFrame(columns=["responsavel"]),
              df_cess[["responsavel"]] if not df_cess.empty else pd.DataFrame(columns=["responsavel"])],
@@ -147,19 +147,16 @@ def render(usuario: dict) -> None:
         )
         st.plotly_chart(grafico_top_responsaveis(df_consolidado_resp), use_container_width=True)
 
-    col_g5, col_g6 = st.columns(2)
-    with col_g5:
+    col_g3, col_g4 = st.columns([2, 1])
+    with col_g3:
+        st.plotly_chart(grafico_evolucao_mensal(df_prest, df_cess), use_container_width=True)
+    with col_g4:
         df_consolidado_disc = pd.concat(
             [df_prest[["disciplina"]] if not df_prest.empty else pd.DataFrame(columns=["disciplina"]),
              df_cess[["disciplina"]] if not df_cess.empty else pd.DataFrame(columns=["disciplina"])],
             ignore_index=True,
         )
         st.plotly_chart(grafico_disciplina(df_consolidado_disc), use_container_width=True)
-    with col_g6:
-        coluna_dias = "dias_uteis_decorridos" if not df_prest.empty else "saldo_dias_uteis"
-        base_aging = df_prest if not df_prest.empty else df_cess
-        coluna_disp = "dias_uteis_decorridos" if "dias_uteis_decorridos" in base_aging.columns else "saldo_dias_uteis"
-        st.plotly_chart(grafico_aging(base_aging, coluna_disp), use_container_width=True)
 
     st.markdown("#### Resumo Sintético")
     tab1, tab2 = st.tabs(["Prestadores", "Cessionários"])
@@ -183,6 +180,11 @@ def render(usuario: dict) -> None:
                 pendentes_reuniao=("pendente_reuniao", "sum"),
             ).reset_index()
             st.dataframe(resumo, use_container_width=True, hide_index=True)
+
+    # --- Prazos e atrasos (última seção, tom gerencial) ---------------------
+    base_aging = df_prest if not df_prest.empty else df_cess
+    coluna_disp = "dias_uteis_decorridos" if "dias_uteis_decorridos" in base_aging.columns else "saldo_dias_uteis"
+    _renderizar_acompanhamento_prazos(df_prest, df_cess, total_atrasados, pendentes_reuniao, pct_no_prazo, base_aging, coluna_disp)
 
     if pode_area(usuario, "consolidado.exportar"):
         st.markdown("---")

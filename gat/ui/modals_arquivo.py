@@ -11,6 +11,7 @@ import streamlit as st
 
 from gat.arquivo_business_rules import TEXTO_CONFIRMACAO_1, TEXTO_CONFIRMACAO_2
 from gat.arquivo_database import arquivar_projeto_gat, arquivar_registro, excluir_definitivamente, restaurar_registro
+from gat.ui.pos_mutacao import atualizar_apos_mutacao
 
 
 @st.dialog("Arquivar registro")
@@ -27,7 +28,7 @@ def dialog_arquivar(tabela: str, registro_id: int, descricao: str, usuario: str,
         st.success("Registro arquivado.", icon=":material/check_circle:")
         if ao_concluir:
             ao_concluir()
-        st.rerun()
+        atualizar_apos_mutacao()
 
 
 @st.dialog("Arquivar projeto GAT")
@@ -44,7 +45,7 @@ def dialog_arquivar_projeto_gat(codigo: str, usuario: str, ao_concluir: Callable
         st.success(f"Projeto {codigo} arquivado ({qtd} análise(s)).", icon=":material/check_circle:")
         if ao_concluir:
             ao_concluir()
-        st.rerun()
+        atualizar_apos_mutacao()
 
 
 @st.dialog("Restaurar registro")
@@ -55,7 +56,7 @@ def dialog_restaurar(tabela: str, registro_id: int, descricao: str, usuario: str
     if st.button("Confirmar restauração", icon=":material/restore:", type="primary", key=f"arquivo_restaurar_confirmar_{tabela}_{registro_id}"):
         restaurar_registro(tabela, registro_id, usuario, justificativa=justificativa.strip() or None)
         st.success("Registro restaurado.", icon=":material/check_circle:")
-        st.rerun()
+        atualizar_apos_mutacao()
 
 
 def _avancar_exclusao(tabela: str, registro_id: int) -> None:
@@ -92,4 +93,4 @@ def dialog_excluir_definitivamente(tabela: str, registro_id: int, descricao: str
                 excluir_definitivamente(tabela, registro_id, usuario, justificativa.strip())
                 st.session_state.pop(chave_etapa, None)
                 st.success("Registro excluído definitivamente.", icon=":material/check_circle:")
-                st.rerun()
+                atualizar_apos_mutacao()

@@ -18,6 +18,7 @@ from gat.business_rules import classificacao_atraso, dias_restantes_prioridade, 
 from gat.config import COLUNAS_EXIBICAO_CESSIONARIOS, COLUNAS_EXIBICAO_PRESTADORES
 from gat.database import listar_cadastro_cessionarios, listar_obras_prestador
 from gat.horario import agora_br
+from gat.normalizacao import calculo_seguro
 
 COLUNA_TIPO_PROJETO = "Tipo de Projeto"
 
@@ -56,8 +57,15 @@ def _acrescentar_indicadores_atraso(df: pd.DataFrame, modulo: str) -> pd.DataFra
     if df.empty or "status_entrega_calc" not in df.columns:
         return df
     df = df.copy()
-    classificacoes = df.apply(lambda r: classificacao_atraso(r.get("status_analise"), r.get("status_entrega_calc")), axis=1)
-    dias_restantes = df.apply(lambda r: dias_restantes_prioridade(r, modulo), axis=1)
+    classificacoes = df.apply(
+        lambda r: calculo_seguro(
+            classificacao_atraso, r.get("status_analise"), r.get("status_entrega_calc"), contexto="classificacao_atraso",
+        ),
+        axis=1,
+    )
+    dias_restantes = df.apply(
+        lambda r: calculo_seguro(dias_restantes_prioridade, r, modulo, contexto="dias_restantes_prioridade"), axis=1,
+    )
     df["_classificacao_atraso_label"] = classificacoes.map(_LABEL_CLASSIFICACAO_ATRASO)
     df["_dias_atraso"] = dias_restantes.apply(lambda d: max(-int(d), 0) if pd.notna(d) else 0)
     df["_nivel_alerta_atraso"] = dias_restantes.apply(nivel_alerta_atraso)

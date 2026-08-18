@@ -22,6 +22,7 @@ from datetime import date
 import pandas as pd
 
 from gat.business_rules import STATUS_CONCLUIDO_ENTREGA, dias_restantes_prioridade
+from gat.normalizacao import calculo_seguro
 
 CLASSIFICACAO_ANTES_PRAZO = "ANTES_DO_PRAZO"
 CLASSIFICACAO_NO_DIA = "NO_DIA"
@@ -40,8 +41,11 @@ def _classificar_entrega_prazo(data_limite, data_analise) -> str | None:
     (com data efetiva de entrega registrada)."""
     if pd.isna(data_limite) or pd.isna(data_analise):
         return None
-    d_lim = pd.to_datetime(data_limite).date()
-    d_ana = pd.to_datetime(data_analise).date()
+    d_lim = pd.to_datetime(data_limite, errors="coerce")
+    d_ana = pd.to_datetime(data_analise, errors="coerce")
+    if pd.isna(d_lim) or pd.isna(d_ana):
+        return None
+    d_lim, d_ana = d_lim.date(), d_ana.date()
     if d_ana < d_lim:
         return CLASSIFICACAO_ANTES_PRAZO
     if d_ana == d_lim:
@@ -56,8 +60,11 @@ def _dias_uteis_diferenca(data_limite, data_analise) -> float | None:
 
     if pd.isna(data_limite) or pd.isna(data_analise):
         return None
-    d_lim = pd.to_datetime(data_limite).date()
-    d_ana = pd.to_datetime(data_analise).date()
+    d_lim = pd.to_datetime(data_limite, errors="coerce")
+    d_ana = pd.to_datetime(data_analise, errors="coerce")
+    if pd.isna(d_lim) or pd.isna(d_ana):
+        return None
+    d_lim, d_ana = d_lim.date(), d_ana.date()
     if d_ana == d_lim:
         return 0
     dias = dias_uteis_entre(d_lim, d_ana)
@@ -79,7 +86,9 @@ def preparar_base_prazo(df: pd.DataFrame, modulo: str) -> pd.DataFrame:
         lambda r: _dias_uteis_diferenca(r.get("data_limite"), r.get("data_analise")), axis=1
     )
     status_final = df["status_analise"].astype(str).str.strip().str.upper().isin(STATUS_CONCLUIDO_ENTREGA)
-    dias_restantes = df.apply(lambda r: dias_restantes_prioridade(r, modulo), axis=1)
+    dias_restantes = df.apply(
+        lambda r: calculo_seguro(dias_restantes_prioridade, r, modulo, contexto="dias_restantes_prioridade"), axis=1,
+    )
     df["_dias_restantes"] = dias_restantes
     df["_ativa_atrasada"] = (~status_final) & dias_restantes.apply(lambda d: d is not None and d < 0)
     df["_vence_2_dias"] = (~status_final) & dias_restantes.apply(lambda d: d is not None and 0 <= d <= 2)

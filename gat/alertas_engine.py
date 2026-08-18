@@ -36,6 +36,7 @@ from gat.business_rules import (
     nivel_alerta_atraso,
 )
 from gat.database import listar_avaliacao_obrigatoria_isentos, listar_avaliacoes_checklist, listar_radar
+from gat.normalizacao import inteiro_seguro, logger
 from gat.revisoes import calcular_intervalos_revisao
 
 _COLUNAS_RADAR = ["status", "providencia", "responsavel_tratamento", "data_tratamento", "justificativa", "observacao", "adiado_para"]
@@ -108,50 +109,54 @@ def montar_alertas_modulo(df: pd.DataFrame, modulo: str, coluna_nome: str, colun
 
     registros = []
     for _, row in df.iterrows():
-        codigo = row.get(coluna_codigo) or row.get(coluna_nome)
-        chave_entidade = (codigo, row.get("disciplina") or "")
-        base = {
-            "modulo": modulo, "projeto_id": int(row["id"]), "nome": row.get(coluna_nome),
-            "codigo": row.get(coluna_codigo), "disciplina": row.get("disciplina"),
-            "num_at": row.get("num_at"), "revisao": row.get("revisao"), "responsavel": row.get("responsavel"),
-            "item": row.get("item"), "data_analise": row.get("data_analise"),
-        }
-        if row.get("pendente_reuniao"):
-            registros.append({**base, "tipo_alerta": TIPO_PENDENTE_REUNIAO, "detalhe": None})
-        if row.get("status_entrega_calc") == "ATRASADO":
-            registros.append({**base, "tipo_alerta": TIPO_ATRASO_ANALISE, "detalhe": None})
-        if classificacao_atraso(row.get("status_analise"), row.get("status_entrega_calc")) == "ATIVO_ATRASADO":
-            dias_restantes_atraso = dias_restantes_prioridade(row, modulo)
-            if nivel_alerta_atraso(dias_restantes_atraso) == "ALERTA_MAXIMO":
-                dias_atraso = int(-dias_restantes_atraso) if dias_restantes_atraso is not None else None
-                registros.append({
-                    **base, "tipo_alerta": TIPO_ALERTA_MAXIMO,
-                    "detalhe": (
-                        f"ATENÇÃO: esta análise está com mais de 2 dias úteis de atraso ({dias_atraso} dia(s) útil(eis)) "
-                        "e exige atuação imediata."
-                    ),
-                })
-        if chave_entidade in criticos:
-            registros.append({**base, "tipo_alerta": TIPO_AVALIACAO_CRITICA, "detalhe": None})
-        if (
-            rev1_concluida(row.get("revisao"), row.get("data_analise"))
-            and chave_entidade not in avaliados
-            and int(row["id"]) not in isentos
-        ):
-            rotulo_avaliacao = "avaliação de prestador" if tipo_entidade == "PRESTADOR" else "avaliação do projetista do cessionário"
-            registros.append({
-                **base, "tipo_alerta": TIPO_AVALIACAO_OBRIGATORIA,
-                "detalhe": f"Existe uma {rotulo_avaliacao} pendente para a AT {row.get('num_at') or '—'}.",
-            })
-        if em_lista_prioridades(row):
-            dias_restantes = dias_restantes_prioridade(row, modulo)
-            if dias_restantes is not None:
-                limite5, limite3, limite1 = limites_alerta_vencimento(int(row.get("sla_dias") or 10))
-                if dias_restantes <= limite5:
+        try:
+            codigo = row.get(coluna_codigo) or row.get(coluna_nome)
+            chave_entidade = (codigo, row.get("disciplina") or "")
+            base = {
+                "modulo": modulo, "projeto_id": int(row["id"]), "nome": row.get(coluna_nome),
+                "codigo": row.get(coluna_codigo), "disciplina": row.get("disciplina"),
+                "num_at": row.get("num_at"), "revisao": row.get("revisao"), "responsavel": row.get("responsavel"),
+                "item": row.get("item"), "data_analise": row.get("data_analise"),
+            }
+            if row.get("pendente_reuniao"):
+                registros.append({**base, "tipo_alerta": TIPO_PENDENTE_REUNIAO, "detalhe": None})
+            if row.get("status_entrega_calc") == "ATRASADO":
+                registros.append({**base, "tipo_alerta": TIPO_ATRASO_ANALISE, "detalhe": None})
+            if classificacao_atraso(row.get("status_analise"), row.get("status_entrega_calc")) == "ATIVO_ATRASADO":
+                dias_restantes_atraso = dias_restantes_prioridade(row, modulo)
+                if nivel_alerta_atraso(dias_restantes_atraso) == "ALERTA_MAXIMO":
+                    dias_atraso = int(-dias_restantes_atraso) if dias_restantes_atraso is not None else None
                     registros.append({
-                        **base, "tipo_alerta": TIPO_PRAZO_PRIORITARIO,
-                        "detalhe": f"Prazo prioritário: restam {dias_restantes} dia(s) útil(eis) (limites de alerta: {limite5}/{limite3}/{limite1}).",
+                        **base, "tipo_alerta": TIPO_ALERTA_MAXIMO,
+                        "detalhe": (
+                            f"ATENÇÃO: esta análise está com mais de 2 dias úteis de atraso ({dias_atraso} dia(s) útil(eis)) "
+                            "e exige atuação imediata."
+                        ),
                     })
+            if chave_entidade in criticos:
+                registros.append({**base, "tipo_alerta": TIPO_AVALIACAO_CRITICA, "detalhe": None})
+            if (
+                rev1_concluida(row.get("revisao"), row.get("data_analise"))
+                and chave_entidade not in avaliados
+                and int(row["id"]) not in isentos
+            ):
+                rotulo_avaliacao = "avaliação de prestador" if tipo_entidade == "PRESTADOR" else "avaliação do projetista do cessionário"
+                registros.append({
+                    **base, "tipo_alerta": TIPO_AVALIACAO_OBRIGATORIA,
+                    "detalhe": f"Existe uma {rotulo_avaliacao} pendente para a AT {row.get('num_at') or '—'}.",
+                })
+            if em_lista_prioridades(row):
+                dias_restantes = dias_restantes_prioridade(row, modulo)
+                if dias_restantes is not None:
+                    limite5, limite3, limite1 = limites_alerta_vencimento(inteiro_seguro(row.get("sla_dias"), 10))
+                    if dias_restantes <= limite5:
+                        registros.append({
+                            **base, "tipo_alerta": TIPO_PRAZO_PRIORITARIO,
+                            "detalhe": f"Prazo prioritário: restam {dias_restantes} dia(s) útil(eis) (limites de alerta: {limite5}/{limite3}/{limite1}).",
+                        })
+        except (ValueError, TypeError, OverflowError, KeyError, AttributeError) as exc:
+            logger.warning("montar_alertas_modulo: registro id=%r ignorado (%s)", row.get("id"), exc)
+            continue
 
     intervalos = calcular_intervalos_revisao(df, coluna_nome, coluna_codigo)
     if not intervalos.empty:

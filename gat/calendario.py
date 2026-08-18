@@ -8,6 +8,7 @@ utilizadas na planilha original "Controle_GAT_Projetos_2026.xlsm"
 from datetime import date, datetime, timedelta
 
 import numpy as np
+import pandas as pd
 
 from gat.horario import hoje_br
 
@@ -42,7 +43,17 @@ _FERIADOS_NP = np.array(FERIADOS_RJ, dtype="datetime64[D]")
 
 
 def _to_date(valor) -> date | None:
-    """Normaliza datetime/date/str/None para `date`."""
+    """Normaliza datetime/date/str/None para `date`, tolerando também
+    `NaN`/`NaT` (o `pandas.NaT` é reconhecido pelo Python como instância de
+    `datetime`/`date`, então precisa ser descartado antes dos `isinstance`
+    abaixo) e strings vazias, malformadas ou legadas ("nan", "None") —
+    nunca levanta exceção, apenas retorna `None` quando o valor não é uma
+    data válida."""
+    try:
+        if pd.isna(valor):
+            return None
+    except (TypeError, ValueError):
+        pass
     if valor is None or valor == "":
         return None
     if isinstance(valor, datetime):
@@ -50,7 +61,10 @@ def _to_date(valor) -> date | None:
     if isinstance(valor, date):
         return valor
     if isinstance(valor, str):
-        return datetime.fromisoformat(valor).date()
+        try:
+            return datetime.fromisoformat(valor).date()
+        except ValueError:
+            return None
     return None
 
 
@@ -146,7 +160,10 @@ def saldo_dias_uteis(data_solicitacao, sla_dias_uteis: int, data_analise=None, h
 
 
 def calcular_hold_dias(hold_inicio, hold_fim) -> int:
-    """Calcula os dias úteis em hold (suspensão da análise)."""
-    if not hold_inicio or not hold_fim:
+    """Calcula os dias úteis em hold (suspensão da análise). Usa `_to_date`
+    (via `dias_uteis_entre`) para decidir ausência de data — evitar checar
+    `not hold_inicio`/`not hold_fim` diretamente, porque `NaN` (float) é
+    truthy em Python e não seria pego por essa negação."""
+    if _to_date(hold_inicio) is None or _to_date(hold_fim) is None:
         return 0
     return max(dias_uteis_entre(hold_inicio, hold_fim), 0)

@@ -26,6 +26,7 @@ from gat.database import (
     registrar_atividade,
 )
 from gat.horario import hoje_br
+from gat.normalizacao import inteiro_seguro
 
 
 def _idx(opcoes: list[str], valor: Any) -> int:
@@ -75,7 +76,7 @@ def dialog_avaliacao_checklist(
         )
         revisao = st.number_input(
             "Revisão avaliada", min_value=0, step=1,
-            value=int(registro.get("revisao") or 1) if editando else int(prefill.get("revisao") or 1),
+            value=inteiro_seguro(registro.get("revisao"), 1) if editando else inteiro_seguro(prefill.get("revisao"), 1),
             key=f"av_rev_{sufixo}",
         )
         analista_responsavel = st.selectbox(
