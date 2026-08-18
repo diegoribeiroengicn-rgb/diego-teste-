@@ -35,8 +35,9 @@ from gat.business_rules import (
     limites_alerta_vencimento,
     nivel_alerta_atraso,
 )
+from gat.calendario import dias_uteis_hold_aberto
 from gat.database import listar_avaliacao_obrigatoria_isentos, listar_avaliacoes_checklist, listar_radar
-from gat.normalizacao import inteiro_seguro, logger
+from gat.normalizacao import booleano_seguro, inteiro_seguro, logger
 from gat.revisoes import calcular_intervalos_revisao
 
 _COLUNAS_RADAR = ["status", "providencia", "responsavel_tratamento", "data_tratamento", "justificativa", "observacao", "adiado_para"]
@@ -48,6 +49,7 @@ TIPO_ATRASO_REENVIO = "ATRASO_REENVIO"
 TIPO_AVALIACAO_OBRIGATORIA = "AVALIACAO_OBRIGATORIA"
 TIPO_PRAZO_PRIORITARIO = "PRAZO_PRIORITARIO"
 TIPO_ALERTA_MAXIMO = "ALERTA_MAXIMO"
+TIPO_ACOMPANHAMENTO_HOLD = "ACOMPANHAMENTO_HOLD"
 
 TIPO_ALERTA_LABELS = {
     TIPO_PENDENTE_REUNIAO: "Revisão ≥ REV2 sem liberação",
@@ -57,7 +59,12 @@ TIPO_ALERTA_LABELS = {
     TIPO_AVALIACAO_OBRIGATORIA: "Avaliação obrigatória pendente",
     TIPO_PRAZO_PRIORITARIO: "Prazo prioritário próximo do vencimento",
     TIPO_ALERTA_MAXIMO: "Alerta Máximo — mais de 2 dias úteis de atraso",
+    TIPO_ACOMPANHAMENTO_HOLD: "Acompanhamento de HOLD (3+ dias úteis)",
 }
+
+# HOLD não é atraso: o limiar é tratado à parte dos demais alertas de
+# prazo, sem herdar o tom visual/urgência dos alertas de atraso.
+LIMIAR_DIAS_UTEIS_ACOMPANHAMENTO_HOLD = 3
 
 
 def _classificacoes_criticas(avaliacoes: pd.DataFrame) -> set[tuple[str, str]]:
@@ -95,6 +102,38 @@ def rev1_concluida(revisao, data_analise) -> bool:
     return bool(data_analise) and pd.notna(data_analise)
 
 
+_STATUS_RADAR_ATIVOS = {"PENDENTE", "EM_TRATAMENTO", "REABERTO"}
+
+
+def contar_hold_aguardando_acompanhamento(df: pd.DataFrame, modulo: str) -> int:
+    """
+    Quantos projetos em HOLD (ver `gat.calendario.em_hold`) já atingiram
+    os 3 dias úteis de acompanhamento e cujo alerta correspondente ainda
+    está ativo (nunca tratado, ou reaberto) — usado na informação
+    secundária discreta do card "Projetos em HOLD" da Página Inicial
+    (item 15: "N aguardando acompanhamento").
+    """
+    if df.empty or "em_hold" not in df.columns:
+        return 0
+    candidatos = df[df["em_hold"].fillna(False).astype(bool)]
+    if candidatos.empty:
+        return 0
+
+    radar = listar_radar()
+    status_por_projeto: dict[int, str] = {}
+    if not radar.empty:
+        relevantes = radar[(radar["modulo"] == modulo) & (radar["tipo_alerta"] == TIPO_ACOMPANHAMENTO_HOLD)]
+        status_por_projeto = dict(zip(relevantes["projeto_id"], relevantes["status"]))
+
+    total = 0
+    for _, row in candidatos.iterrows():
+        if dias_uteis_hold_aberto(row.get("hold_inicio")) < LIMIAR_DIAS_UTEIS_ACOMPANHAMENTO_HOLD:
+            continue
+        if status_por_projeto.get(row.get("id"), "PENDENTE") in _STATUS_RADAR_ATIVOS:
+            total += 1
+    return total
+
+
 def montar_alertas_modulo(df: pd.DataFrame, modulo: str, coluna_nome: str, coluna_codigo: str = "codigo") -> pd.DataFrame:
     """Retorna uma linha por alerta (um projeto pode gerar mais de um alerta,
     um por critério atendido), já com o status atual do ciclo de vida."""
@@ -120,9 +159,10 @@ def montar_alertas_modulo(df: pd.DataFrame, modulo: str, coluna_nome: str, colun
             }
             if row.get("pendente_reuniao"):
                 registros.append({**base, "tipo_alerta": TIPO_PENDENTE_REUNIAO, "detalhe": None})
-            if row.get("status_entrega_calc") == "ATRASADO":
+            em_hold_atual = booleano_seguro(row.get("em_hold"))
+            if row.get("status_entrega_calc") == "ATRASADO" and not em_hold_atual:
                 registros.append({**base, "tipo_alerta": TIPO_ATRASO_ANALISE, "detalhe": None})
-            if classificacao_atraso(row.get("status_analise"), row.get("status_entrega_calc")) == "ATIVO_ATRASADO":
+            if classificacao_atraso(row.get("status_analise"), row.get("status_entrega_calc"), em_hold=em_hold_atual) == "ATIVO_ATRASADO":
                 dias_restantes_atraso = dias_restantes_prioridade(row, modulo)
                 if nivel_alerta_atraso(dias_restantes_atraso) == "ALERTA_MAXIMO":
                     dias_atraso = int(-dias_restantes_atraso) if dias_restantes_atraso is not None else None
@@ -154,6 +194,13 @@ def montar_alertas_modulo(df: pd.DataFrame, modulo: str, coluna_nome: str, colun
                             **base, "tipo_alerta": TIPO_PRAZO_PRIORITARIO,
                             "detalhe": f"Prazo prioritário: restam {dias_restantes} dia(s) útil(eis) (limites de alerta: {limite5}/{limite3}/{limite1}).",
                         })
+            if em_hold_atual:
+                dias_hold = dias_uteis_hold_aberto(row.get("hold_inicio"))
+                if dias_hold >= LIMIAR_DIAS_UTEIS_ACOMPANHAMENTO_HOLD:
+                    registros.append({
+                        **base, "tipo_alerta": TIPO_ACOMPANHAMENTO_HOLD,
+                        "detalhe": f"Em HOLD há {dias_hold} dia(s) útil(eis) — acompanhamento com o especialista recomendado.",
+                    })
         except (ValueError, TypeError, OverflowError, KeyError, AttributeError) as exc:
             logger.warning("montar_alertas_modulo: registro id=%r ignorado (%s)", row.get("id"), exc)
             continue

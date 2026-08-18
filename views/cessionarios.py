@@ -20,7 +20,7 @@ from gat.business_rules import (
 from gat.config import COLUNAS_EXIBICAO_CESSIONARIOS, RESPONSAVEIS, STATUS_ANALISE_OPCOES, TIPO_CESSIONARIO_OPCOES
 from gat.database import listar_cessionarios, obter_cessionario, registrar_atividade
 from gat.export_projetos import gerar_csv_bytes, gerar_excel_bytes, montar_exportacao_cessionarios, nome_arquivo_exportacao
-from gat.normalizacao import calculo_seguro
+from gat.normalizacao import booleano_seguro, calculo_seguro
 from gat.permissions import exigir_area, exigir_modulo, pode_area
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.formatos import formatar_datas_df
@@ -54,7 +54,9 @@ def _rotulo_situacao_prazo(dias_restantes, revisao) -> str:
     return rotulo
 
 
-def _rotulo_nivel_alerta_atraso(status_analise, status_entrega_calc, dias_restantes) -> str:
+def _rotulo_nivel_alerta_atraso(status_analise, status_entrega_calc, dias_restantes, em_hold=False) -> str:
+    if booleano_seguro(em_hold):
+        return "Em HOLD"
     classificacao = classificacao_atraso(status_analise, status_entrega_calc)
     if classificacao == "CONCLUIDO_COM_ATRASO":
         return "🟠 Concluído com atraso"
@@ -153,7 +155,10 @@ def render(usuario: dict) -> None:
 
     if f_atraso:
         mascara_atrasado = df_filtrado.apply(
-            lambda r: classificacao_atraso(r.get("status_analise"), r.get("status_entrega_calc")) == "ATIVO_ATRASADO", axis=1,
+            lambda r: classificacao_atraso(
+                r.get("status_analise"), r.get("status_entrega_calc"), em_hold=booleano_seguro(r.get("em_hold")),
+            ) == "ATIVO_ATRASADO",
+            axis=1,
         )
         df_filtrado = df_filtrado[mascara_atrasado]
 
@@ -184,7 +189,7 @@ def render(usuario: dict) -> None:
         lambda r: _rotulo_situacao_prazo(r["saldo_dias_uteis"], r.get("revisao")), axis=1
     )
     df_filtrado["Nível de Atraso"] = df_filtrado.apply(
-        lambda r: _rotulo_nivel_alerta_atraso(r.get("status_analise"), r.get("status_entrega_calc"), r.get("saldo_dias_uteis")), axis=1
+        lambda r: _rotulo_nivel_alerta_atraso(r.get("status_analise"), r.get("status_entrega_calc"), r.get("saldo_dias_uteis"), r.get("em_hold")), axis=1
     )
 
     colunas = list(COLUNAS_EXIBICAO_CESSIONARIOS.keys())

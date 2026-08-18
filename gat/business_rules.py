@@ -141,14 +141,18 @@ def calcular_sla_efetivo(sla_padrao: int, sla_reduzido: bool, dias_reduzidos: in
     return sla_padrao
 
 
-def status_entrega_prestador(data_solicitacao, data_analise, hold_dias: int, sla_dias: int = SLA_PRESTADORES_DIAS_UTEIS) -> tuple[str, int]:
+def status_entrega_prestador(
+    data_solicitacao, data_analise, hold_dias: int, sla_dias: int = SLA_PRESTADORES_DIAS_UTEIS, hold_aberto_desde=None,
+) -> tuple[str, int]:
     """
     Calcula os dias úteis decorridos e o status de entrega de uma análise
     de prestador, comparando com o SLA em vigor (10 dias úteis por
     padrão, ou o SLA reduzido/de prioridade quando aplicável — ver
-    `calcular_sla_efetivo`).
+    `calcular_sla_efetivo`). `hold_aberto_desde` congela o relógio de dias
+    decorridos enquanto o projeto estiver em HOLD aberto (ver
+    `gat.calendario.dias_uteis_decorridos`).
     """
-    decorridos = dias_uteis_decorridos(data_solicitacao, data_analise, hold_dias)
+    decorridos = dias_uteis_decorridos(data_solicitacao, data_analise, hold_dias, hold_aberto_desde)
     if decorridos < sla_dias:
         status = "ANTES DO PRAZO"
     elif decorridos == sla_dias:
@@ -158,13 +162,16 @@ def status_entrega_prestador(data_solicitacao, data_analise, hold_dias: int, sla
     return status, decorridos
 
 
-def status_entrega_cessionario(data_solicitacao, data_analise, hold_dias: int, sla_dias: int) -> tuple[str, int]:
+def status_entrega_cessionario(
+    data_solicitacao, data_analise, hold_dias: int, sla_dias: int, hold_aberto_desde=None,
+) -> tuple[str, int]:
     """
     Calcula o saldo de dias úteis e o status de entrega de uma análise de
     cessionário, comparando o saldo com o SLA correspondente ao tipo de
-    operação/revisão.
+    operação/revisão. `hold_aberto_desde` congela o relógio enquanto o
+    projeto estiver em HOLD aberto (ver `status_entrega_prestador`).
     """
-    saldo = saldo_dias_uteis(data_solicitacao, sla_dias, data_analise, hold_dias)
+    saldo = saldo_dias_uteis(data_solicitacao, sla_dias, data_analise, hold_dias, hold_aberto_desde)
     if saldo > 0:
         status = "ANTES DO PRAZO"
     elif saldo == 0:
@@ -420,7 +427,7 @@ def nivel_alerta_atraso(dias_restantes: int | None) -> str:
     return "DENTRO_DO_PRAZO"
 
 
-def classificacao_atraso(status_analise: str | None, status_entrega_calc: str | None) -> str:
+def classificacao_atraso(status_analise: str | None, status_entrega_calc: str | None, em_hold: bool = False) -> str:
     """
     Classifica um projeto em uma das 4 categorias do indicador de atraso
     (itens 2/3 da modificação): ATIVO_ATRASADO e ATIVO_OK cobrem análises
@@ -431,9 +438,14 @@ def classificacao_atraso(status_analise: str | None, status_entrega_calc: str | 
     data de análise (fixa), não sobre a data de hoje. Obsoleto e
     Cancelado ficam fora da contagem de atrasos (não representam uma
     entrega real), assim como já ocorre com Cancelado em `filtrar_ativos`.
+
+    `em_hold=True` (projeto atualmente em HOLD aberto — ver
+    `gat.calendario.em_hold`) nunca é classificado como atrasado: HOLD
+    pausa o SLA, então HOLD ativo e ATRASADO ativo são mutuamente
+    exclusivos nos indicadores/cards operacionais.
     """
     status = texto_seguro(status_analise).strip().upper()
-    atrasado = status_entrega_calc == "ATRASADO"
+    atrasado = status_entrega_calc == "ATRASADO" and not em_hold
     if status in STATUS_ATIVO_ANALISE:
         return "ATIVO_ATRASADO" if atrasado else "ATIVO_OK"
     if status in STATUS_CONCLUIDO_ENTREGA:
@@ -459,7 +471,8 @@ def resumo_indicadores_atraso(df: pd.DataFrame, modulo: str) -> dict[str, Any]:
     coluna_nome = "prestador" if modulo == "prestadores" else "cessionario"
     classificacoes = df.apply(
         lambda r: calculo_seguro(
-            classificacao_atraso, r.get("status_analise"), r.get("status_entrega_calc"), contexto="classificacao_atraso",
+            classificacao_atraso, r.get("status_analise"), r.get("status_entrega_calc"),
+            em_hold=booleano_seguro(r.get("em_hold")), contexto="classificacao_atraso",
         ),
         axis=1,
     )
@@ -499,7 +512,7 @@ def montar_lista_atrasados(df: pd.DataFrame, modulo: str, coluna_nome: str) -> p
     linhas = []
     for _, row in df.iterrows():
         try:
-            classificacao = classificacao_atraso(row.get("status_analise"), row.get("status_entrega_calc"))
+            classificacao = classificacao_atraso(row.get("status_analise"), row.get("status_entrega_calc"), em_hold=booleano_seguro(row.get("em_hold")))
             if classificacao != "ATIVO_ATRASADO":
                 continue
             dias_restantes = dias_restantes_prioridade(row, modulo)
@@ -635,23 +648,28 @@ def adicionar_flags_governanca(df: pd.DataFrame, coluna_status: str = "status_an
 def enriquecer_prestadores(df: pd.DataFrame) -> pd.DataFrame:
     """
     Adiciona ao DataFrame de prestadores as colunas calculadas
-    dinamicamente: `hold_dias`, `dias_uteis_decorridos` (Coluna L) e
-    `status_entrega_calc`, além das flags de governança.
+    dinamicamente: `hold_dias`, `em_hold`, `dias_uteis_decorridos`
+    (Coluna L) e `status_entrega_calc`, além das flags de governança.
     """
-    from gat.calendario import calcular_hold_dias  # import local evita ciclo
+    from gat.calendario import calcular_hold_dias, em_hold  # import local evita ciclo
 
     if df.empty:
-        for col in ("hold_dias", "dias_uteis_decorridos", "status_entrega_calc", "situacao_pep"):
+        for col in ("hold_dias", "em_hold", "dias_uteis_decorridos", "status_entrega_calc", "situacao_pep"):
             df[col] = pd.Series(dtype=object)
         return adicionar_flags_governanca(df)
 
     df = df.copy()
 
     def _linha(linha):
-        hold = calcular_hold_dias(linha.get("hold_inicio"), linha.get("hold_fim"))
+        hold_inicio, hold_fim = linha.get("hold_inicio"), linha.get("hold_fim")
+        hold = calcular_hold_dias(hold_inicio, hold_fim)
+        em_hold_aberto = em_hold(hold_inicio, hold_fim)
         sla_vigente = int(linha.get("sla_dias")) if pd.notna(linha.get("sla_dias")) else SLA_PRESTADORES_DIAS_UTEIS
-        status, decorridos = status_entrega_prestador(linha.get("data_solicitacao"), linha.get("data_analise"), hold, sla_vigente)
-        return pd.Series({"hold_dias": hold, "dias_uteis_decorridos": decorridos, "status_entrega_calc": status})
+        status, decorridos = status_entrega_prestador(
+            linha.get("data_solicitacao"), linha.get("data_analise"), hold, sla_vigente,
+            hold_aberto_desde=hold_inicio if em_hold_aberto else None,
+        )
+        return pd.Series({"hold_dias": hold, "em_hold": em_hold_aberto, "dias_uteis_decorridos": decorridos, "status_entrega_calc": status})
 
     calculados = df.apply(_linha, axis=1)
     df = pd.concat([df, calculados], axis=1)
@@ -765,23 +783,28 @@ def enriquecer_situacao_pep(df: pd.DataFrame, coluna_pep: str) -> pd.DataFrame:
 def enriquecer_cessionarios(df: pd.DataFrame) -> pd.DataFrame:
     """
     Adiciona ao DataFrame de cessionários as colunas calculadas
-    dinamicamente: `hold_dias`, `saldo_dias_uteis` (Coluna K) e
+    dinamicamente: `hold_dias`, `em_hold`, `saldo_dias_uteis` (Coluna K) e
     `status_entrega_calc`, além das flags de governança.
     """
-    from gat.calendario import calcular_hold_dias  # import local evita ciclo
+    from gat.calendario import calcular_hold_dias, em_hold  # import local evita ciclo
 
     if df.empty:
-        for col in ("hold_dias", "saldo_dias_uteis", "status_entrega_calc"):
+        for col in ("hold_dias", "em_hold", "saldo_dias_uteis", "status_entrega_calc"):
             df[col] = pd.Series(dtype=object)
         return adicionar_flags_governanca(df)
 
     df = df.copy()
 
     def _linha(linha):
-        hold = calcular_hold_dias(linha.get("hold_inicio"), linha.get("hold_fim"))
+        hold_inicio, hold_fim = linha.get("hold_inicio"), linha.get("hold_fim")
+        hold = calcular_hold_dias(hold_inicio, hold_fim)
+        em_hold_aberto = em_hold(hold_inicio, hold_fim)
         sla = int(linha.get("sla_dias")) if pd.notna(linha.get("sla_dias")) else calcular_sla_cessionario(linha.get("tipo"), linha.get("revisao") or 0)
-        status, saldo = status_entrega_cessionario(linha.get("data_solicitacao"), linha.get("data_analise"), hold, sla)
-        return pd.Series({"hold_dias": hold, "saldo_dias_uteis": saldo, "status_entrega_calc": status})
+        status, saldo = status_entrega_cessionario(
+            linha.get("data_solicitacao"), linha.get("data_analise"), hold, sla,
+            hold_aberto_desde=hold_inicio if em_hold_aberto else None,
+        )
+        return pd.Series({"hold_dias": hold, "em_hold": em_hold_aberto, "saldo_dias_uteis": saldo, "status_entrega_calc": status})
 
     calculados = df.apply(_linha, axis=1)
     df = pd.concat([df, calculados], axis=1)

@@ -135,35 +135,68 @@ def calcular_data_limite(data_solicitacao, sla_dias_uteis: int) -> date | None:
     return somar_dias_uteis(base - timedelta(days=1), sla_dias_uteis)
 
 
-def dias_uteis_decorridos(data_solicitacao, data_analise=None, hold_dias: int = 0) -> int:
+def dias_uteis_decorridos(data_solicitacao, data_analise=None, hold_dias: int = 0, hold_aberto_desde=None) -> int:
     """
     Calcula os dias úteis decorridos de uma análise (Coluna L - Prestadores):
     conta os dias úteis entre a data de solicitação e a data de análise
     (quando já concluída) ou a data de hoje (quando ainda em andamento,
     tornando o cálculo 100% dinâmico), descontando os dias em hold.
+
+    `hold_aberto_desde`: quando o projeto está atualmente em HOLD aberto
+    (ver `em_hold`) e ainda não há `data_analise`, o relógio de dias
+    decorridos é congelado na data de início do HOLD em vez de continuar
+    avançando até hoje — o SLA fica pausado enquanto o HOLD estiver aberto,
+    e volta a contar a partir de onde parou assim que o HOLD for encerrado
+    (`hold_fim` preenchido, quando `hold_dias` passa a descontar o período
+    integral já fechado).
     """
     inicio = _to_date(data_solicitacao)
     if inicio is None:
         return 0
-    fim = _to_date(data_analise) or hoje_br()
+    if data_analise is None and hold_aberto_desde is not None:
+        fim = _to_date(hold_aberto_desde) or hoje_br()
+    else:
+        fim = _to_date(data_analise) or hoje_br()
     return max(dias_uteis_entre(inicio, fim) - (hold_dias or 0), 0)
 
 
-def saldo_dias_uteis(data_solicitacao, sla_dias_uteis: int, data_analise=None, hold_dias: int = 0) -> int:
+def saldo_dias_uteis(data_solicitacao, sla_dias_uteis: int, data_analise=None, hold_dias: int = 0, hold_aberto_desde=None) -> int:
     """
     Calcula o saldo de dias úteis (Coluna K - Cessionários): é o total de
     dias úteis do SLA menos os dias úteis já decorridos. Valores negativos
-    indicam que o prazo já foi estourado.
+    indicam que o prazo já foi estourado. Ver `dias_uteis_decorridos` sobre
+    `hold_aberto_desde` (congelamento do SLA durante HOLD aberto).
     """
-    decorridos = dias_uteis_decorridos(data_solicitacao, data_analise, hold_dias)
+    decorridos = dias_uteis_decorridos(data_solicitacao, data_analise, hold_dias, hold_aberto_desde)
     return (sla_dias_uteis or 0) - decorridos
 
 
 def calcular_hold_dias(hold_inicio, hold_fim) -> int:
-    """Calcula os dias úteis em hold (suspensão da análise). Usa `_to_date`
-    (via `dias_uteis_entre`) para decidir ausência de data — evitar checar
-    `not hold_inicio`/`not hold_fim` diretamente, porque `NaN` (float) é
-    truthy em Python e não seria pego por essa negação."""
+    """Calcula os dias úteis em hold (suspensão da análise) já ENCERRADO
+    (ambas as datas preenchidas). Usa `_to_date` (via `dias_uteis_entre`)
+    para decidir ausência de data — evitar checar `not hold_inicio`/
+    `not hold_fim` diretamente, porque `NaN` (float) é truthy em Python e
+    não seria pego por essa negação. Para HOLD ainda aberto, ver `em_hold`
+    e `dias_uteis_hold_aberto`."""
     if _to_date(hold_inicio) is None or _to_date(hold_fim) is None:
         return 0
     return max(dias_uteis_entre(hold_inicio, hold_fim), 0)
+
+
+def em_hold(hold_inicio, hold_fim) -> bool:
+    """True quando o projeto está atualmente em HOLD (intervalo aberto):
+    `hold_inicio` preenchido e `hold_fim` ainda vazio. Fonte única de
+    verdade para "está em HOLD agora" — usada pela Página Inicial,
+    Dashboards, Visão Geral, Central de Alertas e Lista de HOLD, para que
+    todos apresentem exatamente os mesmos números."""
+    return _to_date(hold_inicio) is not None and _to_date(hold_fim) is None
+
+
+def dias_uteis_hold_aberto(hold_inicio) -> int:
+    """Dias úteis decorridos desde o início de um HOLD ainda aberto até
+    hoje — usado para disparar o alerta de acompanhamento aos 3 dias
+    úteis. Só faz sentido chamar quando `em_hold(...)` for `True`."""
+    inicio = _to_date(hold_inicio)
+    if inicio is None:
+        return 0
+    return max(dias_uteis_entre(inicio, hoje_br()), 0)

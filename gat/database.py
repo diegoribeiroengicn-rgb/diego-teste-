@@ -2934,6 +2934,35 @@ def marcar_tratado_alerta(modulo: str, projeto_id: int, tipo_alerta: str, provid
     )
 
 
+DECISAO_HOLD_OPCOES = ["MANTER", "RETIRADO"]
+
+
+def registrar_tratativa_hold(
+    modulo: str, projeto_id: int, especialista: str, data_contato: str, resolucao: str, decisao: str, usuario: str,
+) -> None:
+    """
+    Registra o contato com o especialista sobre um projeto em HOLD (item 16
+    do módulo de HOLD) reaproveitando o mesmo ciclo de vida de alertas já
+    existente (`marcar_tratado_alerta`, tipo "ACOMPANHAMENTO_HOLD" — ver
+    `gat.alertas_engine.TIPO_ACOMPANHAMENTO_HOLD`) para o histórico da
+    tratativa. Registrar a tratativa NÃO retira o projeto do HOLD por si
+    só (item 17): a contagem do HOLD só muda quando `decisao == "RETIRADO"`
+    (item 18), que encerra o HOLD (`hold_fim`) — SLA, prazo e demais
+    indicadores são recalculados automaticamente na próxima leitura, pois
+    são 100% dinâmicos.
+    """
+    rotulo_decisao = "Retirado do HOLD" if decisao == "RETIRADO" else "Permanece em HOLD"
+    marcar_tratado_alerta(modulo, projeto_id, "ACOMPANHAMENTO_HOLD", rotulo_decisao, especialista, resolucao, usuario)
+    if decisao == "RETIRADO":
+        obter = obter_prestador if modulo == "prestadores" else obter_cessionario
+        atualizar = atualizar_prestador if modulo == "prestadores" else atualizar_cessionario
+        registro = obter(projeto_id)
+        if registro is not None:
+            dados = dict(registro)
+            dados["hold_fim"] = data_contato
+            atualizar(projeto_id, dados, usuario)
+
+
 def adiar_alerta(modulo: str, projeto_id: int, tipo_alerta: str, adiado_para: str | None, observacao: str | None, usuario: str) -> None:
     status_anterior = status_radar(modulo, projeto_id, tipo_alerta)
     _upsert_alerta(modulo, projeto_id, tipo_alerta, {"status": "ADIADO", "adiado_para": adiado_para, "observacao": observacao}, usuario, status_anterior)

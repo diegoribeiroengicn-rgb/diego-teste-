@@ -18,7 +18,7 @@ from gat.business_rules import classificacao_atraso, dias_restantes_prioridade, 
 from gat.config import COLUNAS_EXIBICAO_CESSIONARIOS, COLUNAS_EXIBICAO_PRESTADORES
 from gat.database import listar_cadastro_cessionarios, listar_obras_prestador
 from gat.horario import agora_br
-from gat.normalizacao import calculo_seguro
+from gat.normalizacao import booleano_seguro, calculo_seguro
 
 COLUNA_TIPO_PROJETO = "Tipo de Projeto"
 
@@ -59,7 +59,8 @@ def _acrescentar_indicadores_atraso(df: pd.DataFrame, modulo: str) -> pd.DataFra
     df = df.copy()
     classificacoes = df.apply(
         lambda r: calculo_seguro(
-            classificacao_atraso, r.get("status_analise"), r.get("status_entrega_calc"), contexto="classificacao_atraso",
+            classificacao_atraso, r.get("status_analise"), r.get("status_entrega_calc"),
+            em_hold=booleano_seguro(r.get("em_hold")), contexto="classificacao_atraso",
         ),
         axis=1,
     )

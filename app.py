@@ -45,6 +45,7 @@ from views import (
     consolidado,
     gestao_historico,
     historico_atividades,
+    hold,
     inicio,
     kpis_analistas_prazo,
     lembretes_pep,
@@ -139,6 +140,7 @@ if pode_modulo(usuario, "prestadores"):
     if pode_area(usuario, "dashboard"):
         grupo_prestadores.append(_pagina(lambda: prestadores_dashboard.render(usuario), "Dashboard", ":material/dashboard:", "prestadores_dashboard"))
     grupo_prestadores.append(_pagina(lambda: prestadores.render(usuario), "Projetos", ":material/folder_open:", "prestadores_projetos"))
+    grupo_prestadores.append(_pagina(lambda: hold.render(usuario, "prestadores"), "Em HOLD", ":material/pause_circle:", "prestadores_hold"))
     grupo_prestadores.append(_pagina(lambda: cadastro_prestadores.render(usuario), "Cadastro", ":material/badge:", "prestadores_cadastro"))
     grupo_prestadores.append(_pagina(lambda: canteiros.render(usuario), "Canteiros", ":material/construction:", "prestadores_canteiros"))
     if pode_area(usuario, "avaliacoes.visualizar"):
@@ -150,6 +152,7 @@ if pode_modulo(usuario, "cessionarios"):
     if pode_area(usuario, "dashboard"):
         grupo_cessionarios.append(_pagina(lambda: cessionarios_dashboard.render(usuario), "Dashboard", ":material/dashboard:", "cessionarios_dashboard"))
     grupo_cessionarios.append(_pagina(lambda: cessionarios.render(usuario), "Projetos", ":material/store:", "cessionarios_projetos"))
+    grupo_cessionarios.append(_pagina(lambda: hold.render(usuario, "cessionarios"), "Em HOLD", ":material/pause_circle:", "cessionarios_hold"))
     grupo_cessionarios.append(_pagina(lambda: cadastro_cessionarios.render(usuario), "Cadastro", ":material/badge:", "cessionarios_cadastro"))
     # A tela de Avaliação cobre Prestadores e Cessionários numa única view —
     # já aparece no grupo Prestadores quando esse módulo está liberado; aqui

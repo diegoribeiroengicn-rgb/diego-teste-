@@ -6,6 +6,7 @@ import streamlit as st
 
 import pandas as pd
 
+from gat.alertas_engine import contar_hold_aguardando_acompanhamento
 from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia
 from gat.config import CORES
 from gat.database import listar_cessionarios, listar_prestadores
@@ -124,6 +125,32 @@ def render(usuario: dict) -> None:
                 if st.button("Ver lista", icon=":material/arrow_forward:", type="tertiary", key="ver_analise_cess"):
                     st.session_state["filtro_cess_status_default"] = ["EM ANÁLISE"]
                     _navegar_para("cessionarios_projetos")
+
+    hold_prest = int(df_prest["em_hold"].fillna(False).astype(bool).sum()) if not df_prest.empty else 0
+    hold_cess = int(df_cess["em_hold"].fillna(False).astype(bool).sum()) if not df_cess.empty else 0
+    aguardando_prest = contar_hold_aguardando_acompanhamento(df_prest, "prestadores") if not df_prest.empty else 0
+    aguardando_cess = contar_hold_aguardando_acompanhamento(df_cess, "cessionarios") if not df_cess.empty else 0
+
+    if pode_prest or pode_cess:
+        st.markdown("##### Projetos em HOLD por módulo")
+        colunas_h = st.columns(1 + pode_prest + pode_cess)
+        colunas_h[0].metric("Total", hold_prest + hold_cess)
+        idx = 1
+        if pode_prest:
+            with colunas_h[idx]:
+                st.metric("Prestadores", hold_prest)
+                if aguardando_prest:
+                    st.caption(f"{aguardando_prest} aguardando acompanhamento")
+                if st.button("Ver lista", icon=":material/arrow_forward:", type="tertiary", key="ver_hold_prest"):
+                    _navegar_para("prestadores_hold")
+            idx += 1
+        if pode_cess:
+            with colunas_h[idx]:
+                st.metric("Cessionários", hold_cess)
+                if aguardando_cess:
+                    st.caption(f"{aguardando_cess} aguardando acompanhamento")
+                if st.button("Ver lista", icon=":material/arrow_forward:", type="tertiary", key="ver_hold_cess"):
+                    _navegar_para("cessionarios_hold")
 
     pagina_gestao = next(
         (pagina for area, pagina in (
