@@ -188,10 +188,18 @@ def avaliacoes_obrigatorias_do_mes(analista: str, mes: int, ano: int) -> dict[st
     >= 1 sem avaliação antes desta regra existir) não entram na conta,
     para não penalizar o analista por uma pendência que nem aparece na
     Central de Alertas.
+
+    Marco oficial das avaliações (01/07/2026, `gat.alertas_engine.
+    MARCO_AVALIACOES_OFICIAL`): candidatos com Data de Conclusão da
+    Análise anterior ao marco também não entram na conta — nem como
+    obrigatória, nem como pendente — sem retroatividade no KPI/bônus do
+    analista.
     """
+    from gat.alertas_engine import MARCO_AVALIACOES_OFICIAL
     from gat.database import listar_avaliacao_obrigatoria_isentos, listar_avaliacoes_checklist, listar_cessionarios, listar_prestadores
 
     fim_mes = _fim_do_mes(mes, ano)
+    marco = pd.Timestamp(MARCO_AVALIACOES_OFICIAL)
     obrigatorias = 0
     pendentes = 0
     at_pendentes: list[str] = []
@@ -209,7 +217,10 @@ def avaliacoes_obrigatorias_do_mes(analista: str, mes: int, ano: int) -> dict[st
 
         datas_analise = pd.to_datetime(df["data_analise"], errors="coerce")
         revisao_valida = pd.to_numeric(df["revisao"], errors="coerce").fillna(0) >= 1
-        concluida_ate_fim_mes = revisao_valida & datas_analise.notna() & (datas_analise <= fim_mes)
+        # Marco oficial das avaliações (modificação de ranking/marco): antes de
+        # 01/07/2026 a obrigatoriedade é apenas opcional — não entra nem como
+        # obrigatória, nem como pendente, sem retroatividade no KPI do analista.
+        concluida_ate_fim_mes = revisao_valida & datas_analise.notna() & (datas_analise <= fim_mes) & (datas_analise >= marco)
         candidatos = df[concluida_ate_fim_mes]
         if candidatos.empty:
             continue

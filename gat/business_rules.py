@@ -78,8 +78,14 @@ def status_avaliacao_obrigatoria(
     usava uma regra própria, mais restrita (só marcava exatamente na
     Rev.01), o que deixava o indicador "sumir" a partir da Rev.02 mesmo com
     a avaliação obrigatória ainda pendente, divergindo da Central de Alertas.
+
+    Uma quarta situação, "OPCIONAL", cobre a avaliação cuja Rev.01 foi
+    concluída antes do marco oficial das avaliações (01/07/2026 — ver
+    `gat.alertas_engine.avaliacao_dentro_periodo_oficial`): continua sem
+    avaliação, mas sem ser tratada como obrigação pendente — sem
+    retroatividade.
     """
-    from gat.alertas_engine import chaves_avaliadas_obrigatoria, rev1_concluida
+    from gat.alertas_engine import avaliacao_dentro_periodo_oficial, chaves_avaliadas_obrigatoria, rev1_concluida
     from gat.database import listar_avaliacao_obrigatoria_isentos, listar_avaliacoes_checklist
 
     if df.empty:
@@ -94,7 +100,11 @@ def status_avaliacao_obrigatoria(
         codigo = row.get(coluna_codigo)
         nome = row.get(coluna_nome)
         chave = (codigo if codigo else nome, row.get("disciplina") or "")
-        return "CONCLUIDA" if chave in avaliados else "PENDENTE"
+        if chave in avaliados:
+            return "CONCLUIDA"
+        if not avaliacao_dentro_periodo_oficial(row.get("data_analise")):
+            return "OPCIONAL"
+        return "PENDENTE"
 
     return df.apply(_situacao, axis=1)
 

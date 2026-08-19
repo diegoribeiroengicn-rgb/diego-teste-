@@ -26,6 +26,8 @@ ação manual de tratamento/retirada — ver `views/alertas.py`.
 
 from __future__ import annotations
 
+from datetime import date
+
 import pandas as pd
 
 from gat.business_rules import (
@@ -100,6 +102,26 @@ def rev1_concluida(revisao, data_analise) -> bool:
     except (TypeError, ValueError):
         return False
     return bool(data_analise) and pd.notna(data_analise)
+
+
+MARCO_AVALIACOES_OFICIAL = date(2026, 7, 1)
+
+
+def avaliacao_dentro_periodo_oficial(data_analise) -> bool:
+    """
+    True quando a Data de Conclusão da Análise (a mesma referência que já
+    dispara a obrigatoriedade em `rev1_concluida`) é igual ou posterior ao
+    marco oficial das avaliações de Prestadores e Projetistas de
+    Cessionários (01/07/2026 — modificação de ranking/marco das
+    avaliações). Antes desse marco a obrigatoriedade é apenas opcional,
+    sem retroatividade: não gera alerta, não conta como falta, não entra
+    nos rankings oficiais e não afeta o KPI/bônus do analista — mas nada é
+    apagado, a avaliação pode ser feita voluntariamente a qualquer momento.
+    """
+    referencia = pd.to_datetime(data_analise, errors="coerce")
+    if pd.isna(referencia):
+        return False
+    return referencia.date() >= MARCO_AVALIACOES_OFICIAL
 
 
 _STATUS_RADAR_ATIVOS = {"PENDENTE", "EM_TRATAMENTO", "REABERTO"}
@@ -177,6 +199,7 @@ def montar_alertas_modulo(df: pd.DataFrame, modulo: str, coluna_nome: str, colun
                 registros.append({**base, "tipo_alerta": TIPO_AVALIACAO_CRITICA, "detalhe": None})
             if (
                 rev1_concluida(row.get("revisao"), row.get("data_analise"))
+                and avaliacao_dentro_periodo_oficial(row.get("data_analise"))
                 and chave_entidade not in avaliados
                 and int(row["id"]) not in isentos
             ):
@@ -253,6 +276,7 @@ def pendencias_avaliacao_obrigatoria(df: pd.DataFrame, modulo: str, coluna_nome:
         chave = (row.get(coluna_codigo) or row.get(coluna_nome), row.get("disciplina") or "")
         return (
             rev1_concluida(row.get("revisao"), row.get("data_analise"))
+            and avaliacao_dentro_periodo_oficial(row.get("data_analise"))
             and chave not in avaliados
             and int(row["id"]) not in isentos
         )

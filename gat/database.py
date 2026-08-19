@@ -1279,6 +1279,24 @@ def _migracao_0028_manual_filtro_periodo(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migracao_0029_manual_ranking_avaliacoes(conn: sqlite3.Connection) -> None:
+    """Acrescenta o capítulo 'Ranking de Prestadores e Projetistas de
+    Cessionários' ao Manual do Sistema, ao final da lista já existente,
+    sem alterar nenhum capítulo anterior."""
+    from gat.ranking_avaliacoes_manual_conteudo import CAPITULOS_RANKING_AVALIACOES
+
+    agora = agora_br().isoformat()
+    maior_ordem = conn.execute("SELECT COALESCE(MAX(ordem), 0) FROM manual_capitulos").fetchone()[0]
+    for indice, (titulo, conteudo) in enumerate(CAPITULOS_RANKING_AVALIACOES, start=1):
+        existe = conn.execute("SELECT id FROM manual_capitulos WHERE titulo = ?", (titulo,)).fetchone()
+        if existe:
+            continue
+        conn.execute(
+            "INSERT INTO manual_capitulos (ordem, titulo, conteudo, perfis_visiveis, criado_em) VALUES (?, ?, ?, NULL, ?)",
+            (maior_ordem + indice, titulo, conteudo, agora),
+        )
+
+
 def _migracao_0025_manual_consolidacao_atraso_hold(conn: sqlite3.Connection) -> None:
     """Acrescenta o capítulo 'SLA, Atraso, HOLD e Alerta Máximo' ao Manual
     do Sistema, ao final da lista já existente, sem alterar nenhum
@@ -1327,6 +1345,7 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (26, "Devolutiva Externa: tabela devolutiva_cobrancas (histórico de cobranças de retorno externo confirmadas)", _migracao_0026_devolutiva_externa),
     (27, "Manual do Sistema: capítulo 'Devolutiva Externa'", _migracao_0027_manual_devolutiva_externa),
     (28, "Manual do Sistema: capítulo 'Filtros de Análises — Mês/Ano e Intervalo Personalizado'", _migracao_0028_manual_filtro_periodo),
+    (29, "Manual do Sistema: capítulo 'Ranking de Prestadores e Projetistas de Cessionários' (marco oficial das avaliações, 01/07/2026)", _migracao_0029_manual_ranking_avaliacoes),
 ]
 
 

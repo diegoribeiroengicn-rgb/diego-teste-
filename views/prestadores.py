@@ -190,7 +190,10 @@ def render(usuario: dict) -> None:
 
     df_filtrado["_situacao_avaliacao"] = status_avaliacao_obrigatoria(df_filtrado, "PRESTADOR", "prestador", "codigo", "prestadores")
     df_filtrado["Avaliação"] = df_filtrado["_situacao_avaliacao"].map(
-        {"PENDENTE": "🔴 Avaliação pendente (Rev.01)", "CONCLUIDA": "🟢 Avaliação em dia", "": ""}
+        {
+            "PENDENTE": "🔴 Avaliação pendente (Rev.01)", "CONCLUIDA": "🟢 Avaliação em dia",
+            "OPCIONAL": "⚪ Avaliação opcional (anterior a jul/2026)", "": "",
+        }
     )
     df_filtrado["_dias_restantes"] = df_filtrado["sla_dias"].fillna(SLA_PRESTADORES_DIAS_UTEIS) - df_filtrado["dias_uteis_decorridos"]
     df_filtrado["Situação do Prazo"] = df_filtrado.apply(

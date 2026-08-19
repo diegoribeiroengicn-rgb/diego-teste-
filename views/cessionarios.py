@@ -187,7 +187,10 @@ def render(usuario: dict) -> None:
 
     df_filtrado["_situacao_avaliacao"] = status_avaliacao_obrigatoria(df_filtrado, "CESSIONARIO", "cessionario", "codigo", "cessionarios")
     df_filtrado["Avaliação"] = df_filtrado["_situacao_avaliacao"].map(
-        {"PENDENTE": "🔴 Avaliação pendente (Rev.01)", "CONCLUIDA": "🟢 Avaliação em dia", "": ""}
+        {
+            "PENDENTE": "🔴 Avaliação pendente (Rev.01)", "CONCLUIDA": "🟢 Avaliação em dia",
+            "OPCIONAL": "⚪ Avaliação opcional (anterior a jul/2026)", "": "",
+        }
     )
     df_filtrado["Situação do Prazo"] = df_filtrado.apply(
         lambda r: _rotulo_situacao_prazo(r["saldo_dias_uteis"], r.get("revisao")), axis=1
