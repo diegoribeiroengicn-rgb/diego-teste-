@@ -42,6 +42,7 @@ from gat.visao_gestor import (
     montar_lista_prioridades_gestor,
     montar_painel_por_analista,
     montar_pendencias_avaliacao,
+    montar_resumo_devolutiva_externa,
     status_operacional,
 )
 
@@ -59,13 +60,14 @@ _CHAVES_FILTRO = [
 ]
 
 
-def _base_dados() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def _base_dados() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict]:
     df_prest = enriquecer_prestadores(filtrar_ativos(listar_prestadores()))
     df_cess = enriquecer_cessionarios(filtrar_ativos(listar_cessionarios()))
     df_base = montar_base_combinada(df_prest, df_cess)
     lista_prioridades = montar_lista_prioridades_gestor(df_prest, df_cess)
     alertas_ativos = montar_alertas_ativos(df_prest, df_cess)
-    return df_base, lista_prioridades, alertas_ativos
+    resumo_devolutiva = montar_resumo_devolutiva_externa(df_prest, df_cess)
+    return df_base, lista_prioridades, alertas_ativos, resumo_devolutiva
 
 
 def _renderizar_filtros(df: pd.DataFrame) -> pd.DataFrame:
@@ -160,6 +162,26 @@ def _renderizar_kpis_executivos(df: pd.DataFrame, lista_prioridades: pd.DataFram
             f"{maior_atrasos['analista']} ({int(maior_atrasos['atrasados'])})" if maior_atrasos["atrasados"] > 0 else "Nenhum atraso",
         )
         col11.metric("Média geral de prazo da equipe (dias úteis)", media_geral_prazo)
+
+
+def _renderizar_devolutiva_externa(resumo_devolutiva: dict) -> None:
+    """Área própria e separada da Devolutiva Externa (item 17): a análise
+    já saiu da responsabilidade temporal do analista (AT emitida,
+    aguardando retorno do Prestador/Cessionário) — nunca entra em "Quem
+    está fazendo o quê > Atrasadas", nem se mistura com os indicadores de
+    atraso interno acima."""
+    total = resumo_devolutiva["prestadores_aguardando"] + resumo_devolutiva["cessionarios_aguardando"]
+    if total == 0:
+        return
+    st.markdown("##### :material/mark_email_unread: Aguardando Devolutiva Externa")
+    st.caption(
+        "Projetos com a última AT emitida, aguardando retorno do Prestador/Cessionário — fora da "
+        "responsabilidade temporal do analista neste momento, nunca contados como atraso interno."
+    )
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Prestadores aguardando retorno", resumo_devolutiva["prestadores_aguardando"])
+    col2.metric("Cessionários aguardando retorno", resumo_devolutiva["cessionarios_aguardando"])
+    col3.metric("Cobranças pendentes", resumo_devolutiva["cobrancas_pendentes"])
 
 
 def _renderizar_quem_faz_o_que(df: pd.DataFrame, painel: pd.DataFrame, lista_prioridades: pd.DataFrame, alertas_ativos: pd.DataFrame) -> None:
@@ -393,7 +415,7 @@ def render(usuario: dict) -> None:
         "não altera nenhum módulo, regra ou permissão."
     )
 
-    df_base, lista_prioridades, alertas_ativos = _base_dados()
+    df_base, lista_prioridades, alertas_ativos, resumo_devolutiva = _base_dados()
     if df_base.empty:
         st.info("Nenhum projeto cadastrado ainda.")
         return
@@ -416,6 +438,7 @@ def render(usuario: dict) -> None:
 
     st.markdown("### Indicadores executivos")
     _renderizar_kpis_executivos(df_filtrado, lista_prioridades_filtrada, alertas_filtrados, painel)
+    _renderizar_devolutiva_externa(resumo_devolutiva)
     st.divider()
 
     aba1, aba2, aba3, aba4, aba5 = st.tabs([

@@ -12,6 +12,7 @@ import pandas as pd
 
 from gat.alertas_engine import montar_alertas_modulo, pendencias_avaliacao_obrigatoria
 from gat.business_rules import STATUS_ATIVO_ANALISE, montar_lista_prioridades
+from gat.devolutiva_externa import montar_devolutivas_pendentes
 from gat.kpis_analistas_prazo import calcular_kpis_prazo_analista, preparar_base_prazo
 
 STATUS_ALERTA_ATIVOS = {"PENDENTE", "EM_TRATAMENTO", "REABERTO"}
@@ -70,6 +71,24 @@ def montar_pendencias_avaliacao(df_prest: pd.DataFrame, df_cess: pd.DataFrame) -
     if not partes:
         return pd.DataFrame()
     return pd.concat(partes, ignore_index=True)
+
+
+def montar_resumo_devolutiva_externa(df_prest: pd.DataFrame, df_cess: pd.DataFrame) -> dict:
+    """
+    Resumo executivo da Devolutiva Externa (item 17): a análise já saiu da
+    responsabilidade temporal do analista (AT emitida, aguardando retorno
+    do Prestador/Cessionário) — por isso nunca entra em "Quem está
+    fazendo o quê > Atrasadas", ficando numa área própria e separada.
+    """
+    devolutivas_prest = montar_devolutivas_pendentes(df_prest, "prestadores", "prestador") if not df_prest.empty else pd.DataFrame()
+    devolutivas_cess = montar_devolutivas_pendentes(df_cess, "cessionarios", "cessionario") if not df_cess.empty else pd.DataFrame()
+    todas = pd.concat([devolutivas_prest, devolutivas_cess], ignore_index=True) if not devolutivas_prest.empty or not devolutivas_cess.empty else pd.DataFrame()
+    return {
+        "prestadores_aguardando": len(devolutivas_prest),
+        "cessionarios_aguardando": len(devolutivas_cess),
+        "cobrancas_pendentes": int(todas["acao_necessaria"].sum()) if not todas.empty else 0,
+        "detalhe": todas,
+    }
 
 
 def montar_lista_prioridades_gestor(df_prest: pd.DataFrame, df_cess: pd.DataFrame) -> pd.DataFrame:

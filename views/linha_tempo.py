@@ -16,8 +16,15 @@ from gat.arquivo_business_rules import perfil_pode_arquivar_e_restaurar
 from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia
 from gat.calendario import calcular_hold_dias, dias_uteis_entre
 from gat.config import DISCIPLINAS, RESPONSAVEIS
-from gat.database import listar_avaliacoes_checklist, listar_cessionarios, listar_prestadores, listar_reunioes_do_projeto, registrar_atividade
-from gat.normalizacao import inteiro_ou_none, inteiro_seguro
+from gat.database import (
+    listar_avaliacoes_checklist,
+    listar_cessionarios,
+    listar_cobrancas_devolutiva,
+    listar_prestadores,
+    listar_reunioes_do_projeto,
+    registrar_atividade,
+)
+from gat.normalizacao import inteiro_ou_none, inteiro_seguro, texto_seguro
 from gat.permissions import exigir_area, pode_modulo
 from gat.relatorio_prestador import gerar_relatorio_prestador, nome_arquivo_relatorio
 from gat.revisoes import calcular_intervalos_revisao, consolidado_por_entidade, projetos_por_entidade, situacao_sla_externo
@@ -57,11 +64,34 @@ def _etapa(titulo: str, data_ref, dias_uteis: int | None, responsavel: str | Non
             st.caption(f"Responsável: {responsavel}")
 
 
+def _etapa_cobranca(cobranca: pd.Series) -> None:
+    numero = int(cobranca["numero_cobranca"])
+    canal = texto_seguro(cobranca.get("canal")).strip() or "—"
+    responsavel = texto_seguro(cobranca.get("usuario")).strip() or "—"
+    observacao = f"Canal: {canal} · Responsável: {responsavel}"
+    observacao_extra = texto_seguro(cobranca.get("observacao")).strip()
+    if observacao_extra:
+        observacao += f" · {observacao_extra}"
+    _etapa(f"{numero}ª Cobrança de Devolutiva", cobranca.get("data_cobranca"), None, None, observacao)
+
+
 def _sequencia_completa_projeto(modulo: str, coluna_nome: str, tipo_entidade: str, df_grupo: pd.DataFrame) -> None:
     """Sequência cronológica completa de revisões de UM projeto (código/nome
-    + AT + disciplina): postagem → análise → resposta → retorno externo →
-    próxima revisão, e assim sucessivamente."""
+    + AT + disciplina): postagem → análise → resposta → cobranças de
+    devolutiva externa (quando houver) → retorno externo → próxima
+    revisão, e assim sucessivamente. Cada cobrança de devolutiva
+    efetivamente confirmada gera um evento próprio, permanente, nunca
+    sobrescrito (itens 7-9 da regra de cobrança recorrente)."""
     df_grupo = df_grupo.sort_values("revisao").reset_index(drop=True)
+    cobrancas = listar_cobrancas_devolutiva(modulo)
+    if not cobrancas.empty:
+        cobrancas = cobrancas[cobrancas["projeto_id"].isin(df_grupo["id"])]
+
+    def _cobrancas_da_revisao(projeto_id: int) -> pd.DataFrame:
+        if cobrancas.empty:
+            return cobrancas
+        return cobrancas[cobrancas["projeto_id"] == projeto_id].sort_values("numero_cobranca")
+
     anterior = None
     for idx, revisao in df_grupo.iterrows():
         st.markdown(f"###### REV{int(revisao['revisao']):02d}")
@@ -82,13 +112,24 @@ def _sequencia_completa_projeto(modulo: str, coluna_nome: str, tipo_entidade: st
                 f"Hold de {formatar_data_br(revisao.get('hold_inicio')) or '—'} a {formatar_data_br(revisao.get('hold_fim')) or '—'}.",
             )
 
+        cobrancas_revisao = _cobrancas_da_revisao(int(revisao["id"]))
+        for _, cobranca in cobrancas_revisao.iterrows():
+            _etapa_cobranca(cobranca)
+
         if anterior is not None:
             if pd.notna(revisao.get("data_solicitacao")) and pd.notna(anterior.get("data_solicitacao")):
                 dias = dias_uteis_entre(anterior["data_solicitacao"], revisao["data_solicitacao"])
                 situacao = situacao_sla_externo(dias)
+                observacao_retorno = f"Situação: {situacao}"
+                cobrancas_anterior = _cobrancas_da_revisao(int(anterior["id"]))
+                if not cobrancas_anterior.empty:
+                    observacao_retorno += (
+                        f" · Nova revisão recebida — projeto retornou para análise após {dias} dia(s) útil(eis) "
+                        f"de devolutiva externa. Cobranças realizadas: {len(cobrancas_anterior)}."
+                    )
                 _etapa(
                     f"Retorno externo — REV{int(anterior['revisao']):02d} → REV{int(revisao['revisao']):02d}",
-                    None, dias, None, f"Situação: {situacao}",
+                    None, dias, None, observacao_retorno,
                 )
         anterior = revisao
         if idx < len(df_grupo) - 1:
@@ -121,8 +162,9 @@ def _sequencia_completa_projeto(modulo: str, coluna_nome: str, tipo_entidade: st
                 use_container_width=True, hide_index=True,
             )
 
-    if ultima.get("observacoes"):
-        st.caption(f"Observações: {ultima['observacoes']}")
+    observacoes_ultima = texto_seguro(ultima.get("observacoes")).strip()
+    if observacoes_ultima:
+        st.caption(f"Observações: {observacoes_ultima}")
 
 
 def render(usuario: dict) -> None:

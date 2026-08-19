@@ -1215,6 +1215,52 @@ def _migracao_0024_manual_resumo_conclusao(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migracao_0026_devolutiva_externa(conn: sqlite3.Connection) -> None:
+    """
+    Devolutiva Externa (cobrança recorrente após a emissão da última AT):
+    tabela de histórico das cobranças efetivamente confirmadas — cada
+    linha é uma cobrança real, nunca sobrescrita, base da Linha do Tempo
+    e do cálculo de qual é a próxima cobrança devida. Puramente aditiva.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS devolutiva_cobrancas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            modulo TEXT NOT NULL,
+            projeto_id INTEGER NOT NULL,
+            numero_cobranca INTEGER NOT NULL,
+            data_cobranca TEXT NOT NULL,
+            hora_cobranca TEXT,
+            usuario TEXT NOT NULL,
+            canal TEXT,
+            observacao TEXT,
+            criado_em TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_devolutiva_cobrancas_projeto "
+        "ON devolutiva_cobrancas(modulo, projeto_id)"
+    )
+
+
+def _migracao_0027_manual_devolutiva_externa(conn: sqlite3.Connection) -> None:
+    """Acrescenta o capítulo 'Devolutiva Externa' ao Manual do Sistema, ao
+    final da lista já existente, sem alterar nenhum capítulo anterior."""
+    from gat.devolutiva_externa_manual_conteudo import CAPITULOS_DEVOLUTIVA_EXTERNA
+
+    agora = agora_br().isoformat()
+    maior_ordem = conn.execute("SELECT COALESCE(MAX(ordem), 0) FROM manual_capitulos").fetchone()[0]
+    for indice, (titulo, conteudo) in enumerate(CAPITULOS_DEVOLUTIVA_EXTERNA, start=1):
+        existe = conn.execute("SELECT id FROM manual_capitulos WHERE titulo = ?", (titulo,)).fetchone()
+        if existe:
+            continue
+        conn.execute(
+            "INSERT INTO manual_capitulos (ordem, titulo, conteudo, perfis_visiveis, criado_em) VALUES (?, ?, ?, NULL, ?)",
+            (maior_ordem + indice, titulo, conteudo, agora),
+        )
+
+
 def _migracao_0025_manual_consolidacao_atraso_hold(conn: sqlite3.Connection) -> None:
     """Acrescenta o capítulo 'SLA, Atraso, HOLD e Alerta Máximo' ao Manual
     do Sistema, ao final da lista já existente, sem alterar nenhum
@@ -1260,6 +1306,8 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (23, "Resumo de Conclusão da Análise: colunas de estado em Prestadores/Cessionários + tabela resumo_conclusao_historico", _migracao_0023_resumo_conclusao),
     (24, "Manual do Sistema: capítulo 'Resumo de Conclusão da Análise'", _migracao_0024_manual_resumo_conclusao),
     (25, "Manual do Sistema: capítulo 'SLA, Atraso, HOLD e Alerta Máximo' (consolidação definitiva das regras)", _migracao_0025_manual_consolidacao_atraso_hold),
+    (26, "Devolutiva Externa: tabela devolutiva_cobrancas (histórico de cobranças de retorno externo confirmadas)", _migracao_0026_devolutiva_externa),
+    (27, "Manual do Sistema: capítulo 'Devolutiva Externa'", _migracao_0027_manual_devolutiva_externa),
 ]
 
 
@@ -2981,6 +3029,45 @@ def registrar_tratativa_hold(
             dados = dict(registro)
             dados["hold_fim"] = data_contato
             atualizar(projeto_id, dados, usuario)
+
+
+def listar_cobrancas_devolutiva(modulo: str | None = None, projeto_id: int | None = None) -> pd.DataFrame:
+    """Cobranças de Devolutiva Externa já confirmadas — histórico completo,
+    nunca sobrescrito (base do cálculo de qual é a próxima cobrança devida
+    e dos eventos permanentes na Linha do Tempo)."""
+    with _conectar() as conn:
+        query = "SELECT * FROM devolutiva_cobrancas WHERE 1=1"
+        params: list[Any] = []
+        if modulo is not None:
+            query += " AND modulo = ?"
+            params.append(modulo)
+        if projeto_id is not None:
+            query += " AND projeto_id = ?"
+            params.append(projeto_id)
+        query += " ORDER BY numero_cobranca"
+        return pd.read_sql_query(query, conn, params=params)
+
+
+def registrar_cobranca_devolutiva(
+    modulo: str, projeto_id: int, numero_cobranca: int, usuario: str, canal: str = "E-mail", observacao: str | None = None,
+) -> None:
+    """Registra uma cobrança de Devolutiva Externa efetivamente realizada
+    (confirmada pelo usuário após o envio) — nunca gerada/enviada
+    automaticamente. A partir desta confirmação, a contagem dos próximos
+    5 dias úteis passa a valer a partir desta data (ver
+    `gat.devolutiva_externa.situacao_devolutiva`)."""
+    agora = agora_br()
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO devolutiva_cobrancas "
+            "(modulo, projeto_id, numero_cobranca, data_cobranca, hora_cobranca, usuario, canal, observacao, criado_em) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                modulo, projeto_id, numero_cobranca, agora.date().isoformat(), agora.strftime("%H:%M:%S"),
+                usuario, canal, observacao, agora.isoformat(),
+            ),
+        )
+    registrar_atividade(usuario, None, "COBRANCA_DEVOLUTIVA_REGISTRADA", modulo=modulo, detalhe=f"{numero_cobranca}ª cobrança — projeto {projeto_id}")
 
 
 def adiar_alerta(modulo: str, projeto_id: int, tipo_alerta: str, adiado_para: str | None, observacao: str | None, usuario: str) -> None:

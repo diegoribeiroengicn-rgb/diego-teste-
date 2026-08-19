@@ -20,19 +20,27 @@ from gat.database import (
     listar_alertas_manuais,
     listar_cessionarios,
     listar_historico,
+    listar_obras_prestador,
     listar_prestadores,
     marcar_tratado_alerta,
     reabrir_alerta,
     reabrir_alerta_manual,
     retirar_do_radar,
 )
+from gat.devolutiva_externa import (
+    SITUACAO_AGUARDANDO_PRAZO_INICIAL,
+    SITUACAO_EM_HOLD,
+    montar_devolutivas_pendentes,
+)
 from gat.horario import hoje_br
+from gat.normalizacao import texto_seguro
 from gat.permissions import exigir_area, pode_area, pode_modulo
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
 from gat.ui.formatos import formatar_data_br, formatar_datahora_br, formatar_datahoras_df
 from gat.ui.modals_alerta_manual import dialog_alerta_manual, dialog_encerrar_alerta_manual
 from gat.ui.modals_arquivo import dialog_arquivar
 from gat.ui.modals_avaliacao import dialog_avaliacao_checklist
+from gat.ui.modals_devolutiva import dialog_cobranca_devolutiva
 
 _LABEL_STATUS = {
     "PENDENTE": "Pendente", "EM_TRATAMENTO": "Em tratamento", "TRATADO": "Tratado",
@@ -265,6 +273,82 @@ def _secao_alertas_manuais(usuario: dict, modulos_incluidos: list[str], modulo_c
                         dialog_arquivar("alertas_manuais", int(alerta["id"]), alerta["titulo"], usuario["username"])
 
 
+_ICONE_SITUACAO_DEVOLUTIVA = {
+    SITUACAO_AGUARDANDO_PRAZO_INICIAL: "⚪",
+    SITUACAO_EM_HOLD: "🔵",
+}
+
+
+def _cartao_devolutiva(usuario: dict, registro: pd.Series, mapa_obras: dict) -> None:
+    with st.container(border=True):
+        obra = texto_seguro(mapa_obras.get(registro.get("obra_id"), "")).strip() if registro.get("modulo") == "prestadores" else ""
+        icone = _ICONE_SITUACAO_DEVOLUTIVA.get(registro["situacao"], "🟡" if not registro["acao_necessaria"] else "🟠")
+        col_info, col_status = st.columns([4, 1])
+        with col_info:
+            titulo_obra = f" · {obra}" if obra else ""
+            st.markdown(f"**{_ou_traco(registro.get('nome'))}** ({_ou_traco(registro.get('codigo'))}){titulo_obra} — {_ou_traco(registro.get('disciplina'))}")
+            st.caption(
+                f"N° AT {_ou_traco(registro.get('num_at'))} · Revisão {registro.get('revisao')} · "
+                f"Responsável: {_ou_traco(registro.get('responsavel'))} · "
+                f"Última AT em {formatar_data_br(registro.get('data_ultima_at')) or '—'} · "
+                f"{registro['dias_uteis_decorridos']} dia(s) útil(eis) sem retorno"
+            )
+            st.caption(
+                f"Cobranças realizadas: {registro['numero_cobrancas_realizadas']}" +
+                (f" · Última cobrança: {formatar_data_br(registro.get('data_ultima_cobranca'))}" if pd.notna(registro.get("data_ultima_cobranca")) else "") +
+                (f" · Próxima verificação prevista: {formatar_data_br(registro.get('data_prevista_proxima_verificacao'))}" if pd.notna(registro.get("data_prevista_proxima_verificacao")) else "")
+            )
+        with col_status:
+            st.caption(f"{icone} **{registro['situacao_label']}**")
+
+        if registro["acao_necessaria"]:
+            if st.button(
+                "Gerar e-mail de cobrança", icon=":material/mail:", type="primary", use_container_width=True,
+                key=f"dv_gerar_{registro['modulo']}_{registro['projeto_id']}",
+            ):
+                dialog_cobranca_devolutiva(usuario, registro["modulo"], registro.to_dict())
+
+
+def _secao_devolutivas_pendentes(usuario: dict, modulos_incluidos: list[str]) -> None:
+    """Central de Alertas > Devolutivas Pendentes (itens 1-16 da regra de
+    cobrança recorrente de Devolutiva Externa): projetos com a última AT
+    emitida ainda aguardando retorno do Prestador/Cessionário, com a
+    situação calculada 100% dinamicamente (nunca um alerta persistido) e
+    a ação de gerar/confirmar a próxima cobrança quando devida."""
+    with st.expander("Devolutivas Pendentes", icon=":material/mark_email_unread:", expanded=False):
+        st.caption(
+            "Projetos com a última AT emitida, aguardando nova revisão do Prestador/Cessionário. 10 dias úteis "
+            "sem retorno geram a 1ª cobrança; a partir daí, uma nova cobrança a cada 5 dias úteis sem retorno, "
+            "sem limite máximo, até o projeto voltar para Em Análise/Em Andamento. HOLD sempre pausa a contagem "
+            "e nunca gera cobrança, atraso ou Alerta Máximo. Este período nunca é contado como atraso do analista."
+        )
+
+        todas_devolutivas = []
+        for mod in modulos_incluidos:
+            coluna_nome = "prestador" if mod == "prestadores" else "cessionario"
+            df = enriquecer_prestadores(filtrar_ativos(listar_prestadores())) if mod == "prestadores" else enriquecer_cessionarios(filtrar_ativos(listar_cessionarios()))
+            devolutivas_mod = montar_devolutivas_pendentes(df, mod, coluna_nome)
+            if not devolutivas_mod.empty:
+                todas_devolutivas.append(devolutivas_mod)
+
+        if not todas_devolutivas:
+            st.success("Nenhuma devolutiva externa pendente no momento.")
+            return
+
+        devolutivas = pd.concat(todas_devolutivas, ignore_index=True)
+        obras = listar_obras_prestador()
+        mapa_obras = obras.set_index("id")["nome_obra"].to_dict() if not obras.empty else {}
+
+        col_m1, col_m2, col_m3 = st.columns(3)
+        col_m1.metric("Prestadores aguardando retorno", int((devolutivas["modulo"] == "prestadores").sum()))
+        col_m2.metric("Cessionários aguardando retorno", int((devolutivas["modulo"] == "cessionarios").sum()))
+        col_m3.metric("Cobranças pendentes (ação necessária)", int(devolutivas["acao_necessaria"].sum()))
+
+        devolutivas = devolutivas.sort_values(by="acao_necessaria", ascending=False)
+        for _, registro in devolutivas.iterrows():
+            _cartao_devolutiva(usuario, registro, mapa_obras)
+
+
 def render(usuario: dict, modulo: str | None = None) -> None:
     """`modulo` = 'prestadores' | 'cessionarios' | None (consolidado, apenas
     usuários autorizados)."""
@@ -286,6 +370,7 @@ def render(usuario: dict, modulo: str | None = None) -> None:
     )
 
     _secao_alertas_manuais(usuario, modulos_incluidos, modulo)
+    _secao_devolutivas_pendentes(usuario, modulos_incluidos)
 
     with st.expander("Filtros", icon=":material/filter_list:", expanded=False):
         col1, col2, col3 = st.columns(3)

@@ -44,7 +44,7 @@ SITUACAO_SLA_EXTERNO_CORES = {
 }
 
 
-def _at_valido(num_at) -> bool:
+def at_valido(num_at) -> bool:
     if pd.isna(num_at):
         return False
     return bool(num_at) and str(num_at).strip().upper() not in _AT_PLACEHOLDERS
@@ -71,11 +71,30 @@ def situacao_sla_externo(dias_uteis: int | None) -> str:
     return "DENTRO DO SLA"
 
 
-def _chave_entidade_serie(df: pd.DataFrame, coluna_nome: str, coluna_codigo: str = "codigo") -> pd.Series:
+def chave_entidade_serie(df: pd.DataFrame, coluna_nome: str, coluna_codigo: str = "codigo") -> pd.Series:
     """Código do Prestador/Cessionário quando disponível; caso contrário, o
     nome — mesma regra usada para consolidar o Radar e a Linha do Tempo por
     código, já que nem todo cadastro tem código preenchido."""
     return df[coluna_codigo].where(df[coluna_codigo].notna() & (df[coluna_codigo] != ""), df[coluna_nome])
+
+
+def linha_mais_recente_por_projeto(df: pd.DataFrame, coluna_nome: str, coluna_codigo: str = "codigo") -> pd.DataFrame:
+    """Uma linha por projeto (mesmo agrupamento de `projetos_por_entidade`:
+    código/nome + N° AT + disciplina, ou id isolado quando o AT não é
+    utilizável), mas preservando TODAS as colunas originais da revisão
+    mais recente — não apenas o resumo agregado. Base para qualquer regra
+    que precise operar sobre o estado real da última revisão de um
+    projeto (ex.: Devolutiva Externa)."""
+    if df.empty:
+        return df
+    base = df.copy()
+    base["_chave_entidade"] = chave_entidade_serie(base, coluna_nome, coluna_codigo)
+    base["_at_valido"] = base["num_at"].apply(at_valido)
+    chave_at = base["_chave_entidade"].astype(str) + "||" + base["num_at"].astype(str) + "||" + base["disciplina"].fillna("").astype(str)
+    chave_unica = base["_chave_entidade"].astype(str) + "||SEMAT||" + base["id"].astype(str)
+    base["_chave_projeto"] = chave_at.where(base["_at_valido"], chave_unica)
+    idx_max = base.groupby("_chave_projeto")["revisao"].idxmax()
+    return base.loc[idx_max].drop(columns=["_chave_projeto"])
 
 
 def calcular_intervalos_revisao(df: pd.DataFrame, coluna_nome: str, coluna_codigo: str = "codigo") -> pd.DataFrame:
@@ -97,11 +116,11 @@ def calcular_intervalos_revisao(df: pd.DataFrame, coluna_nome: str, coluna_codig
     if df.empty:
         return pd.DataFrame(columns=colunas_saida)
 
-    base = df[df["num_at"].apply(_at_valido)].copy()
+    base = df[df["num_at"].apply(at_valido)].copy()
     if base.empty:
         return pd.DataFrame(columns=colunas_saida)
 
-    base["_chave_entidade"] = _chave_entidade_serie(base, coluna_nome, coluna_codigo)
+    base["_chave_entidade"] = chave_entidade_serie(base, coluna_nome, coluna_codigo)
     base["chave_grupo"] = base["_chave_entidade"].astype(str) + "||" + base["num_at"].astype(str) + "||" + base["disciplina"].fillna("").astype(str)
 
     linhas = []
@@ -217,8 +236,8 @@ def projetos_por_entidade(df: pd.DataFrame, coluna_nome: str, coluna_codigo: str
         return pd.DataFrame(columns=colunas)
 
     base = df.copy()
-    base["_chave_entidade"] = _chave_entidade_serie(base, coluna_nome, coluna_codigo)
-    base["_at_valido"] = base["num_at"].apply(_at_valido)
+    base["_chave_entidade"] = chave_entidade_serie(base, coluna_nome, coluna_codigo)
+    base["_at_valido"] = base["num_at"].apply(at_valido)
     # Registros sem AT válido (placeholder "***"/"-"/etc.) nunca são agrupados
     # entre si — cada um vira seu próprio projeto (chave única pelo id), já
     # que um AT placeholder repetido não indica que sejam o mesmo projeto.
