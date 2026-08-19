@@ -86,12 +86,17 @@ def preparar_base_prazo(df: pd.DataFrame, modulo: str) -> pd.DataFrame:
         lambda r: _dias_uteis_diferenca(r.get("data_limite"), r.get("data_analise")), axis=1
     )
     status_final = df["status_analise"].astype(str).str.strip().str.upper().isin(STATUS_CONCLUIDO_ENTREGA)
+    em_hold_atual = df.get("em_hold", pd.Series(False, index=df.index)).fillna(False).astype(bool)
     dias_restantes = df.apply(
         lambda r: calculo_seguro(dias_restantes_prioridade, r, modulo, contexto="dias_restantes_prioridade"), axis=1,
     )
     df["_dias_restantes"] = dias_restantes
-    df["_ativa_atrasada"] = (~status_final) & dias_restantes.apply(lambda d: d is not None and d < 0)
-    df["_vence_2_dias"] = (~status_final) & dias_restantes.apply(lambda d: d is not None and 0 <= d <= 2)
+    # HOLD pausa o SLA: uma análise em HOLD aberto nunca conta como
+    # "ativa atrasada" nem como "vencendo em 2 dias", mesmo que o valor
+    # congelado de dias_restantes já esteja negativo/baixo (ver
+    # gat.business_rules.status_entrega_prestador/status_entrega_cessionario).
+    df["_ativa_atrasada"] = (~status_final) & (~em_hold_atual) & dias_restantes.apply(lambda d: d is not None and d < 0)
+    df["_vence_2_dias"] = (~status_final) & (~em_hold_atual) & dias_restantes.apply(lambda d: d is not None and 0 <= d <= 2)
     df["_modulo"] = modulo
     return df
 

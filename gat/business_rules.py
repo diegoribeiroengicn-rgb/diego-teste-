@@ -159,6 +159,15 @@ def status_entrega_prestador(
         status = "NO PRAZO"
     else:
         status = "ATRASADO"
+    if hold_aberto_desde is not None and status == "ATRASADO":
+        # HOLD pausa o SLA — mesmo que a análise já estivesse além do prazo
+        # no momento em que entrou em HOLD, ela não deve ser rotulada como
+        # "ATRASADO" enquanto permanecer pausada (HOLD e atraso são
+        # mutuamente exclusivos). Corrigido na origem para que todos os
+        # consumidores de `status_entrega_calc` (dashboards, Visão Geral,
+        # relatórios, OPR, exportações) herdem o mesmo comportamento sem
+        # precisar checar `em_hold` individualmente.
+        status = "NO PRAZO"
     return status, decorridos
 
 
@@ -178,6 +187,11 @@ def status_entrega_cessionario(
         status = "NO PRAZO"
     else:
         status = "ATRASADO"
+    if hold_aberto_desde is not None and status == "ATRASADO":
+        # Mesma lógica de `status_entrega_prestador`: HOLD pausa o SLA, então
+        # a análise não é rotulada como atrasada enquanto estiver em HOLD
+        # aberto, mesmo que já estivesse além do prazo quando entrou em HOLD.
+        status = "NO PRAZO"
     return status, saldo
 
 
