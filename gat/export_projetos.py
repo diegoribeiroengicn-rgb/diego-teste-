@@ -136,20 +136,29 @@ def montar_exportacao_consolidada(df_prest: pd.DataFrame, df_cess: pd.DataFrame)
     return pd.concat([exp_prest, exp_cess], ignore_index=True).fillna("—")
 
 
-def gerar_excel_bytes(df: pd.DataFrame, nome_aba: str) -> bytes:
+def gerar_excel_bytes(df: pd.DataFrame, nome_aba: str, cabecalho: str | None = None) -> bytes:
+    """`cabecalho` (opcional, item 13 do filtro por intervalo de datas):
+    linha informativa (ex.: "Período analisado: ...") escrita acima da
+    tabela, sem afetar quem já chama esta função sem o parâmetro."""
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        df.to_excel(writer, sheet_name=nome_aba[:31], index=False)
+        linha_inicial = 2 if cabecalho else 0
+        df.to_excel(writer, sheet_name=nome_aba[:31], index=False, startrow=linha_inicial)
         planilha = writer.sheets[nome_aba[:31]]
+        if cabecalho:
+            planilha.cell(row=1, column=1, value=cabecalho)
         for indice, coluna in enumerate(df.columns, start=1):
             maior = max([len(str(coluna))] + [len(str(v)) for v in df[coluna].head(200)]) if not df.empty else len(str(coluna))
             planilha.column_dimensions[planilha.cell(row=1, column=indice).column_letter].width = min(max(maior + 2, 10), 45)
-        planilha.freeze_panes = "A2"
+        planilha.freeze_panes = f"A{linha_inicial + 2}"
     return buffer.getvalue()
 
 
-def gerar_csv_bytes(df: pd.DataFrame) -> bytes:
-    return df.to_csv(index=False, sep=";", encoding="utf-8-sig").encode("utf-8-sig")
+def gerar_csv_bytes(df: pd.DataFrame, cabecalho: str | None = None) -> bytes:
+    corpo = df.to_csv(index=False, sep=";", encoding="utf-8-sig")
+    if cabecalho:
+        corpo = f"{cabecalho}\n\n{corpo}"
+    return corpo.encode("utf-8-sig")
 
 
 def nome_arquivo_exportacao(tipo: str, extensao: str, filtrado: bool, rotulo_periodo: str | None = None) -> str:

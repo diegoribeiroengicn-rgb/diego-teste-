@@ -13,6 +13,7 @@ from gat.business_rules import (
     dias_restantes_prioridade,
     enriquecer_prestadores,
     filtrar_por_competencia,
+    filtrar_por_intervalo_datas,
     nivel_alerta_atraso,
     situacao_prazo,
     status_avaliacao_obrigatoria,
@@ -22,7 +23,7 @@ from gat.database import listar_prestadores, obter_prestador, registrar_atividad
 from gat.export_projetos import gerar_csv_bytes, gerar_excel_bytes, montar_exportacao_prestadores, nome_arquivo_exportacao
 from gat.normalizacao import booleano_seguro, calculo_seguro
 from gat.permissions import exigir_area, exigir_modulo, pode_area
-from gat.ui.filtros import rotulo_competencia, seletor_competencia
+from gat.ui.filtros import rotulo_periodo_filtro, seletor_periodo
 from gat.ui.formatos import formatar_datas_df
 from gat.ui.modals import dialog_prestador
 from gat.ui.tables import tabela_com_edicao
@@ -118,15 +119,15 @@ def render(usuario: dict) -> None:
         f_nome = col8.text_input("Prestador (nome)", key="filtro_prest_nome", placeholder="Ex.: Empresa ABC")
         f_revisao = col9.text_input("Revisão", key="filtro_prest_revisao", placeholder="Ex.: 2")
 
-        mes, ano = seletor_competencia("filtro_prest_comp")
+        mes, ano, data_inicio, data_fim = seletor_periodo("filtro_prest_comp", "Data de Solicitação")
 
         col_pesquisar, col_limpar = st.columns([1, 1])
         col_pesquisar.button("Pesquisar", icon=":material/search:", type="primary", key="pesquisar_prest", use_container_width=True)
         if col_limpar.button("Limpar filtros", icon=":material/filter_alt_off:", key="limpar_filtros_prest", use_container_width=True):
             for chave in _CHAVES_FILTRO:
                 st.session_state.pop(chave, None)
-            st.session_state.pop("filtro_prest_comp_mes", None)
-            st.session_state.pop("filtro_prest_comp_ano", None)
+            for sufixo in ("_tipo", "_mes", "_ano", "_data_ini", "_data_fim"):
+                st.session_state.pop(f"filtro_prest_comp{sufixo}", None)
             st.rerun()
 
     df_filtrado = df.copy()
@@ -150,9 +151,12 @@ def render(usuario: dict) -> None:
         df_filtrado = df_filtrado[df_filtrado["prestador"].fillna("").astype(str).str.contains(f_nome.strip(), case=False, na=False, regex=False)]
     if f_revisao.strip():
         df_filtrado = df_filtrado[df_filtrado["revisao"].astype(str).str.strip() == f_revisao.strip()]
-    if mes or ano:
+    if data_inicio or data_fim:
+        df_filtrado = filtrar_por_intervalo_datas(df_filtrado, "data_solicitacao", data_inicio, data_fim)
+        st.caption(f"Período: **{rotulo_periodo_filtro(mes, ano, data_inicio, data_fim)}** (baseado na Data de Solicitação)")
+    elif mes or ano:
         df_filtrado = filtrar_por_competencia(df_filtrado, "data_solicitacao", mes, ano)
-        st.caption(f"Competência: **{rotulo_competencia(mes, ano)}** (baseado na Data de Solicitação)")
+        st.caption(f"Competência: **{rotulo_periodo_filtro(mes, ano, data_inicio, data_fim)}** (baseado na Data de Solicitação)")
 
     if f_atraso:
         mascara_atrasado = df_filtrado.apply(
@@ -231,13 +235,15 @@ def render(usuario: dict) -> None:
         if st.button("Baixar Projetos de Prestadores", icon=":material/description:", key="export_prest_gerar"):
             exigir_area(usuario, "prestadores.exportar" if filtrado else "prestadores.exportar_completo")
             exportacao = montar_exportacao_prestadores(base_exportacao)
-            rotulo_periodo = rotulo_competencia(mes, ano) if (filtrado and (mes or ano)) else None
+            tem_periodo = filtrado and (mes or ano or data_inicio or data_fim)
+            rotulo_periodo = rotulo_periodo_filtro(mes, ano, data_inicio, data_fim) if tem_periodo else None
+            cabecalho_periodo = f"Período analisado: {rotulo_periodo}" if tem_periodo else None
             if formato.startswith("Excel"):
-                conteudo = gerar_excel_bytes(exportacao, "Prestadores")
+                conteudo = gerar_excel_bytes(exportacao, "Prestadores", cabecalho=cabecalho_periodo)
                 arquivo = nome_arquivo_exportacao("Prestadores", "xlsx", filtrado, rotulo_periodo)
                 mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             else:
-                conteudo = gerar_csv_bytes(exportacao)
+                conteudo = gerar_csv_bytes(exportacao, cabecalho=cabecalho_periodo)
                 arquivo = nome_arquivo_exportacao("Prestadores", "csv", filtrado, rotulo_periodo)
                 mime = "text/csv"
             st.download_button(

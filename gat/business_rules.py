@@ -883,3 +883,28 @@ def filtrar_por_competencia(df: pd.DataFrame, coluna: str, mes: int | None, ano:
         mascara &= datas.dt.year == ano
     mascara &= datas.notna()
     return df.loc[mascara].copy()
+
+
+def filtrar_por_intervalo_datas(df: pd.DataFrame, coluna: str, data_inicio, data_fim) -> pd.DataFrame:
+    """
+    Filtra `df` por um intervalo [data_inicio, data_fim] (ambos inclusive)
+    de `coluna` — filtro por período personalizado (modificação de filtro
+    por intervalo de datas, item 1-5), pensado para usar exatamente a mesma
+    coluna de referência já usada por `filtrar_por_competencia` na mesma
+    tela (nunca uma interpretação diferente entre os dois filtros).
+    `data_inicio`/`data_fim` iguais a None não filtram por aquele limite —
+    permite informar só um dos dois. Aceita `date`/`datetime`/string ISO.
+    """
+    if df.empty or coluna not in df.columns or (data_inicio is None and data_fim is None):
+        return df
+    datas = pd.to_datetime(df[coluna], errors="coerce")
+    mascara = pd.Series(True, index=df.index)
+    if data_inicio is not None:
+        mascara &= datas >= pd.Timestamp(data_inicio)
+    if data_fim is not None:
+        # Inclusive até o fim do dia de `data_fim` — a coluna normalmente só
+        # guarda a data (sem hora), mas isso evita excluir um registro caso
+        # algum dia passe a existir componente de hora na data de referência.
+        mascara &= datas <= pd.Timestamp(data_fim) + pd.Timedelta(hours=23, minutes=59, seconds=59)
+    mascara &= datas.notna()
+    return df.loc[mascara].copy()
