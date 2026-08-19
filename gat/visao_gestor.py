@@ -103,11 +103,14 @@ def montar_painel_por_analista(
         if sub.empty and prioridades_analista.empty and alertas_analista.empty:
             continue
 
+        em_hold_qtd = int(sub.get("em_hold", pd.Series(dtype=bool)).fillna(False).astype(bool).sum())
+
         linhas.append({
             "analista": analista,
             "em_andamento": len(em_andamento),
             "concluidos": kpis["total_entregue"],
             "atrasados": int(kpis["atrasados_em_analise"]),
+            "em_hold": em_hold_qtd,
             "prioridades": len(prioridades_analista),
             "alertas_ativos": len(alertas_analista),
             "aguardando_avaliacao": len(pendencias_analista),

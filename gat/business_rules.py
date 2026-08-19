@@ -275,12 +275,16 @@ def limites_alerta_vencimento(sla_dias: int) -> tuple[int, int, int]:
 
 def cor_mapa_calor(row: pd.Series, dias_restantes: int | None) -> str:
     """
-    Cor do mapa de calor de prazos (item 9): roxo tem prioridade sobre as
-    demais e sinaliza reforço — SLA reduzido manualmente ou Nível 1 de
-    prioridade (o mais crítico) — independentemente dos dias restantes;
-    as demais situações seguem o esquema padrão de 4 cores por proximidade
-    do prazo (`situacao_prazo`).
+    Cor do mapa de calor de prazos (item 9): azul tem prioridade máxima e
+    identifica uma análise em HOLD aberto (regra definitiva de HOLD —
+    nunca pode aparecer como atrasada/vermelha, mesmo com `dias_restantes`
+    congelado negativo); roxo sinaliza reforço — SLA reduzido manualmente
+    ou Nível 1 de prioridade (o mais crítico) — independentemente dos dias
+    restantes; as demais situações seguem o esquema padrão de 4 cores por
+    proximidade do prazo (`situacao_prazo`).
     """
+    if booleano_seguro(row.get("em_hold")):
+        return "azul"
     if bool(row.get("sla_reduzido")) or row.get("nivel_prioridade") == 1:
         return "roxo"
     mapa = {"DENTRO DO PRAZO": "verde", "VENCE EM BREVE": "amarelo", "VENCE HOJE": "laranja", "ATRASADO": "vermelho"}
@@ -295,6 +299,7 @@ MOTIVO_VENCE_2_DIAS = "Vence em 2 dias úteis"
 MOTIVO_VENCE_1_DIA = "Vence em 1 dia útil"
 MOTIVO_VENCE_HOJE = "Vence hoje"
 MOTIVO_PRAZO_VENCIDO = "Prazo vencido"
+MOTIVO_PRIORIDADE_HOLD = "Prioridade – Em HOLD"
 
 _RANK_NIVEL_PRIORIDADE = {1: 4, 2: 5, 3: 6}
 
@@ -306,14 +311,22 @@ def motivos_entrada_lista_prioridades(row: pd.Series, modulo: str) -> list[str]:
     uma mesma análise pode ter mais de um motivo simultaneamente (ex.:
     "Prioridade Nível 2" + "Vence em 1 dia útil"). Uma análise concluída
     (status final) nunca tem motivo — já saiu da lista ativa (item 8).
-    Uma análise em HOLD aberto também não tem motivo — apareceria com um
-    prazo/urgência congelado, dando a falsa impressão de que o analista
-    estaria deixando de trabalhar nela, quando na verdade está pausada.
+
+    Uma análise em HOLD aberto nunca entra por proximidade/atraso de prazo
+    (congelado, sem sentido enquanto pausada) nem gera Alerta Máximo — mas,
+    se já possuía formalmente um Nível de Prioridade antes/durante o HOLD,
+    continua listada com o motivo único "Prioridade – Em HOLD" (regra
+    definitiva — consolidação de atraso/HOLD/Alerta Máximo, item 21): o
+    gestor não perde visibilidade da prioridade formal, sem que isso seja
+    interpretado como atraso.
     """
-    if booleano_seguro(row.get("em_hold")):
-        return []
     status = texto_seguro(row.get("status_analise")).strip().upper()
     if status in STATUS_CONCLUIDOS_PRIORIDADE:
+        return []
+    if booleano_seguro(row.get("em_hold")):
+        nivel = row.get("nivel_prioridade")
+        if pd.notna(nivel) and int(nivel) in NIVEIS_PRIORIDADE_LABELS:
+            return [MOTIVO_PRIORIDADE_HOLD]
         return []
     motivos: list[str] = []
     nivel = row.get("nivel_prioridade")
@@ -341,7 +354,17 @@ def _criticidade_lista_prioridades(row: pd.Series, dias_restantes: int | None) -
     retornado, mais crítico — a lista é ordenada de forma ascendente por
     este valor, com a data prevista mais próxima como critério de
     desempate (item 10, posição 9).
+
+    Uma análise em HOLD nunca escala pela proximidade/atraso do prazo
+    (regra definitiva de HOLD, item 21) — mesmo com `dias_restantes`
+    congelado negativo, sua criticidade vem só do Nível de Prioridade
+    formal, nunca dos níveis 0-3 (vencido/vence hoje/1/2 dias).
     """
+    if booleano_seguro(row.get("em_hold")):
+        nivel = row.get("nivel_prioridade")
+        if pd.notna(nivel) and int(nivel) in _RANK_NIVEL_PRIORIDADE:
+            return _RANK_NIVEL_PRIORIDADE[int(nivel)]
+        return 8
     if dias_restantes is not None:
         if dias_restantes < 0:
             return 0
@@ -384,6 +407,7 @@ def montar_lista_prioridades(df_prestadores: pd.DataFrame, df_cessionarios: pd.D
                 NIVEIS_PRIORIDADE_LABELS.get(int(row["nivel_prioridade"]), "—")
                 if pd.notna(row.get("nivel_prioridade")) else ("SLA reduzido" if row.get("sla_reduzido") else "—")
             )
+            em_hold_row = booleano_seguro(row.get("em_hold"))
             linhas.append({
                 "tipo": rotulo_tipo, "modulo": modulo, "id": row.get("id"),
                 "nome_entidade": row.get(coluna_nome), "codigo": row.get("codigo"),
@@ -394,7 +418,11 @@ def montar_lista_prioridades(df_prestadores: pd.DataFrame, df_cessionarios: pd.D
                 "sla_original": row.get("sla_original"), "data_solicitacao": row.get("data_solicitacao"),
                 "data_limite": row.get("data_limite"),
                 "justificativa_sla": row.get("justificativa_sla"),
-                "dias_restantes": dias_restantes, "situacao_prazo": situacao_prazo(dias_restantes),
+                # Em HOLD nunca é "ATRASADO", mesmo com dias_restantes congelado
+                # negativo — regra definitiva de HOLD (item 21).
+                "dias_restantes": dias_restantes,
+                "situacao_prazo": "EM HOLD" if em_hold_row else situacao_prazo(dias_restantes),
+                "em_hold": em_hold_row,
                 "cor_mapa_calor": cor_mapa_calor(row, dias_restantes),
                 "status_analise": row.get("status_analise"),
                 "sla_alterado_por": row.get("sla_alterado_por"), "sla_alterado_em": row.get("sla_alterado_em"),
@@ -418,9 +446,9 @@ STATUS_CONCLUIDO_ENTREGA = {"LIBERADO", "LIBERADO C/ REST.", "NÃO LIBERADO"}
 NIVEL_ALERTA_ATRASO_LABELS = {
     "DENTRO_DO_PRAZO": "Dentro do prazo",
     "PROXIMO_VENCIMENTO": "Próximo do vencimento",
-    "ATRASO_ALTO": "1 dia útil de atraso",
-    "ATRASO_CRITICO": "2 dias úteis de atraso",
-    "ALERTA_MAXIMO": "Mais de 2 dias úteis de atraso",
+    "ATRASO_ALTO": "1 dia útil de atraso",  # nível legado, não produzido mais — ver nivel_alerta_atraso()
+    "ATRASO_CRITICO": "2 dias úteis de atraso",  # nível legado, não produzido mais — ver nivel_alerta_atraso()
+    "ALERTA_MAXIMO": "Alerta Máximo — pelo menos 24h de atraso real",
 }
 NIVEL_ALERTA_ATRASO_ICONES = {
     "DENTRO_DO_PRAZO": "🟢", "PROXIMO_VENCIMENTO": "🟡", "ATRASO_ALTO": "🟠",
@@ -430,21 +458,26 @@ NIVEL_ALERTA_ATRASO_ICONES = {
 
 def nivel_alerta_atraso(dias_restantes: int | None) -> str:
     """
-    Escala de 5 níveis de atraso (item 8 da modificação de indicadores de
-    atraso): Dentro do prazo / Próximo do vencimento / 1 dia útil de
-    atraso (alerta alto) / 2 dias úteis de atraso (alerta crítico) / mais
-    de 2 dias úteis de atraso (Alerta Máximo). Limiar fixo (não escalonado
-    por SLA curto, ao contrário do aviso de vencimento da Lista de
-    Prioridades) — `dias_restantes` negativo indica atraso.
+    Escala de níveis de atraso (regra definitiva — substitui expressamente
+    a regra anterior de "mais de 2 dias úteis de atraso" para o Alerta
+    Máximo): Dentro do prazo / Próximo do vencimento / Alerta Máximo.
+
+    Alerta Máximo = análise ativa com pelo menos 24 horas de atraso real.
+    Como o sistema mede o prazo em dias úteis (nunca em frações de dia), o
+    primeiro dia útil em que `dias_restantes` fica negativo já representa,
+    em qualquer cenário, pelo menos um dia corrido inteiro (≥24h) além do
+    prazo — não existe, nesta granularidade, um estado intermediário de
+    "atrasado há menos de 24h" que ainda não seja Alerta Máximo. Por isso
+    todo `dias_restantes < 0` já é Alerta Máximo, sem esperar acumular 2+
+    dias úteis como na regra antiga (ATRASO_ALTO/ATRASO_CRITICO deixam de
+    ser produzidos, mas os rótulos permanecem definidos para não quebrar
+    quem ainda os referencia). Limiar fixo (não escalonado por SLA curto,
+    ao contrário do aviso de vencimento da Lista de Prioridades).
     """
     if dias_restantes is None:
         return "DENTRO_DO_PRAZO"
-    if dias_restantes <= -3:
+    if dias_restantes < 0:
         return "ALERTA_MAXIMO"
-    if dias_restantes == -2:
-        return "ATRASO_CRITICO"
-    if dias_restantes == -1:
-        return "ATRASO_ALTO"
     if dias_restantes <= _LIMIAR_VENCE_EM_BREVE_DIAS_UTEIS:
         return "PROXIMO_VENCIMENTO"
     return "DENTRO_DO_PRAZO"

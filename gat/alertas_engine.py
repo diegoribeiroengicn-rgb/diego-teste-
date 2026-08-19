@@ -58,7 +58,7 @@ TIPO_ALERTA_LABELS = {
     TIPO_ATRASO_REENVIO: "Atraso no reenvio (retorno externo)",
     TIPO_AVALIACAO_OBRIGATORIA: "Avaliação obrigatória pendente",
     TIPO_PRAZO_PRIORITARIO: "Prazo prioritário próximo do vencimento",
-    TIPO_ALERTA_MAXIMO: "Alerta Máximo — mais de 2 dias úteis de atraso",
+    TIPO_ALERTA_MAXIMO: "Alerta Máximo — pelo menos 24 horas de atraso real",
     TIPO_ACOMPANHAMENTO_HOLD: "Acompanhamento de HOLD (3+ dias úteis)",
 }
 
@@ -169,8 +169,8 @@ def montar_alertas_modulo(df: pd.DataFrame, modulo: str, coluna_nome: str, colun
                     registros.append({
                         **base, "tipo_alerta": TIPO_ALERTA_MAXIMO,
                         "detalhe": (
-                            f"ATENÇÃO: esta análise está com mais de 2 dias úteis de atraso ({dias_atraso} dia(s) útil(eis)) "
-                            "e exige atuação imediata."
+                            f"ATENÇÃO: esta análise está com pelo menos 24 horas de atraso real "
+                            f"({dias_atraso} dia(s) útil(eis)) e exige atuação imediata."
                         ),
                     })
             if chave_entidade in criticos:

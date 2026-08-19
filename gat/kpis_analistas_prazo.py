@@ -174,6 +174,7 @@ def calcular_kpis_prazo_analista(df: pd.DataFrame, analista: str | None = None) 
         "media_dias_atraso": media_atraso,
         "atrasados_em_analise": int(sub["_ativa_atrasada"].sum()),
         "vencem_2_dias_uteis": int(sub["_vence_2_dias"].sum()),
+        "em_hold": int(sub.get("em_hold", pd.Series(dtype=bool)).fillna(False).astype(bool).sum()),
     }
 
 
@@ -182,7 +183,7 @@ def _kpis_vazio() -> dict:
         "total_entregue": 0, "antes_prazo": 0, "no_dia": 0, "com_atraso": 0,
         "pct_antes_prazo": 0.0, "pct_no_dia": 0.0, "pct_atraso": 0.0, "pct_cumprimento_prazo": 0.0,
         "media_dias_antecipacao": 0.0, "media_dias_atraso": 0.0,
-        "atrasados_em_analise": 0, "vencem_2_dias_uteis": 0,
+        "atrasados_em_analise": 0, "vencem_2_dias_uteis": 0, "em_hold": 0,
     }
 
 
@@ -192,7 +193,7 @@ def tabela_consolidada_por_analista(df: pd.DataFrame, analistas: list[str]) -> p
     linhas = []
     for analista in analistas:
         kpis = calcular_kpis_prazo_analista(df, analista)
-        if kpis["total_entregue"] == 0 and kpis["atrasados_em_analise"] == 0 and kpis["vencem_2_dias_uteis"] == 0:
+        if kpis["total_entregue"] == 0 and kpis["atrasados_em_analise"] == 0 and kpis["vencem_2_dias_uteis"] == 0 and kpis["em_hold"] == 0:
             continue
         linhas.append({"Analista": analista, **kpis})
     if not linhas:

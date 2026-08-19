@@ -22,10 +22,10 @@ from gat.relatorios_prioridades import (
     nome_arquivo_prioridades,
 )
 
-_ICONE_MAPA_CALOR = {"verde": "🟢", "amarelo": "🟡", "laranja": "🟠", "vermelho": "🔴", "roxo": "🟣"}
+_ICONE_MAPA_CALOR = {"verde": "🟢", "amarelo": "🟡", "laranja": "🟠", "vermelho": "🔴", "roxo": "🟣", "azul": "🔵"}
 _LABEL_SITUACAO = {
     "DENTRO DO PRAZO": "Dentro do prazo", "VENCE EM BREVE": "Vence em breve",
-    "VENCE HOJE": "Vence hoje", "ATRASADO": "Atrasado",
+    "VENCE HOJE": "Vence hoje", "ATRASADO": "Atrasado", "EM HOLD": "Em HOLD",
 }
 
 _CHAVES_FILTRO = [
@@ -45,7 +45,7 @@ def render(usuario: dict) -> None:
         "(liberado, não liberado, obsoleto ou cancelado). Ordenada pela condição mais crítica: vencidos, "
         "vence hoje, vence em 1 dia, vence em 2 dias, Nível 1, Nível 2, Nível 3, SLA reduzido, data prevista "
         "mais próxima. Mapa de calor: 🟢 dentro do prazo · 🟡 vence em breve · 🟠 vence hoje · 🔴 atrasado · "
-        "🟣 reforço (SLA reduzido ou Nível 1)."
+        "🟣 reforço (SLA reduzido ou Nível 1) · 🔵 em HOLD (prioridade formal pausada — nunca conta como atraso)."
     )
 
     df_prestadores = enriquecer_prestadores(filtrar_ativos(listar_prestadores()))
@@ -96,11 +96,12 @@ def render(usuario: dict) -> None:
         st.warning("Nenhum registro encontrado com os filtros aplicados.", icon=":material/search_off:")
         return
 
-    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+    col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
     col_m1.metric("Total prioritários", len(filtrada))
     col_m2.metric("Prestadores", int((filtrada["tipo"] == "Prestador").sum()))
     col_m3.metric("Cessionários", int((filtrada["tipo"] == "Cessionário").sum()))
     col_m4.metric("Atrasados", int((filtrada["situacao_prazo"] == "ATRASADO").sum()))
+    col_m5.metric("Em HOLD", int((filtrada["situacao_prazo"] == "EM HOLD").sum()))
 
     exibicao = formatar_datas_df(filtrada, ["data_solicitacao", "data_limite"])
     exibicao["Mapa de calor"] = exibicao["cor_mapa_calor"].map(_ICONE_MAPA_CALOR)

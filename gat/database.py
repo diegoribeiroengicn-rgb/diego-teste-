@@ -1215,6 +1215,25 @@ def _migracao_0024_manual_resumo_conclusao(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migracao_0025_manual_consolidacao_atraso_hold(conn: sqlite3.Connection) -> None:
+    """Acrescenta o capítulo 'SLA, Atraso, HOLD e Alerta Máximo' ao Manual
+    do Sistema, ao final da lista já existente, sem alterar nenhum
+    capítulo anterior — consolidação definitiva das regras de atraso,
+    HOLD e Alerta Máximo."""
+    from gat.consolidacao_atraso_hold_manual_conteudo import CAPITULOS_CONSOLIDACAO_ATRASO_HOLD
+
+    agora = agora_br().isoformat()
+    maior_ordem = conn.execute("SELECT COALESCE(MAX(ordem), 0) FROM manual_capitulos").fetchone()[0]
+    for indice, (titulo, conteudo) in enumerate(CAPITULOS_CONSOLIDACAO_ATRASO_HOLD, start=1):
+        existe = conn.execute("SELECT id FROM manual_capitulos WHERE titulo = ?", (titulo,)).fetchone()
+        if existe:
+            continue
+        conn.execute(
+            "INSERT INTO manual_capitulos (ordem, titulo, conteudo, perfis_visiveis, criado_em) VALUES (?, ?, ?, NULL, ?)",
+            (maior_ordem + indice, titulo, conteudo, agora),
+        )
+
+
 _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (1, "Índices de busca por N° AT e nome em Prestadores e Cessionários", _migracao_0001_indices_busca),
     (2, "Índices para avaliações (checklist/analistas), alertas com radar e histórico de atividades", _migracao_0002_indices_avaliacoes_alertas),
@@ -1240,6 +1259,7 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (22, "Manual do Sistema: capítulos 'Tema Claro e Tema Escuro' e 'Padrão visual do sistema'", _migracao_0022_manual_tema),
     (23, "Resumo de Conclusão da Análise: colunas de estado em Prestadores/Cessionários + tabela resumo_conclusao_historico", _migracao_0023_resumo_conclusao),
     (24, "Manual do Sistema: capítulo 'Resumo de Conclusão da Análise'", _migracao_0024_manual_resumo_conclusao),
+    (25, "Manual do Sistema: capítulo 'SLA, Atraso, HOLD e Alerta Máximo' (consolidação definitiva das regras)", _migracao_0025_manual_consolidacao_atraso_hold),
 ]
 
 

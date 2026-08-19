@@ -136,7 +136,7 @@ def _renderizar_cards(kpis: dict, analista: str) -> None:
     col3.metric("Entregues no dia", kpis["no_dia"])
     col4.metric("Entregues com atraso", kpis["com_atraso"])
 
-    col_atraso, col_vence, col_acao = st.columns([2, 2, 1.3])
+    col_atraso, col_vence, col_hold, col_acao = st.columns([2, 2, 1.5, 1.3])
     with col_atraso:
         destaque = kpis["atrasados_em_analise"] > 0
         cor = CORES["vermelho"] if destaque else CORES["borda_forte"]
@@ -157,6 +157,16 @@ def _renderizar_cards(kpis: dict, analista: str) -> None:
                     Vencem em até 2 dias úteis</div>
                 <div style="font-size:1.9rem;font-weight:800;color:{CORES['texto']};">
                     {kpis['vencem_2_dias_uteis']}</div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+    with col_hold:
+        st.markdown(
+            f"""<div style="border:1px solid {CORES['borda_forte']};border-radius:10px;padding:12px 14px;">
+                <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:{CORES['texto_fraco']};">
+                    Em HOLD</div>
+                <div style="font-size:1.9rem;font-weight:800;color:{CORES['texto']};">
+                    {kpis.get('em_hold', 0)}</div>
             </div>""",
             unsafe_allow_html=True,
         )
@@ -232,15 +242,17 @@ def _renderizar_consolidado(df: pd.DataFrame, usuario: dict, notas_fechadas: dic
     total_entregue = int(tabela["total_entregue"].sum())
     total_atrasados = int(tabela["atrasados_em_analise"].sum())
     total_vence_2d = int(tabela["vencem_2_dias_uteis"].sum())
+    total_hold = int(tabela.get("em_hold", pd.Series(dtype=int)).sum())
     pct_geral = round(tabela["antes_prazo"].sum() / total_entregue * 100 + tabela["no_dia"].sum() / total_entregue * 100, 1) if total_entregue else 0.0
     media_atraso_geral = round(tabela.loc[tabela["com_atraso"] > 0, "media_dias_atraso"].mean(), 1) if (tabela["com_atraso"] > 0).any() else 0.0
     media_antecip_geral = round(tabela.loc[tabela["antes_prazo"] > 0, "media_dias_antecipacao"].mean(), 1) if (tabela["antes_prazo"] > 0).any() else 0.0
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col_hold = st.columns(5)
     col1.metric("Total entregue (equipe)", total_entregue)
     col2.metric("Atrasados em análise (equipe)", total_atrasados)
     col3.metric("Vencem em até 2 dias úteis (equipe)", total_vence_2d)
     col4.metric("% Cumprimento geral do prazo", f"{pct_geral}%")
+    col_hold.metric("Em HOLD (equipe)", total_hold)
     col5, col6 = st.columns(2)
     col5.metric("Média dias úteis de atraso (equipe)", media_atraso_geral)
     col6.metric("Média dias úteis de antecipação (equipe)", media_antecip_geral)
@@ -265,6 +277,7 @@ def _renderizar_consolidado(df: pd.DataFrame, usuario: dict, notas_fechadas: dic
         "pct_atraso": "% Atraso", "pct_cumprimento_prazo": "% Cumprimento",
         "media_dias_antecipacao": "Média Antecipação (dias úteis)", "media_dias_atraso": "Média Atraso (dias úteis)",
         "atrasados_em_analise": "Atrasados em Análise", "vencem_2_dias_uteis": "Vencem em 2 Dias Úteis",
+        "em_hold": "Em HOLD",
     })
     if pode_area(usuario, "analistas.notas"):
         tabela_exibicao["Nota Final (fechada) 🔒"] = tabela_exibicao["Analista"].map(

@@ -134,11 +134,12 @@ def _renderizar_kpis_executivos(df: pd.DataFrame, lista_prioridades: pd.DataFram
     em_andamento = df[status_upper.isin(STATUS_ATIVO_ANALISE)]
     kpis_equipe = calcular_kpis_prazo_analista(df, None)
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col_hold = st.columns(5)
     col1.metric("Total em andamento", len(em_andamento))
     col2.metric("Total prioritárias", len(lista_prioridades))
     col3.metric("Total atrasadas", kpis_equipe["atrasados_em_analise"])
     col4.metric("Vencendo em ≤2 dias úteis", kpis_equipe["vencem_2_dias_uteis"])
+    col_hold.metric("Em HOLD", kpis_equipe.get("em_hold", 0))
 
     col5, col6, col7 = st.columns(3)
     col5.metric("Com SLA reduzido", int(em_andamento["sla_reduzido"].fillna(False).astype(bool).sum()) if "sla_reduzido" in em_andamento.columns else 0)
@@ -174,15 +175,17 @@ def _renderizar_quem_faz_o_que(df: pd.DataFrame, painel: pd.DataFrame, lista_pri
         titulo = (
             f"{icone} **{analista}** — {_LABEL_STATUS_OPERACIONAL[situacao]} · "
             f"{int(linha['em_andamento'])} em andamento · {int(linha['prioridades'])} prioridade(s) · "
-            f"{int(linha['atrasados'])} atrasada(s) · {int(linha['alertas_ativos'])} alerta(s)"
+            f"{int(linha['atrasados'])} atrasada(s) · {int(linha.get('em_hold', 0))} em HOLD · "
+            f"{int(linha['alertas_ativos'])} alerta(s)"
         )
         with st.expander(titulo, icon=":material/person:"):
-            col1, col2, col3, col4, col5 = st.columns(5)
+            col1, col2, col3, col4, col5, col_hold = st.columns(6)
             col1.metric("Em andamento", int(linha["em_andamento"]))
             col2.metric("Concluídos", int(linha["concluidos"]))
             col3.metric("Atrasados", int(linha["atrasados"]))
             col4.metric("Prioridades", int(linha["prioridades"]))
             col5.metric("Alertas ativos", int(linha["alertas_ativos"]))
+            col_hold.metric("Em HOLD", int(linha.get("em_hold", 0)))
             col6, col7, col8 = st.columns(3)
             col6.metric("Tempo médio de análise (dias úteis)", linha["tempo_medio_dias"])
             col7.metric("% no prazo", f"{linha['pct_no_prazo']}%")
@@ -309,7 +312,7 @@ def _renderizar_distribuicao_carga(painel: pd.DataFrame) -> None:
         return
     exibicao = painel.rename(columns={
         "analista": "Analista", "em_andamento": "Em Andamento", "concluidos": "Concluídos",
-        "atrasados": "Atrasados", "prioridades": "Prioritárias", "alertas_ativos": "Alertas Ativos",
+        "atrasados": "Atrasados", "em_hold": "Em HOLD", "prioridades": "Prioritárias", "alertas_ativos": "Alertas Ativos",
         "aguardando_avaliacao": "Aguardando Avaliação", "tempo_medio_dias": "Tempo Médio (dias úteis)",
         "vence_2_dias": "Vencendo em 2 Dias Úteis", "pct_no_prazo": "% No Prazo", "pct_atraso": "% Com Atraso",
         "sla_reduzido_qtd": "SLA Reduzido em Vigor",
@@ -317,10 +320,11 @@ def _renderizar_distribuicao_carga(painel: pd.DataFrame) -> None:
     st.dataframe(exibicao, use_container_width=True, hide_index=True)
 
     st.markdown("###### Indicadores consolidados da equipe")
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total em andamento (equipe)", int(painel["em_andamento"].sum()))
     col2.metric("Total concluído (equipe)", int(painel["concluidos"].sum()))
     col3.metric("Total atrasado (equipe)", int(painel["atrasados"].sum()))
+    col4.metric("Total em HOLD (equipe)", int(painel.get("em_hold", pd.Series(dtype=int)).sum()))
 
 
 def _renderizar_relatorios(df: pd.DataFrame, painel: pd.DataFrame, lista_prioridades: pd.DataFrame, kpis_dict: dict, analistas: list[str], usuario: dict) -> None:

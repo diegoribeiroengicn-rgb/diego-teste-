@@ -76,7 +76,7 @@ def _cartao_alerta(usuario: dict, alerta: pd.Series, sufixo_chave: str) -> None:
         if alerta["tipo_alerta"] == TIPO_ALERTA_MAXIMO:
             st.error(
                 f"🟥 **ALERTA MÁXIMO** — {alerta['nome']} (AT {_ou_traco(alerta.get('num_at'))}): "
-                f"{alerta.get('detalhe') or 'mais de 2 dias úteis de atraso, exige atuação imediata.'}",
+                f"{alerta.get('detalhe') or 'pelo menos 24 horas de atraso real, exige atuação imediata.'}",
                 icon=":material/emergency_home:",
             )
         col_info, col_status = st.columns([4, 1])
