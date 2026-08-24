@@ -18,16 +18,23 @@ Um registro cuja chave só é encontrada entre os já arquivados é apenas
 sinalizado no relatório, nunca modificado nem duplicado — arquivamento é
 uma decisão manual separada.
 
+A planilha é a referência: quando um campo tem valor diferente e não
+vazio nos dois lados (conflito), o padrão é atualizar o sistema para
+acompanhar a planilha — o usuário só precisa agir para o caso contrário
+(manter um valor específico do sistema).
+
 Uso em duas fases (Configurações > Atualização por Planilha):
 `planejar_importacao_prestadores`/`planejar_importacao_cessionarios`
 leem a planilha e classificam cada linha (novo/atualização/sem
 mudança/já arquivado/inconsistente) SEM gravar nada — inclusive
 identificando conflitos reais (campo com valor diferente e não vazio dos
-dois lados, nunca resolvido automaticamente). Só depois que o usuário
-revisa a prévia e confirma (resolvendo os conflitos, se houver),
-`executar_plano_prestadores`/`executar_plano_cessionarios` gravam no
-banco. `confirmar_importacao` orquestra as duas execuções com backup
-antes e restauração automática em caso de erro (item 8) — cópia de
+dois lados), sempre mostrados na prévia para transparência mesmo que a
+resolução padrão já seja aplicar a planilha. Só depois que o usuário
+revisa a prévia e confirma (ajustando os conflitos que quiser resolver
+diferente, se houver), `executar_plano_prestadores`/
+`executar_plano_cessionarios` gravam no banco. `confirmar_importacao`
+orquestra as duas execuções com backup antes e restauração automática em
+caso de erro (item 8) — cópia de
 arquivo (`shutil`), não uma transação SQL única: o resto do sistema já
 grava linha a linha, sem uma transação cobrindo múltiplas tabelas, então
 esta é a forma de garantir "tudo ou nada" sem reestruturar `gat.database`
@@ -168,21 +175,28 @@ def ler_planilha_cessionarios(conteudo: bytes, nome_aba: str = "PROJ_CESS") -> t
 
 
 def _num_at_normalizado(num_at: str | None) -> str | None:
-    """Só a parte numérica do nº AT (antes da '/'), sem zeros à esquerda,
-    para comparação — o valor original (com zeros à esquerda) nunca é
-    alterado ao gravar; isto é só a chave de correspondência. Um nº AT que
-    não é um número (ex.: "***", "AT", "% TODO" — valores de rascunho ou
-    de células de fora da tabela de dados) NUNCA é usado como identificador
-    de correspondência: várias análises diferentes usam o mesmo texto de
-    rascunho para "ainda não tem AT", então usá-lo como chave faria
-    análises diferentes colidirem na mesma chave (mesclando uma na outra,
-    ou criando duplicidade, conforme a ordem de leitura)."""
+    """Número + ano do nº AT ("0468/26" → "468/26"), sem zeros à esquerda
+    no número, para comparação — o valor original (com zeros à esquerda)
+    nunca é alterado ao gravar; isto é só a chave de correspondência.
+
+    O ANO faz parte da identidade da AT: "0468/26" e "0468/25" são duas
+    ATs DIFERENTES que só coincidem no número sequencial — um bug real
+    encontrado ao testar (descartar o ano na chave) fez o sistema
+    confundir duas análises diferentes de anos diferentes, aplicando o
+    valor de uma na outra. Por isso, um nº AT sem ano reconhecível, ou
+    que não é um número (ex.: "***", "AT", "% TODO" — valores de
+    rascunho ou de células de fora da tabela de dados), NUNCA é usado
+    como identificador de correspondência — cai no critério adicional
+    (Data de Solicitação) em `chave_registro`."""
     if not num_at:
         return None
-    parte = str(num_at).split("/")[0].strip()
-    if parte.isdigit():
-        return str(int(parte))
-    return None
+    partes = str(num_at).split("/")
+    if len(partes) != 2:
+        return None
+    numero, ano = partes[0].strip(), partes[1].strip()
+    if not numero.isdigit() or not ano.isdigit():
+        return None
+    return f"{int(numero)}/{ano}"
 
 
 def chave_registro(linha: dict[str, Any], campo_nome_entidade: str, campo_extra: str | None = None) -> tuple:
@@ -257,8 +271,9 @@ def _diff_campos(existente: dict[str, Any], novo: dict[str, Any]) -> tuple[dict[
       aplicados automaticamente (item 4), nunca é um conflito preencher o
       que estava em branco.
     * `conflitos` — campos com valor diferente e não vazio dos dois
-      lados: `{campo: (valor_sistema, valor_planilha)}` — nunca aplicados
-      sem uma decisão explícita do usuário (item 11)."""
+      lados: `{campo: (valor_sistema, valor_planilha)}` — sempre listados
+      na prévia para o usuário ver (item 11), mesmo a planilha sendo a
+      referência e a resolução padrão sendo aplicá-la."""
     preenchimentos: dict[str, Any] = {}
     conflitos: dict[str, tuple] = {}
     for campo, valor_novo in novo.items():
@@ -441,11 +456,13 @@ def executar_plano(
     plano: PlanoImportacao, resolucoes_conflito: dict[tuple, dict[str, str]],
     usuario: str, inserir_fn, atualizar_fn, colunas_tabela: list[str],
 ) -> RelatorioImportacao:
-    """Fase 2 (item 7): aplica um plano já confirmado pelo usuário.
+    """Fase 2 (item 7): aplica um plano já confirmado pelo usuário. A
+    planilha é a referência: por padrão, um conflito é resolvido a favor
+    do valor da planilha (o sistema é atualizado para acompanhá-la).
     `resolucoes_conflito` tem a decisão por campo de cada item com
-    conflito — `{chave: {campo: "planilha"}}`; um campo sem decisão
-    explícita mantém o valor do sistema (o padrão nunca sobrescreve
-    silenciosamente — item 11)."""
+    conflito só para os casos em que o usuário quer o comportamento
+    contrário — `{chave: {campo: "sistema"}}` — mantendo o valor já
+    cadastrado em vez de aplicar o da planilha."""
     relatorio = RelatorioImportacao(
         origem=plano.origem, lidos=plano.lidos, colunas_nao_mapeadas=plano.colunas_nao_mapeadas,
     )
@@ -470,16 +487,16 @@ def executar_plano(
             relatorio.novos += 1
             continue
 
-        # atualizacao: preenchimentos sempre aplicados; conflitos só
-        # quando o usuário escolheu explicitamente usar o valor da
-        # planilha — senão o valor do sistema é mantido.
+        # atualizacao: preenchimentos sempre aplicados; a planilha é a
+        # referência, então um conflito também aplica o valor da planilha
+        # por padrão — só mantém o valor do sistema quando o usuário
+        # escolheu isso explicitamente para aquele campo.
         final = dict(item.existente)
         final.update(item.preenchimentos)
         escolhas = resolucoes_conflito.get(item.chave, {})
         conflitos_tratados_aqui = 0
-        for campo, (_valor_sistema, valor_planilha) in item.conflitos.items():
-            if escolhas.get(campo) == "planilha":
-                final[campo] = valor_planilha
+        for campo, (valor_sistema, valor_planilha) in item.conflitos.items():
+            final[campo] = valor_sistema if escolhas.get(campo) == "sistema" else valor_planilha
             conflitos_tratados_aqui += 1
         atualizar_fn(item.existente_id, final, usuario)
         relatorio.atualizados += 1
@@ -530,15 +547,19 @@ def confirmar_importacao(
 ) -> tuple[RelatorioImportacao, RelatorioImportacao]:
     """
     Aplica os dois planos já revisados e confirmados pelo usuário (item 7).
-    Cria backup antes de gravar (item 8); se qualquer erro ocorrer durante
-    a aplicação, restaura o backup imediatamente — "ou a atualização é
-    concluída com sucesso, ou o estado anterior é preservado" — em vez de
-    deixar o banco parcialmente atualizado. Cada execução (sucesso ou
-    falha) fica registrada no histórico (item 13)."""
+    Cria backup antes de gravar, marcado como PRE_IMPORTACAO e vinculado ao
+    usuário (item 8); se qualquer erro ocorrer durante a aplicação, restaura
+    o backup imediatamente — "ou a atualização é concluída com sucesso, ou
+    o estado anterior é preservado" — em vez de deixar o banco parcialmente
+    atualizado. Cada execução (sucesso ou falha) fica registrada no
+    histórico (item 13), com o nome do arquivo de backup PRE_IMPORTACAO
+    associado (item 21) para permitir localizar e restaurar exatamente esse
+    ponto caso a importação precise ser desfeita depois."""
     from gat.config import DB_PATH
     from gat.database import criar_backup, registrar_importacao_planilha
 
-    caminho_backup = criar_backup()
+    caminho_backup = criar_backup(tipo="PRE_IMPORTACAO", usuario=usuario, observacoes=f"Antes de importar \"{nome_arquivo}\"")
+    nome_backup = caminho_backup.name if caminho_backup is not None else None
 
     try:
         relatorio_prest = executar_plano_prestadores(plano_prestadores, resolucoes_prestadores, usuario)
@@ -550,7 +571,7 @@ def confirmar_importacao(
             usuario, nome_arquivo, "Prestadores + Cessionários",
             lidos=plano_prestadores.lidos + plano_cessionarios.lidos,
             novos=0, atualizados=0, conflitos_tratados=0, ignorados=0, inconsistencias=0,
-            resultado="ERRO", erro=str(exc),
+            resultado="ERRO", erro=str(exc), backup_ref=nome_backup,
         )
         raise
 
@@ -559,13 +580,13 @@ def confirmar_importacao(
         lidos=relatorio_prest.lidos, novos=relatorio_prest.novos, atualizados=relatorio_prest.atualizados,
         conflitos_tratados=relatorio_prest.conflitos_tratados,
         ignorados=relatorio_prest.ignorados_sem_mudanca + relatorio_prest.ignorados_arquivados,
-        inconsistencias=relatorio_prest.inconsistentes, resultado="SUCESSO",
+        inconsistencias=relatorio_prest.inconsistentes, resultado="SUCESSO", backup_ref=nome_backup,
     )
     registrar_importacao_planilha(
         usuario, nome_arquivo, "Cessionários",
         lidos=relatorio_cess.lidos, novos=relatorio_cess.novos, atualizados=relatorio_cess.atualizados,
         conflitos_tratados=relatorio_cess.conflitos_tratados,
         ignorados=relatorio_cess.ignorados_sem_mudanca + relatorio_cess.ignorados_arquivados,
-        inconsistencias=relatorio_cess.inconsistentes, resultado="SUCESSO",
+        inconsistencias=relatorio_cess.inconsistentes, resultado="SUCESSO", backup_ref=nome_backup,
     )
     return relatorio_prest, relatorio_cess

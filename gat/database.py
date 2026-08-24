@@ -181,7 +181,12 @@ def _restaurar_semente_se_necessario() -> None:
 # ---------------------------------------------------------------------------
 
 
-def criar_backup() -> Path | None:
+_TIPOS_BACKUP = {"MANUAL", "AUTOMATICO", "PRE_IMPORTACAO", "PRE_RESTAURACAO", "PRE_MIGRACAO"}
+
+
+def criar_backup(
+    tipo: str = "AUTOMATICO", usuario: str | None = None, observacoes: str | None = None,
+) -> Path | None:
     """
     Cria uma cópia de segurança do banco de produção, com data/hora e versão
     da aplicação no nome do arquivo
@@ -189,9 +194,23 @@ def criar_backup() -> Path | None:
     `MAX_BACKUPS` cópias mais recentes (nunca apaga o backup mais recente
     válido). Retorna o caminho do backup criado, ou `None` se o banco de
     origem ainda não existir (nada a copiar) ou se a cópia falhar.
+
+    `tipo` classifica a origem do backup (MANUAL — botão "Gerar Backup
+    Agora"; AUTOMATICO — rotina diária/por versão; PRE_IMPORTACAO/
+    PRE_RESTAURACAO/PRE_MIGRACAO — backups de segurança automáticos antes de
+    uma operação que altera o banco) e fica registrado em `backups_historico`
+    junto com o usuário responsável (quando houver) e observações livres,
+    para exibição em Configurações > Backup do Sistema. O registro de
+    metadados é best-effort: se a tabela ainda não existir (backup tirado
+    durante a própria migração que a cria, ou banco de uma versão anterior a
+    ela) ou a gravação falhar por qualquer motivo, o backup do arquivo já
+    feito acima continua válido e é retornado normalmente — só a linha de
+    metadados fica de fora.
     """
     if not DB_PATH.exists():
         return None
+    if tipo not in _TIPOS_BACKUP:
+        tipo = "AUTOMATICO"
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = agora_br().strftime("%Y-%m-%d_%H%M%S")
     destino = BACKUP_DIR / f"backup_gat_2026_{timestamp}_v{APP_VERSION}.db"
@@ -202,23 +221,85 @@ def criar_backup() -> Path | None:
     if not destino.exists() or destino.stat().st_size == 0:
         return None
     _limpar_backups_antigos()
+    try:
+        with _conectar() as conn:
+            conn.execute(
+                """
+                INSERT INTO backups_historico (arquivo, tipo, usuario, tamanho_bytes, criado_em, situacao, observacoes)
+                VALUES (?, ?, ?, ?, ?, 'OK', ?)
+                ON CONFLICT(arquivo) DO NOTHING
+                """,
+                (destino.name, tipo, usuario, destino.stat().st_size, agora_br().isoformat(timespec="seconds"), observacoes),
+            )
+    except sqlite3.Error:
+        pass
     return destino
 
 
 def _limpar_backups_antigos() -> None:
     backups = sorted(BACKUP_DIR.glob("backup_gat_2026_*.db"), key=lambda p: p.stat().st_mtime)
     excedente = len(backups) - MAX_BACKUPS
-    for antigo in backups[: max(0, excedente)]:
+    removidos = backups[: max(0, excedente)]
+    for antigo in removidos:
         antigo.unlink(missing_ok=True)
+    if removidos:
+        try:
+            with _conectar() as conn:
+                conn.executemany(
+                    "DELETE FROM backups_historico WHERE arquivo = ?", [(p.name,) for p in removidos],
+                )
+        except sqlite3.Error:
+            pass
 
 
 def listar_backups() -> list[dict[str, Any]]:
-    """Lista os backups existentes (mais recente primeiro) — usado em Administração."""
+    """Lista os backups existentes em disco (mais recente primeiro) — usado
+    em Configurações > Backup do Sistema. O sistema de arquivos é a fonte
+    da verdade sobre quais backups existem; os metadados de
+    `backups_historico` (tipo, usuário, situação, observações, vínculo com
+    importação) só complementam quando disponíveis — um backup criado antes
+    da migração que introduziu essa tabela aparece com tipo 'AUTOMATICO'
+    (o único tipo que existia até então) e os demais campos em branco."""
     backups = sorted(BACKUP_DIR.glob("backup_gat_2026_*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
-    return [
-        {"arquivo": p.name, "tamanho_bytes": p.stat().st_size, "criado_em": datetime.fromtimestamp(p.stat().st_mtime, FUSO_BRASILIA).replace(tzinfo=None).isoformat(timespec="seconds")}
-        for p in backups
-    ]
+    metadados: dict[str, dict[str, Any]] = {}
+    try:
+        with _conectar() as conn:
+            for linha in conn.execute("SELECT * FROM backups_historico"):
+                metadados[linha["arquivo"]] = dict(linha)
+    except sqlite3.Error:
+        pass
+    resultado = []
+    for p in backups:
+        meta = metadados.get(p.name, {})
+        resultado.append(
+            {
+                "arquivo": p.name,
+                "tamanho_bytes": p.stat().st_size,
+                "criado_em": meta.get("criado_em") or datetime.fromtimestamp(p.stat().st_mtime, FUSO_BRASILIA).replace(tzinfo=None).isoformat(timespec="seconds"),
+                "tipo": meta.get("tipo", "AUTOMATICO"),
+                "usuario": meta.get("usuario"),
+                "situacao": meta.get("situacao", "OK"),
+                "observacoes": meta.get("observacoes"),
+            }
+        )
+    return resultado
+
+
+def ler_backup_bytes(nome_arquivo: str) -> bytes | None:
+    """Bytes de um backup já existente em `BACKUP_DIR`, para download
+    individual a partir do histórico (Configurações > Backup do Sistema).
+    Só aceita um nome de arquivo dentro do padrão gerado por `criar_backup`
+    — nunca um caminho arbitrário — para não permitir ler qualquer outro
+    arquivo do disco a partir do nome informado pela interface."""
+    if not nome_arquivo.startswith("backup_gat_2026_") or "/" in nome_arquivo or "\\" in nome_arquivo:
+        return None
+    caminho = BACKUP_DIR / nome_arquivo
+    if not caminho.is_file():
+        return None
+    try:
+        return caminho.read_bytes()
+    except OSError:
+        return None
 
 
 def _backup_diario_e_por_atualizacao() -> None:
@@ -264,19 +345,20 @@ def exportar_banco_bytes() -> bytes | None:
     return DB_PATH.read_bytes()
 
 
-def restaurar_banco_de_bytes(conteudo: bytes) -> None:
+def restaurar_banco_de_bytes(conteudo: bytes, usuario: str | None = None) -> None:
     """
     Restaura o banco de dados a partir dos bytes de um arquivo `.db`
     previamente baixado como backup. Cria um backup do estado atual antes
-    de sobrescrever (nunca substitui sem guardar o estado anterior) e
-    reaplica as migrações pendentes, para que o schema restaurado fique
-    compatível com a versão atual do sistema mesmo que o backup seja de
-    uma versão mais antiga.
+    de sobrescrever (nunca substitui sem guardar o estado anterior, marcado
+    como tipo PRE_RESTAURACAO no histórico de backups) e reaplica as
+    migrações pendentes, para que o schema restaurado fique compatível com
+    a versão atual do sistema mesmo que o backup seja de uma versão mais
+    antiga.
     """
     if not conteudo.startswith(_SQLITE_MAGIC):
         raise ValueError("O arquivo enviado não é um banco de dados SQLite válido.")
     if DB_PATH.exists():
-        caminho_backup = criar_backup()
+        caminho_backup = criar_backup(tipo="PRE_RESTAURACAO", usuario=usuario)
         if caminho_backup is None:
             raise RuntimeError(
                 "Não foi possível criar um backup de segurança do banco atual antes de restaurar — "
@@ -1349,6 +1431,70 @@ def _migracao_0031_manual_atualizacao_dados(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migracao_0034_atualizar_capitulo_planilha_referencia(conn: sqlite3.Connection) -> None:
+    """A planilha é a referência: por padrão um conflito de informação
+    passou a atualizar o sistema com o valor da planilha (antes o padrão
+    era o oposto, manter o sistema) — o capítulo do Manual (migração 33)
+    ainda descrevia o comportamento antigo. Mesma exceção deliberada ao
+    padrão só-insere: atualiza por título em vez de duplicar o
+    capítulo."""
+    from gat.atualizacao_dados_manual_conteudo import CAPITULOS_ATUALIZACAO_DADOS
+
+    conteudo_atualizado = dict(CAPITULOS_ATUALIZACAO_DADOS)["Atualização de Dados pela Planilha Oficial"]
+    conn.execute(
+        "UPDATE manual_capitulos SET conteudo = ? WHERE titulo = 'Atualização de Dados pela Planilha Oficial'",
+        (conteudo_atualizado,),
+    )
+
+
+def _migracao_0035_historico_backups(conn: sqlite3.Connection) -> None:
+    """Configurações > Backup do Sistema: tabela `backups_historico` — metadados
+    que o nome do arquivo e a data de modificação (únicas informações que
+    `listar_backups` conseguia ler do sistema de arquivos) não carregam:
+    tipo (MANUAL/AUTOMATICO/PRE_IMPORTACAO/PRE_RESTAURACAO/PRE_MIGRACAO),
+    usuário responsável, situação e observações. Puramente aditiva — não
+    reconstrói nem apaga nenhum backup já existente; um backup criado antes
+    desta migração simplesmente não tem uma linha correspondente aqui e
+    `listar_backups` o exibe com tipo 'AUTOMATICO' (o único tipo que existia
+    até então). Também acrescenta `importacoes_planilha_historico.backup_ref`
+    para vincular cada importação por planilha ao backup pré-importação
+    correspondente (item 21 do pedido)."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS backups_historico (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            arquivo TEXT NOT NULL UNIQUE,
+            tipo TEXT NOT NULL DEFAULT 'AUTOMATICO',
+            usuario TEXT,
+            tamanho_bytes INTEGER,
+            criado_em TEXT NOT NULL,
+            situacao TEXT NOT NULL DEFAULT 'OK',
+            observacoes TEXT
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_backups_historico_arquivo ON backups_historico(arquivo)")
+    _garantir_coluna(conn, "importacoes_planilha_historico", "backup_ref", "TEXT")
+
+
+def _migracao_0036_manual_backup_sistema(conn: sqlite3.Connection) -> None:
+    """O capítulo 'Backup e preservação dos dados', semeado desde a
+    implantação inicial (CAPITULOS_INICIAIS), descrevia o backup de forma
+    genérica e não cobria o botão "Gerar Backup Agora", os tipos de backup
+    (Manual/Automático/Pré-importação/Pré-restauração/Pré-migração), o
+    histórico com download/restauração por item nem o vínculo com o
+    histórico de importações por planilha — todos itens novos desta
+    entrega. Mesma exceção deliberada ao padrão só-insere das migrações
+    anteriores: atualiza por título em vez de duplicar o capítulo."""
+    from gat.atualizacao_dados_manual_conteudo import CAPITULOS_ATUALIZACAO_DADOS_V2
+
+    conteudo_atualizado = dict(CAPITULOS_ATUALIZACAO_DADOS_V2)["Backup e preservação dos dados"]
+    conn.execute(
+        "UPDATE manual_capitulos SET conteudo = ? WHERE titulo = 'Backup e preservação dos dados'",
+        (conteudo_atualizado,),
+    )
+
+
 def _migracao_0033_atualizar_capitulo_importacao_planilha(conn: sqlite3.Connection) -> None:
     """A funcionalidade de importação por planilha foi movida de
     Administração > Importar Planilha para Configurações > Atualização
@@ -1450,6 +1596,9 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (31, "Manual do Sistema: capítulos 'Atualização de Dados pela Planilha Oficial', 'Central de Codificação e o Número da AT' e 'Atualização Automática dos Dashboards'", _migracao_0031_manual_atualizacao_dados),
     (32, "Configurações > Atualização por Planilha: tabela importacoes_planilha_historico", _migracao_0032_historico_importacao_planilha),
     (33, "Manual do Sistema: atualiza o capítulo 'Atualização de Dados pela Planilha Oficial' para o novo fluxo com prévia e conflitos", _migracao_0033_atualizar_capitulo_importacao_planilha),
+    (34, "Manual do Sistema: atualiza o capítulo 'Atualização de Dados pela Planilha Oficial' — planilha é a referência, conflito atualiza o sistema por padrão", _migracao_0034_atualizar_capitulo_planilha_referencia),
+    (35, "Configurações > Backup do Sistema: tabela backups_historico (tipo/usuário/situação/observações) e importacoes_planilha_historico.backup_ref", _migracao_0035_historico_backups),
+    (36, "Manual do Sistema: atualiza o capítulo 'Backup e preservação dos dados' com Gerar Backup Agora, tipos de backup, histórico por item e vínculo com importações", _migracao_0036_manual_backup_sistema),
 ]
 
 
@@ -1476,7 +1625,7 @@ def _aplicar_migracoes() -> None:
         return
 
     if DB_PATH.exists():
-        caminho_backup = criar_backup()
+        caminho_backup = criar_backup(tipo="PRE_MIGRACAO")
         if caminho_backup is None:
             raise RuntimeError(
                 "Não foi possível criar o backup de segurança antes da migração do banco de dados. "
@@ -2298,21 +2447,25 @@ def registrar_importacao_planilha(
     usuario: str, nome_arquivo: str, origem: str,
     lidos: int, novos: int, atualizados: int, conflitos_tratados: int,
     ignorados: int, inconsistencias: int, resultado: str, erro: str | None = None,
+    backup_ref: str | None = None,
 ) -> None:
     """Registra uma execução (bem-sucedida ou não) da importação por
     planilha, para consulta em Configurações > Atualização por Planilha >
-    Histórico (item 13)."""
+    Histórico (item 13). `backup_ref` é o nome do arquivo de backup
+    PRE_IMPORTACAO criado por `confirmar_importacao` logo antes de aplicar
+    esta importação (item 21) — permite, a partir do histórico de
+    importações, localizar exatamente qual backup restaurar para desfazê-la."""
     agora = agora_br().isoformat()
     with _conectar() as conn:
         conn.execute(
             """
             INSERT INTO importacoes_planilha_historico
                 (data_hora, usuario, nome_arquivo, origem, lidos, novos, atualizados,
-                 conflitos_tratados, ignorados, inconsistencias, resultado, erro)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 conflitos_tratados, ignorados, inconsistencias, resultado, erro, backup_ref)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (agora, usuario, nome_arquivo, origem, lidos, novos, atualizados,
-             conflitos_tratados, ignorados, inconsistencias, resultado, erro),
+             conflitos_tratados, ignorados, inconsistencias, resultado, erro, backup_ref),
         )
 
 

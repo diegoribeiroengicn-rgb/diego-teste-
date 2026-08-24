@@ -14,6 +14,7 @@ from gat.database import (
     definir_codigo_disciplina,
     definir_configuracao,
     exportar_banco_bytes,
+    ler_backup_bytes,
     listar_backups,
     listar_codigos_disciplina,
     listar_historico,
@@ -203,13 +204,13 @@ def _renderizar_historico() -> None:
 
 
 def _renderizar_configuracoes(usuario: dict) -> None:
-    aba_geral, aba_planilha, aba_persistencia = st.tabs(["Geral", "Atualização por Planilha", "Persistência e Backup"])
+    aba_geral, aba_planilha, aba_backup = st.tabs(["Geral", "Atualização por Planilha", "Backup do Sistema"])
     with aba_geral:
         _renderizar_configuracoes_gerais(usuario)
     with aba_planilha:
         _renderizar_atualizacao_planilha(usuario)
-    with aba_persistencia:
-        _renderizar_persistencia_dados(usuario)
+    with aba_backup:
+        _renderizar_backup_sistema(usuario)
 
 
 def _renderizar_configuracoes_gerais(usuario: dict) -> None:
@@ -295,8 +296,9 @@ def _renderizar_atualizacao_planilha(usuario: dict) -> None:
     st.caption(
         "Alternativa para quando os analistas ainda não atualizaram diretamente o sistema: envie a planilha "
         "\"Controle GAT Projetos\" (abas PROJ_PREST e PROJ_CESS) para sincronizar Prestadores e Cessionários. "
-        "O preenchimento direto no sistema continua sendo o fluxo principal — isto é só um complemento. Nada "
-        "é apagado nem duplicado, e nenhuma mudança é aplicada sem você revisar e confirmar a prévia."
+        "A planilha é a referência — o sistema é atualizado para acompanhá-la. Nada é apagado nem duplicado, "
+        "um campo vazio na planilha nunca apaga um valor já cadastrado, e nenhuma mudança é aplicada sem você "
+        "revisar e confirmar a prévia."
     )
 
     ultima = obter_ultima_importacao_planilha()
@@ -342,13 +344,18 @@ def _renderizar_atualizacao_planilha(usuario: dict) -> None:
         else:
             exibicao = formatar_datahoras_df(historico, ["data_hora"])[[
                 "data_hora", "usuario", "nome_arquivo", "origem", "resultado",
-                "lidos", "novos", "atualizados", "conflitos_tratados", "inconsistencias",
+                "lidos", "novos", "atualizados", "conflitos_tratados", "inconsistencias", "backup_ref",
             ]].rename(columns={
                 "data_hora": "Data/Hora", "usuario": "Usuário", "nome_arquivo": "Arquivo", "origem": "Origem",
                 "resultado": "Resultado", "lidos": "Lidos", "novos": "Novos", "atualizados": "Atualizados",
                 "conflitos_tratados": "Conflitos", "inconsistencias": "Inconsistências",
+                "backup_ref": "Backup pré-importação",
             })
             st.dataframe(exibicao, use_container_width=True, hide_index=True)
+            st.caption(
+                "\"Backup pré-importação\" é o backup criado automaticamente logo antes desta importação — em "
+                "Backup do Sistema, é possível baixar ou restaurar exatamente esse ponto para desfazê-la."
+            )
 
 
 def _renderizar_previa_importacao(plano_estado: dict, usuario: dict) -> None:
@@ -382,8 +389,8 @@ def _renderizar_previa_importacao(plano_estado: dict, usuario: dict) -> None:
     if total_conflitos:
         st.markdown(f"###### Conflito de informação — {total_conflitos} registro(s)")
         st.caption(
-            "O sistema e a planilha têm valores diferentes para estes campos. Por padrão o valor já cadastrado "
-            "no sistema é mantido — escolha \"Usar planilha\" só onde quiser substituir."
+            "A planilha é a referência: por padrão, o valor da planilha atualiza o sistema. Escolha "
+            "\"Manter sistema\" só onde quiser preservar o valor já cadastrado em vez de aplicar a planilha."
         )
         for plano, resolucoes, prefixo in ((plano_p, resolucoes_p, "p"), (plano_c, resolucoes_c, "c")):
             for indice, item in enumerate(plano.itens_com_conflito):
@@ -392,11 +399,11 @@ def _renderizar_previa_importacao(plano_estado: dict, usuario: dict) -> None:
                     for campo, (valor_sistema, valor_planilha) in item.conflitos.items():
                         escolha = st.radio(
                             f"**{campo}** — sistema: `{valor_sistema}` · planilha: `{valor_planilha}`",
-                            ["Manter sistema", "Usar planilha"], horizontal=True,
+                            ["Usar planilha", "Manter sistema"], horizontal=True,
                             key=f"admin_conflito_{prefixo}_{indice}_{campo}",
                         )
-                        if escolha == "Usar planilha":
-                            escolhas_item[campo] = "planilha"
+                        if escolha == "Manter sistema":
+                            escolhas_item[campo] = "sistema"
                     if escolhas_item:
                         resolucoes[item.chave] = escolhas_item
 
@@ -438,65 +445,109 @@ def _renderizar_relatorio_importacao(relatorio) -> None:
                 st.caption(f"• {detalhe}")
 
 
-def _renderizar_persistencia_dados(usuario: dict) -> None:
-    st.markdown("##### Persistência e backup dos dados")
+_NOMES_TIPO_BACKUP = {
+    "MANUAL": "Manual", "AUTOMATICO": "Automático", "PRE_IMPORTACAO": "Pré-importação",
+    "PRE_RESTAURACAO": "Pré-restauração", "PRE_MIGRACAO": "Pré-migração",
+}
+
+
+def _renderizar_backup_sistema(usuario: dict) -> None:
+    st.markdown("##### Backup do Sistema")
     st.caption(
         "O banco de dados deste ambiente fica em um disco temporário — ele pode ser apagado quando o ambiente "
-        "é reiniciado. Use os recursos abaixo para não perder o que for cadastrado pela interface (perfis, "
-        "reuniões, avaliações, etc.)."
+        "é reiniciado. Gere um backup manual quando quiser um ponto de restauração garantido, além dos "
+        "automáticos que o sistema já cria sozinho (pelo menos uma vez por dia de uso, e sempre antes de uma "
+        "migração de banco, uma importação por planilha ou uma restauração)."
     )
 
-    col_backup, col_restaurar = st.columns(2)
-    with col_backup:
-        st.markdown("**Baixar cópia de segurança**")
-        st.caption("Baixe o banco de dados agora e guarde o arquivo em um local seguro (seu computador, e-mail, nuvem).")
+    col_gerar, col_baixar = st.columns(2)
+    with col_gerar:
+        st.markdown("**Gerar Backup Agora**")
+        st.caption("Cria imediatamente uma cópia de segurança do banco atual, registrada no histórico abaixo com seu usuário.")
+        if st.button("Gerar Backup Agora", icon=":material/backup:", type="primary", use_container_width=True, key="admin_gerar_backup_manual"):
+            caminho = criar_backup(tipo="MANUAL", usuario=usuario["username"])
+            if caminho is not None:
+                registrar_atividade(usuario["username"], usuario.get("perfil"), "BACKUP_MANUAL_GERADO", detalhe=caminho.name)
+                st.success(f"Backup gerado com sucesso: {caminho.name}")
+                st.rerun()
+            else:
+                st.error("Não foi possível gerar o backup — banco de dados atual não encontrado.")
+
+    with col_baixar:
+        st.markdown("**Baixar cópia do estado atual**")
+        st.caption("Baixe o banco de dados agora (sem passar pelo histórico) e guarde o arquivo em um local seguro.")
         conteudo_db = exportar_banco_bytes()
         if conteudo_db:
             nome_arquivo_backup = f"backup_gat_2026_{agora_br().strftime('%Y-%m-%d_%H%M%S')}.db"
             st.download_button(
-                "Baixar backup agora", data=conteudo_db, file_name=nome_arquivo_backup,
-                mime="application/octet-stream", icon=":material/download:", type="primary", use_container_width=True,
+                "Baixar agora", data=conteudo_db, file_name=nome_arquivo_backup,
+                mime="application/octet-stream", icon=":material/download:", use_container_width=True,
+                key="admin_baixar_atual",
             )
         else:
             st.info("Banco de dados ainda não encontrado.")
 
-    with col_restaurar:
-        st.markdown("**Restaurar de um backup**")
-        st.caption(
-            "Envie um arquivo `.db` baixado anteriormente para restaurar os dados — substitui os dados atuais "
-            "(um backup de segurança do estado atual é criado automaticamente antes)."
-        )
-        arquivo_restauracao = st.file_uploader("Arquivo de backup (.db)", type=["db"], key="admin_restaurar_upload")
-        if arquivo_restauracao is not None and st.button("Restaurar este backup", icon=":material/restore:", key="admin_restaurar_botao"):
-            st.session_state["admin_confirmar_restauracao"] = arquivo_restauracao.getvalue()
-            st.rerun()
+    st.divider()
+    st.markdown("**Restaurar de um arquivo enviado**")
+    st.caption(
+        "Envie um arquivo `.db` baixado anteriormente para restaurar os dados — substitui os dados atuais "
+        "(um backup de segurança do estado atual é criado automaticamente antes)."
+    )
+    arquivo_restauracao = st.file_uploader("Arquivo de backup (.db)", type=["db"], key="admin_restaurar_upload")
+    if arquivo_restauracao is not None and st.button("Restaurar este arquivo", icon=":material/restore:", key="admin_restaurar_botao"):
+        st.session_state["admin_confirmar_restauracao"] = {"conteudo": arquivo_restauracao.getvalue(), "origem": arquivo_restauracao.name}
+        st.rerun()
 
     if st.session_state.get("admin_confirmar_restauracao"):
         _dialog_confirmar_restauracao(usuario)
 
     st.divider()
-    st.markdown("**Backups automáticos**")
+    st.markdown("**Histórico de backups**")
     st.caption(
-        "O sistema cria backups automaticamente: antes de qualquer migração de banco de dados, pelo menos "
-        "uma vez por dia de uso, e sempre que a versão da aplicação em execução muda (a aproximação mais "
-        "próxima possível de \"antes de uma atualização\" para um processo sem acesso ao pipeline de deploy). "
-        f"São mantidos os {MAX_BACKUPS} backups mais recentes."
+        f"Manual (botão acima), Automático (diário/por versão), Pré-importação, Pré-restauração e "
+        f"Pré-migração (criados automaticamente antes de cada uma dessas operações). "
+        f"São mantidos os {MAX_BACKUPS} backups mais recentes — um backup criado antes desta funcionalidade "
+        f"aparece aqui como Automático, sem usuário associado."
     )
     backups = listar_backups()
-    if backups:
+    if not backups:
+        st.info("Nenhum backup criado ainda.")
+    else:
         col_b1, col_b2, col_b3 = st.columns(3)
         col_b1.metric("Total de backups", len(backups))
         col_b2.metric("Mais recente", formatar_datahora_br(backups[0]["criado_em"]))
         col_b3.metric("Mais antigo mantido", formatar_datahora_br(backups[-1]["criado_em"]))
-        with st.expander("Ver todos os backups", icon=":material/history:"):
-            st.dataframe(
-                formatar_datahoras_df(pd.DataFrame(backups), ["criado_em"]).rename(
-                    columns={"arquivo": "Arquivo", "tamanho_bytes": "Tamanho (bytes)", "criado_em": "Criado em"}
-                ),
-                use_container_width=True, hide_index=True,
-            )
-    else:
-        st.info("Nenhum backup automático criado ainda.")
+        with st.expander("Ver todos os backups", icon=":material/history:", expanded=True):
+            for backup in backups:
+                col_info, col_down, col_rest = st.columns([4, 1, 1])
+                with col_info:
+                    linha = (
+                        f"**{backup['arquivo']}** — {_NOMES_TIPO_BACKUP.get(backup['tipo'], backup['tipo'])} — "
+                        f"{formatar_datahora_br(backup['criado_em'])} — {backup['tamanho_bytes'] / 1024:.0f} KB"
+                    )
+                    if backup.get("usuario"):
+                        linha += f" — {backup['usuario']}"
+                    st.markdown(linha)
+                    if backup.get("observacoes"):
+                        st.caption(backup["observacoes"])
+                    if backup.get("situacao") and backup["situacao"] != "OK":
+                        st.caption(f"Situação: {backup['situacao']}")
+                conteudo_backup = ler_backup_bytes(backup["arquivo"])
+                with col_down:
+                    if conteudo_backup:
+                        st.download_button(
+                            "Baixar", data=conteudo_backup, file_name=backup["arquivo"],
+                            mime="application/octet-stream", icon=":material/download:",
+                            key=f"admin_baixar_backup_{backup['arquivo']}", use_container_width=True,
+                        )
+                with col_rest:
+                    if conteudo_backup is not None and st.button(
+                        "Restaurar", icon=":material/restore:", key=f"admin_restaurar_backup_{backup['arquivo']}",
+                        use_container_width=True,
+                    ):
+                        st.session_state["admin_confirmar_restauracao"] = {"conteudo": conteudo_backup, "origem": backup["arquivo"]}
+                        st.rerun()
+                st.divider()
 
     st.divider()
     st.markdown("**Sincronizar para persistência entre reinícios (manual)**")
@@ -546,10 +597,12 @@ def _renderizar_persistencia_dados(usuario: dict) -> None:
 
 @st.dialog("Confirmar restauração de backup")
 def _dialog_confirmar_restauracao(usuario: dict) -> None:
+    pendente = st.session_state["admin_confirmar_restauracao"]
+    origem = pendente["origem"]
     st.warning(
-        "Isso vai substituir todos os dados atuais pelos dados do arquivo de backup enviado. Um backup de "
-        "segurança do estado atual é criado automaticamente antes, mas esta ação não pode ser desfeita pela "
-        "interface.",
+        f"Isso vai substituir todos os dados atuais pelos dados de \"{origem}\". Um backup de segurança do "
+        "estado atual é criado automaticamente antes (tipo Pré-restauração), mas esta ação não pode ser "
+        "desfeita pela interface.",
         icon=":material/warning:",
     )
     col1, col2 = st.columns(2)
@@ -557,10 +610,10 @@ def _dialog_confirmar_restauracao(usuario: dict) -> None:
         del st.session_state["admin_confirmar_restauracao"]
         st.rerun()
     if col2.button("Confirmar restauração", type="primary", use_container_width=True):
-        conteudo = st.session_state.pop("admin_confirmar_restauracao")
+        pendente = st.session_state.pop("admin_confirmar_restauracao")
         try:
-            restaurar_banco_de_bytes(conteudo)
-            registrar_atividade(usuario["username"], usuario.get("perfil"), "RESTAURACAO_BACKUP")
+            restaurar_banco_de_bytes(pendente["conteudo"], usuario=usuario["username"])
+            registrar_atividade(usuario["username"], usuario.get("perfil"), "RESTAURACAO_BACKUP", detalhe=origem)
             st.success("Backup restaurado com sucesso.")
             st.rerun()
         except Exception as exc:

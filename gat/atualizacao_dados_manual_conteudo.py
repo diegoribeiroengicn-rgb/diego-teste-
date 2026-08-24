@@ -1,9 +1,10 @@
 """Conteúdo dos capítulos do Manual do Sistema sobre a atualização de
 dados pela planilha oficial, a correção do número da AT no Resumo de
-Conclusão (Central de Codificação) e a atualização automática dos
-dashboards — usado apenas para semear a migração correspondente. Depois
-de publicado, o conteúdo passa a ser gerido pela Administração do Manual,
-como qualquer outro capítulo."""
+Conclusão (Central de Codificação), a atualização automática dos
+dashboards e o Backup do Sistema (geração manual, tipos de backup,
+histórico e restauração) — usado apenas para semear a migração
+correspondente. Depois de publicado, o conteúdo passa a ser gerido pela
+Administração do Manual, como qualquer outro capítulo."""
 
 from __future__ import annotations
 
@@ -30,10 +31,11 @@ _CONTEUDO_IMPORTACAO_PLANILHA = (
     "Um campo vazio ou em branco na planilha nunca substitui um valor já preenchido no sistema — só um valor "
     "efetivamente preenchido na planilha entra automaticamente como preenchimento.\n\n"
     "**Conflito de informação**\n\n"
-    "Quando o sistema e a planilha têm valores diferentes e não vazios para o mesmo campo do mesmo registro, "
-    "isso NUNCA é resolvido silenciosamente: a prévia lista cada conflito, mostrando o valor do sistema e o "
-    "valor da planilha lado a lado, e por padrão o valor do sistema é mantido — só é substituído se você "
-    "escolher explicitamente \"Usar planilha\" para aquele campo.\n\n"
+    "A planilha é a referência: quando o sistema e a planilha têm valores diferentes e não vazios para o "
+    "mesmo campo do mesmo registro, o valor da planilha atualiza o sistema por padrão. Isso nunca acontece "
+    "silenciosamente — a prévia lista cada conflito, mostrando o valor do sistema e o valor da planilha lado "
+    "a lado; escolha \"Manter sistema\" só nos campos em que quiser preservar o valor já cadastrado em vez de "
+    "aplicar o da planilha.\n\n"
     "**Confirmação e backup automático**\n\n"
     "Nada é gravado até você clicar em \"Confirmar atualização\" (ou \"Cancelar\" para descartar a prévia). "
     "Antes de aplicar, o sistema cria automaticamente um backup completo do banco; se qualquer erro ocorrer "
@@ -81,4 +83,37 @@ CAPITULOS_ATUALIZACAO_DADOS: list[tuple[str, str]] = [
     ("Atualização de Dados pela Planilha Oficial", _CONTEUDO_IMPORTACAO_PLANILHA),
     ("Central de Codificação e o Número da AT", _CONTEUDO_CENTRAL_CODIFICACAO),
     ("Atualização Automática dos Dashboards", _CONTEUDO_DASHBOARDS_DINAMICOS),
+]
+
+_CONTEUDO_BACKUP_SISTEMA = (
+    "Todos os dados devem permanecer salvos após reinicializações e atualizações do sistema. Em "
+    "Configurações > Backup do Sistema, um usuário autorizado pode gerar, baixar, consultar e restaurar "
+    "backups do banco de dados.\n\n"
+    "**Gerar Backup Agora**\n\n"
+    "Cria imediatamente uma cópia de segurança completa do banco atual, registrada no histórico com data/"
+    "hora e o usuário que a gerou.\n\n"
+    "**Backups automáticos**\n\n"
+    "Além do backup manual, o sistema cria backups automaticamente, sem qualquer ação do usuário: pelo "
+    "menos uma vez por dia de uso, sempre que a versão da aplicação em execução muda, antes de qualquer "
+    "migração estrutural do banco de dados (Pré-migração), antes de cada atualização por planilha "
+    "(Pré-importação — Configurações > Atualização por Planilha) e antes de qualquer restauração "
+    "(Pré-restauração), garantindo sempre um ponto de retorno para desfazer a operação caso necessário. "
+    "São mantidos os backups mais recentes; os mais antigos são descartados automaticamente.\n\n"
+    "**Histórico de backups**\n\n"
+    "Lista cada backup existente com arquivo, tipo (Manual/Automático/Pré-importação/Pré-restauração/"
+    "Pré-migração), data/hora, usuário responsável (quando houver) e tamanho — com botões próprios para "
+    "baixar ou restaurar aquele backup específico, além do download avulso do estado atual do banco. Cada "
+    "importação por planilha registrada em Configurações > Atualização por Planilha > Histórico de "
+    "importações mostra o backup Pré-importação criado logo antes dela, permitindo localizar e restaurar "
+    "exatamente aquele ponto para desfazer a importação, se preciso.\n\n"
+    "**Restauração**\n\n"
+    "Restaurar um backup — seja da lista do histórico ou de um arquivo `.db` enviado — sempre exige "
+    "confirmação explícita antes de substituir os dados atuais, e sempre cria automaticamente um backup "
+    "Pré-restauração do estado atual antes de sobrescrever, para nunca perder um estado sem guardá-lo "
+    "antes. Depois de restaurado, o schema é atualizado automaticamente para a versão do sistema em uso, "
+    "mesmo que o backup seja de uma versão mais antiga."
+)
+
+CAPITULOS_ATUALIZACAO_DADOS_V2: list[tuple[str, str]] = [
+    ("Backup e preservação dos dados", _CONTEUDO_BACKUP_SISTEMA),
 ]
