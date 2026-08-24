@@ -17,12 +17,28 @@ já preenchido no banco (item 4) — só passa a campos genuinamente vazios.
 Um registro cuja chave só é encontrada entre os já arquivados é apenas
 sinalizado no relatório, nunca modificado nem duplicado — arquivamento é
 uma decisão manual separada.
+
+Uso em duas fases (Configurações > Atualização por Planilha):
+`planejar_importacao_prestadores`/`planejar_importacao_cessionarios`
+leem a planilha e classificam cada linha (novo/atualização/sem
+mudança/já arquivado/inconsistente) SEM gravar nada — inclusive
+identificando conflitos reais (campo com valor diferente e não vazio dos
+dois lados, nunca resolvido automaticamente). Só depois que o usuário
+revisa a prévia e confirma (resolvendo os conflitos, se houver),
+`executar_plano_prestadores`/`executar_plano_cessionarios` gravam no
+banco. `confirmar_importacao` orquestra as duas execuções com backup
+antes e restauração automática em caso de erro (item 8) — cópia de
+arquivo (`shutil`), não uma transação SQL única: o resto do sistema já
+grava linha a linha, sem uma transação cobrindo múltiplas tabelas, então
+esta é a forma de garantir "tudo ou nada" sem reestruturar `gat.database`
+só para esta funcionalidade.
 """
 
 from __future__ import annotations
 
 import io
 import math
+import shutil
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -212,37 +228,144 @@ def mesclar_preservando(existente: dict[str, Any], novo: dict[str, Any]) -> dict
     return resultado
 
 
+# "item" é só a posição/ordem de exibição na tabela (mutável a qualquer
+# momento pelo próprio usuário, ex.: botão "Restaurar ordem de chegada")
+# — não é um dado de negócio, então nunca é comparado nem tratado como
+# preenchimento/conflito; a importação simplesmente não mexe nele.
+_CAMPOS_IGNORADOS_NA_COMPARACAO = {"item"}
+
+
+def _valores_equivalentes(valor_existente: Any, valor_novo: Any, campo: str) -> bool:
+    """Compara dois valores já sabidamente não vazios. Campos numéricos
+    (`CAMPOS_INTEIROS`) são comparados numericamente, não como texto —
+    senão `0.0` (como o pandas devolve uma coluna inteira com algum NULL)
+    e `0` (inteiro nativo da planilha) apareceriam como um "conflito"
+    falso só por causa do tipo Python, não por serem valores diferentes."""
+    if campo in CAMPOS_INTEIROS:
+        try:
+            return float(valor_existente) == float(valor_novo)
+        except (TypeError, ValueError):
+            pass
+    return str(valor_existente).strip() == str(valor_novo).strip()
+
+
+def _diff_campos(existente: dict[str, Any], novo: dict[str, Any]) -> tuple[dict[str, Any], dict[str, tuple]]:
+    """Compara os campos vindos da planilha com o registro já cadastrado.
+    Retorna (`preenchimentos`, `conflitos`):
+
+    * `preenchimentos` — campos vazios no banco que a planilha preenche;
+      aplicados automaticamente (item 4), nunca é um conflito preencher o
+      que estava em branco.
+    * `conflitos` — campos com valor diferente e não vazio dos dois
+      lados: `{campo: (valor_sistema, valor_planilha)}` — nunca aplicados
+      sem uma decisão explícita do usuário (item 11)."""
+    preenchimentos: dict[str, Any] = {}
+    conflitos: dict[str, tuple] = {}
+    for campo, valor_novo in novo.items():
+        if campo in _CAMPOS_IGNORADOS_NA_COMPARACAO or _vazio(valor_novo):
+            continue
+        valor_existente = existente.get(campo)
+        if _vazio(valor_existente):
+            preenchimentos[campo] = valor_novo
+        elif not _valores_equivalentes(valor_existente, valor_novo, campo):
+            conflitos[campo] = (valor_existente, valor_novo)
+    return preenchimentos, conflitos
+
+
+@dataclass
+class ItemPlanoImportacao:
+    """Um item do plano de importação — o resultado da análise de UMA
+    linha da planilha, antes de qualquer gravação no banco."""
+    item_origem: Any
+    identificacao: str
+    chave: tuple
+    tipo: str  # "novo" | "atualizacao" | "sem_mudanca" | "arquivado" | "inconsistente"
+    dados_novos: dict[str, Any] = field(default_factory=dict)
+    existente_id: int | None = None
+    existente: dict[str, Any] = field(default_factory=dict)
+    preenchimentos: dict[str, Any] = field(default_factory=dict)
+    conflitos: dict[str, tuple] = field(default_factory=dict)
+    motivo_inconsistencia: str | None = None
+
+
+@dataclass
+class PlanoImportacao:
+    """Resultado da pré-visualização (item 6): classifica cada linha da
+    planilha sem gravar nada no banco. `executar_plano` aplica este plano
+    depois que o usuário confirma (e resolve os conflitos, se houver)."""
+    origem: str
+    itens: list[ItemPlanoImportacao] = field(default_factory=list)
+    colunas_nao_mapeadas: list[str] = field(default_factory=list)
+
+    @property
+    def lidos(self) -> int:
+        return len(self.itens)
+
+    @property
+    def novos(self) -> int:
+        return sum(1 for i in self.itens if i.tipo == "novo")
+
+    @property
+    def atualizados(self) -> int:
+        return sum(1 for i in self.itens if i.tipo == "atualizacao")
+
+    @property
+    def sem_mudanca(self) -> int:
+        return sum(1 for i in self.itens if i.tipo == "sem_mudanca")
+
+    @property
+    def arquivados(self) -> int:
+        return sum(1 for i in self.itens if i.tipo == "arquivado")
+
+    @property
+    def inconsistentes(self) -> int:
+        return sum(1 for i in self.itens if i.tipo == "inconsistente")
+
+    @property
+    def itens_com_conflito(self) -> list[ItemPlanoImportacao]:
+        return [i for i in self.itens if i.conflitos]
+
+    @property
+    def total_conflitos(self) -> int:
+        return len(self.itens_com_conflito)
+
+    def resumo_texto(self) -> str:
+        return (
+            f"{self.origem}: {self.lidos} lidos · {self.novos} novos · {self.atualizados} atualizados "
+            f"({self.total_conflitos} com conflito) · {self.sem_mudanca} sem mudança · "
+            f"{self.arquivados} já arquivados (ignorados) · {self.inconsistentes} com inconsistência"
+        )
+
+
 @dataclass
 class RelatorioImportacao:
+    """Resultado da execução de um plano já confirmado (item 14)."""
     origem: str
     lidos: int = 0
     novos: int = 0
     atualizados: int = 0
+    conflitos_tratados: int = 0
     ignorados_sem_mudanca: int = 0
     ignorados_arquivados: int = 0
     inconsistentes: int = 0
     colunas_nao_mapeadas: list[str] = field(default_factory=list)
     detalhes_inconsistencia: list[str] = field(default_factory=list)
 
-    @property
-    def possiveis_duplicidades(self) -> int:
-        return 0  # a chave por (código+disciplina+revisão+nºAT) já impede duplicidade na importação
-
     def resumo_texto(self) -> str:
         return (
-            f"{self.origem}: {self.lidos} lidos · {self.novos} novos · {self.atualizados} atualizados · "
-            f"{self.ignorados_sem_mudanca} sem mudança · {self.ignorados_arquivados} ignorados (já arquivados) · "
-            f"{self.inconsistentes} com inconsistência"
+            f"{self.origem}: {self.lidos} lidos · {self.novos} novos · {self.atualizados} atualizados "
+            f"({self.conflitos_tratados} conflitos tratados) · {self.ignorados_sem_mudanca} sem mudança · "
+            f"{self.ignorados_arquivados} ignorados (já arquivados) · {self.inconsistentes} com inconsistência"
         )
 
 
-def _aplicar(
+def _planejar(
     linhas: list[dict[str, Any]], colunas_nao_mapeadas: list[str], origem: str,
     campo_codigo: str, campo_nome_entidade: str, campo_nome_obra: str | None,
-    listar_ativos, listar_arquivados_fn, inserir_fn, atualizar_fn, colunas_tabela: list[str],
-    usuario: str,
-) -> RelatorioImportacao:
-    relatorio = RelatorioImportacao(origem=origem, lidos=len(linhas), colunas_nao_mapeadas=colunas_nao_mapeadas)
+    listar_ativos, listar_arquivados_fn, colunas_tabela: list[str],
+) -> PlanoImportacao:
+    """Fase 1 (item 6): classifica cada linha sem gravar nada no banco."""
+    plano = PlanoImportacao(origem=origem, colunas_nao_mapeadas=colunas_nao_mapeadas)
 
     ativos = listar_ativos()
     arquivados = listar_arquivados_fn()
@@ -252,83 +375,197 @@ def _aplicar(
     chaves_arquivadas = {
         chave_registro(linha.to_dict(), campo_nome_entidade, campo_nome_obra) for _, linha in arquivados.iterrows()
     }
+    # Linhas da própria planilha que caiam na mesma chave (raro, mas
+    # possível) atualizam o item já planejado nesta mesma leva, em vez de
+    # criar um segundo — mesma proteção que já existia na execução direta.
+    indice_planejados: dict[tuple, int] = {}
 
     for linha in linhas:
-        # O código é usado na chave quando existe, mas sua ausência sozinha
-        # não invalida a linha (item 3) — um Prestador/Cessionário real
-        # pode ainda não ter código atribuído (ex.: análise prévia enviada
-        # antes da pasta ser criada no Citadon). O que realmente falta para
-        # a linha ser um registro reconhecível é o nome da entidade.
+        item_origem = linha.get("item")
         if not linha.get(campo_nome_entidade) or not linha.get("disciplina"):
-            relatorio.inconsistentes += 1
-            relatorio.detalhes_inconsistencia.append(
-                f"Item {linha.get('item') or '?'}: sem {campo_nome_entidade} ou disciplina — linha ignorada."
-            )
+            plano.itens.append(ItemPlanoImportacao(
+                item_origem=item_origem, identificacao=str(linha.get(campo_codigo) or "?"), chave=(),
+                tipo="inconsistente", motivo_inconsistencia=f"sem {campo_nome_entidade} ou disciplina",
+            ))
             continue
 
         chave = chave_registro(linha, campo_nome_entidade, campo_nome_obra)
-        existente = indice_ativos.get(chave)
-
-        if existente is None and chave in chaves_arquivadas:
-            relatorio.ignorados_arquivados += 1
-            continue
-
+        identificacao = str(linha.get(campo_codigo) or linha.get(campo_nome_entidade))
         campos_planilha = {c: linha.get(c) for c in colunas_tabela if c in linha}
 
+        indice_repetido = indice_planejados.get(chave)
+        if indice_repetido is not None:
+            item_repetido = plano.itens[indice_repetido]
+            base = {**item_repetido.existente, **item_repetido.preenchimentos}
+            preenchimentos, conflitos = _diff_campos(base, campos_planilha)
+            item_repetido.preenchimentos.update(preenchimentos)
+            item_repetido.conflitos.update(conflitos)
+            if item_repetido.tipo == "sem_mudanca" and (preenchimentos or conflitos):
+                item_repetido.tipo = "atualizacao"
+            continue
+
+        existente = indice_ativos.get(chave)
+        if existente is None and chave in chaves_arquivadas:
+            plano.itens.append(ItemPlanoImportacao(item_origem=item_origem, identificacao=identificacao, chave=chave, tipo="arquivado"))
+            continue
+
         if existente is None:
-            faltando = [campo for campo in _CAMPOS_OBRIGATORIOS_PARA_NOVO if _vazio(campos_planilha.get(campo))]
+            faltando = [c for c in _CAMPOS_OBRIGATORIOS_PARA_NOVO if _vazio(campos_planilha.get(c))]
             if faltando:
-                relatorio.inconsistentes += 1
-                identificacao = linha.get(campo_codigo) or linha.get(campo_nome_entidade)
-                relatorio.detalhes_inconsistencia.append(
-                    f"Item {linha.get('item') or '?'} ({identificacao}): registro novo sem "
-                    f"{', '.join(faltando)} — não é possível cadastrar sem esse(s) dado(s)."
-                )
+                plano.itens.append(ItemPlanoImportacao(
+                    item_origem=item_origem, identificacao=identificacao, chave=chave, tipo="inconsistente",
+                    motivo_inconsistencia=f"registro novo sem {', '.join(faltando)}",
+                ))
                 continue
+            item_plano = ItemPlanoImportacao(
+                item_origem=item_origem, identificacao=identificacao, chave=chave,
+                tipo="novo", dados_novos=campos_planilha,
+            )
+            plano.itens.append(item_plano)
+            indice_planejados[chave] = len(plano.itens) - 1
+            continue
+
+        preenchimentos, conflitos = _diff_campos(existente, campos_planilha)
+        tipo = "atualizacao" if (preenchimentos or conflitos) else "sem_mudanca"
+        plano.itens.append(ItemPlanoImportacao(
+            item_origem=item_origem, identificacao=identificacao, chave=chave, tipo=tipo,
+            existente_id=existente.get("id"), existente=existente, dados_novos=campos_planilha,
+            preenchimentos=preenchimentos, conflitos=conflitos,
+        ))
+        indice_planejados[chave] = len(plano.itens) - 1
+
+    return plano
+
+
+def executar_plano(
+    plano: PlanoImportacao, resolucoes_conflito: dict[tuple, dict[str, str]],
+    usuario: str, inserir_fn, atualizar_fn, colunas_tabela: list[str],
+) -> RelatorioImportacao:
+    """Fase 2 (item 7): aplica um plano já confirmado pelo usuário.
+    `resolucoes_conflito` tem a decisão por campo de cada item com
+    conflito — `{chave: {campo: "planilha"}}`; um campo sem decisão
+    explícita mantém o valor do sistema (o padrão nunca sobrescreve
+    silenciosamente — item 11)."""
+    relatorio = RelatorioImportacao(
+        origem=plano.origem, lidos=plano.lidos, colunas_nao_mapeadas=plano.colunas_nao_mapeadas,
+    )
+    for item in plano.itens:
+        if item.tipo == "inconsistente":
+            relatorio.inconsistentes += 1
+            relatorio.detalhes_inconsistencia.append(f"Item {item.item_origem or '?'} ({item.identificacao}): {item.motivo_inconsistencia}.")
+            continue
+        if item.tipo == "arquivado":
+            relatorio.ignorados_arquivados += 1
+            continue
+        if item.tipo == "sem_mudanca":
+            relatorio.ignorados_sem_mudanca += 1
+            continue
+
+        if item.tipo == "novo":
+            campos = dict(item.dados_novos)
             for campo, padrao in _PADROES_SO_PARA_INSERCAO.items():
-                if campo in colunas_tabela and _vazio(campos_planilha.get(campo)):
-                    campos_planilha[campo] = padrao
-            novo_id = inserir_fn(campos_planilha, usuario)
-            # Registra o novo registro no índice imediatamente — se outra
-            # linha da MESMA planilha cair na mesma chave (ex.: duas
-            # análises diferentes sem nº AT, mesmo código/disciplina/revisão
-            # e mesma Data de Solicitação), ela deve atualizar este
-            # registro que acabou de ser criado, nunca criar um segundo.
-            indice_ativos[chave] = {**campos_planilha, "id": novo_id}
+                if campo in colunas_tabela and _vazio(campos.get(campo)):
+                    campos[campo] = padrao
+            inserir_fn(campos, usuario)
             relatorio.novos += 1
             continue
 
-        mesclado = mesclar_preservando(existente, campos_planilha)
-        mudou = any(mesclado.get(c) != existente.get(c) for c in campos_planilha)
-        if mudou:
-            atualizar_fn(existente["id"], mesclado, usuario)
-            relatorio.atualizados += 1
-        else:
-            relatorio.ignorados_sem_mudanca += 1
-        indice_ativos[chave] = mesclado
+        # atualizacao: preenchimentos sempre aplicados; conflitos só
+        # quando o usuário escolheu explicitamente usar o valor da
+        # planilha — senão o valor do sistema é mantido.
+        final = dict(item.existente)
+        final.update(item.preenchimentos)
+        escolhas = resolucoes_conflito.get(item.chave, {})
+        conflitos_tratados_aqui = 0
+        for campo, (_valor_sistema, valor_planilha) in item.conflitos.items():
+            if escolhas.get(campo) == "planilha":
+                final[campo] = valor_planilha
+            conflitos_tratados_aqui += 1
+        atualizar_fn(item.existente_id, final, usuario)
+        relatorio.atualizados += 1
+        relatorio.conflitos_tratados += conflitos_tratados_aqui
 
     return relatorio
 
 
-def importar_prestadores(conteudo: bytes, usuario: str, nome_aba: str = "PROJ_PREST") -> RelatorioImportacao:
+def planejar_importacao_prestadores(conteudo: bytes, nome_aba: str = "PROJ_PREST") -> PlanoImportacao:
     from gat.arquivo_database import listar_arquivados
-    from gat.database import COLUNAS_PRESTADORES, inserir_prestador, listar_prestadores, atualizar_prestador
+    from gat.database import COLUNAS_PRESTADORES, listar_prestadores
 
     linhas, colunas_nao_mapeadas = ler_planilha_prestadores(conteudo, nome_aba)
-    return _aplicar(
+    return _planejar(
         linhas, colunas_nao_mapeadas, "Prestadores", "codigo", "prestador", "obra_referencia",
-        listar_prestadores, lambda: listar_arquivados("prestadores"),
-        inserir_prestador, atualizar_prestador, COLUNAS_PRESTADORES, usuario,
+        listar_prestadores, lambda: listar_arquivados("prestadores"), COLUNAS_PRESTADORES,
     )
 
 
-def importar_cessionarios(conteudo: bytes, usuario: str, nome_aba: str = "PROJ_CESS") -> RelatorioImportacao:
+def planejar_importacao_cessionarios(conteudo: bytes, nome_aba: str = "PROJ_CESS") -> PlanoImportacao:
     from gat.arquivo_database import listar_arquivados
-    from gat.database import COLUNAS_CESSIONARIOS, inserir_cessionario, listar_cessionarios, atualizar_cessionario
+    from gat.database import COLUNAS_CESSIONARIOS, listar_cessionarios
 
     linhas, colunas_nao_mapeadas = ler_planilha_cessionarios(conteudo, nome_aba)
-    return _aplicar(
+    return _planejar(
         linhas, colunas_nao_mapeadas, "Cessionários", "codigo", "cessionario", None,
-        listar_cessionarios, lambda: listar_arquivados("cessionarios"),
-        inserir_cessionario, atualizar_cessionario, COLUNAS_CESSIONARIOS, usuario,
+        listar_cessionarios, lambda: listar_arquivados("cessionarios"), COLUNAS_CESSIONARIOS,
     )
+
+
+def executar_plano_prestadores(plano: PlanoImportacao, resolucoes_conflito: dict[tuple, dict[str, str]], usuario: str) -> RelatorioImportacao:
+    from gat.database import COLUNAS_PRESTADORES, atualizar_prestador, inserir_prestador
+
+    return executar_plano(plano, resolucoes_conflito, usuario, inserir_prestador, atualizar_prestador, COLUNAS_PRESTADORES)
+
+
+def executar_plano_cessionarios(plano: PlanoImportacao, resolucoes_conflito: dict[tuple, dict[str, str]], usuario: str) -> RelatorioImportacao:
+    from gat.database import COLUNAS_CESSIONARIOS, atualizar_cessionario, inserir_cessionario
+
+    return executar_plano(plano, resolucoes_conflito, usuario, inserir_cessionario, atualizar_cessionario, COLUNAS_CESSIONARIOS)
+
+
+def confirmar_importacao(
+    nome_arquivo: str,
+    plano_prestadores: PlanoImportacao, resolucoes_prestadores: dict[tuple, dict[str, str]],
+    plano_cessionarios: PlanoImportacao, resolucoes_cessionarios: dict[tuple, dict[str, str]],
+    usuario: str,
+) -> tuple[RelatorioImportacao, RelatorioImportacao]:
+    """
+    Aplica os dois planos já revisados e confirmados pelo usuário (item 7).
+    Cria backup antes de gravar (item 8); se qualquer erro ocorrer durante
+    a aplicação, restaura o backup imediatamente — "ou a atualização é
+    concluída com sucesso, ou o estado anterior é preservado" — em vez de
+    deixar o banco parcialmente atualizado. Cada execução (sucesso ou
+    falha) fica registrada no histórico (item 13)."""
+    from gat.config import DB_PATH
+    from gat.database import criar_backup, registrar_importacao_planilha
+
+    caminho_backup = criar_backup()
+
+    try:
+        relatorio_prest = executar_plano_prestadores(plano_prestadores, resolucoes_prestadores, usuario)
+        relatorio_cess = executar_plano_cessionarios(plano_cessionarios, resolucoes_cessionarios, usuario)
+    except Exception as exc:
+        if caminho_backup is not None:
+            shutil.copy2(caminho_backup, DB_PATH)
+        registrar_importacao_planilha(
+            usuario, nome_arquivo, "Prestadores + Cessionários",
+            lidos=plano_prestadores.lidos + plano_cessionarios.lidos,
+            novos=0, atualizados=0, conflitos_tratados=0, ignorados=0, inconsistencias=0,
+            resultado="ERRO", erro=str(exc),
+        )
+        raise
+
+    registrar_importacao_planilha(
+        usuario, nome_arquivo, "Prestadores",
+        lidos=relatorio_prest.lidos, novos=relatorio_prest.novos, atualizados=relatorio_prest.atualizados,
+        conflitos_tratados=relatorio_prest.conflitos_tratados,
+        ignorados=relatorio_prest.ignorados_sem_mudanca + relatorio_prest.ignorados_arquivados,
+        inconsistencias=relatorio_prest.inconsistentes, resultado="SUCESSO",
+    )
+    registrar_importacao_planilha(
+        usuario, nome_arquivo, "Cessionários",
+        lidos=relatorio_cess.lidos, novos=relatorio_cess.novos, atualizados=relatorio_cess.atualizados,
+        conflitos_tratados=relatorio_cess.conflitos_tratados,
+        ignorados=relatorio_cess.ignorados_sem_mudanca + relatorio_cess.ignorados_arquivados,
+        inconsistencias=relatorio_cess.inconsistentes, resultado="SUCESSO",
+    )
+    return relatorio_prest, relatorio_cess

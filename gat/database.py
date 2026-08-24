@@ -1349,6 +1349,54 @@ def _migracao_0031_manual_atualizacao_dados(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migracao_0033_atualizar_capitulo_importacao_planilha(conn: sqlite3.Connection) -> None:
+    """A funcionalidade de importação por planilha foi movida de
+    Administração > Importar Planilha para Configurações > Atualização
+    por Planilha, com prévia e resolução de conflitos (Configurações >
+    Atualização por Planilha) — o capítulo 'Atualização de Dados pela
+    Planilha Oficial', semeado na migração 31, ficou desatualizado
+    (citava o caminho antigo). Exceção deliberada ao padrão só-insere
+    das demais migrações de Manual: aqui o conteúdo antigo está
+    factualmente errado, então esta migração ATUALIZA o capítulo (por
+    título) em vez de só inserir um novo — evita reduplicar o mesmo
+    assunto com instruções contraditórias no Manual."""
+    from gat.atualizacao_dados_manual_conteudo import CAPITULOS_ATUALIZACAO_DADOS
+
+    conteudo_atualizado = dict(CAPITULOS_ATUALIZACAO_DADOS)["Atualização de Dados pela Planilha Oficial"]
+    conn.execute(
+        "UPDATE manual_capitulos SET conteudo = ? WHERE titulo = 'Atualização de Dados pela Planilha Oficial'",
+        (conteudo_atualizado,),
+    )
+
+
+def _migracao_0032_historico_importacao_planilha(conn: sqlite3.Connection) -> None:
+    """Configurações > Atualização por Planilha: tabela de histórico das
+    importações (item 13) — puramente aditiva, não recria nem altera
+    nenhuma tabela existente."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS importacoes_planilha_historico (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            data_hora TEXT NOT NULL,
+            usuario TEXT NOT NULL,
+            nome_arquivo TEXT NOT NULL,
+            origem TEXT NOT NULL,
+            lidos INTEGER NOT NULL DEFAULT 0,
+            novos INTEGER NOT NULL DEFAULT 0,
+            atualizados INTEGER NOT NULL DEFAULT 0,
+            conflitos_tratados INTEGER NOT NULL DEFAULT 0,
+            ignorados INTEGER NOT NULL DEFAULT 0,
+            inconsistencias INTEGER NOT NULL DEFAULT 0,
+            resultado TEXT NOT NULL,
+            erro TEXT
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_importacoes_planilha_historico_data ON importacoes_planilha_historico(data_hora)"
+    )
+
+
 def _migracao_0025_manual_consolidacao_atraso_hold(conn: sqlite3.Connection) -> None:
     """Acrescenta o capítulo 'SLA, Atraso, HOLD e Alerta Máximo' ao Manual
     do Sistema, ao final da lista já existente, sem alterar nenhum
@@ -1400,6 +1448,8 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (29, "Manual do Sistema: capítulo 'Ranking de Prestadores e Projetistas de Cessionários' (marco oficial das avaliações, 01/07/2026)", _migracao_0029_manual_ranking_avaliacoes),
     (30, "Central de Codificação: tabela codigos_disciplina (código PR-PRO-002 usado no número da AT)", _migracao_0030_central_codificacao),
     (31, "Manual do Sistema: capítulos 'Atualização de Dados pela Planilha Oficial', 'Central de Codificação e o Número da AT' e 'Atualização Automática dos Dashboards'", _migracao_0031_manual_atualizacao_dados),
+    (32, "Configurações > Atualização por Planilha: tabela importacoes_planilha_historico", _migracao_0032_historico_importacao_planilha),
+    (33, "Manual do Sistema: atualiza o capítulo 'Atualização de Dados pela Planilha Oficial' para o novo fluxo com prévia e conflitos", _migracao_0033_atualizar_capitulo_importacao_planilha),
 ]
 
 
@@ -2237,6 +2287,48 @@ def definir_codigo_disciplina(disciplina: str, codigo: str | None, descricao: st
             """,
             (disciplina.strip().upper(), (codigo or "").strip() or None, (descricao or "").strip() or None, agora, usuario),
         )
+
+
+# ---------------------------------------------------------------------------
+# Configurações > Atualização por Planilha — histórico das importações.
+# ---------------------------------------------------------------------------
+
+
+def registrar_importacao_planilha(
+    usuario: str, nome_arquivo: str, origem: str,
+    lidos: int, novos: int, atualizados: int, conflitos_tratados: int,
+    ignorados: int, inconsistencias: int, resultado: str, erro: str | None = None,
+) -> None:
+    """Registra uma execução (bem-sucedida ou não) da importação por
+    planilha, para consulta em Configurações > Atualização por Planilha >
+    Histórico (item 13)."""
+    agora = agora_br().isoformat()
+    with _conectar() as conn:
+        conn.execute(
+            """
+            INSERT INTO importacoes_planilha_historico
+                (data_hora, usuario, nome_arquivo, origem, lidos, novos, atualizados,
+                 conflitos_tratados, ignorados, inconsistencias, resultado, erro)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (agora, usuario, nome_arquivo, origem, lidos, novos, atualizados,
+             conflitos_tratados, ignorados, inconsistencias, resultado, erro),
+        )
+
+
+def listar_importacoes_planilha(limite: int = 100) -> pd.DataFrame:
+    with _conectar() as conn:
+        return pd.read_sql_query(
+            "SELECT * FROM importacoes_planilha_historico ORDER BY data_hora DESC LIMIT ?", conn, params=(limite,),
+        )
+
+
+def obter_ultima_importacao_planilha() -> dict[str, Any] | None:
+    with _conectar() as conn:
+        linha = conn.execute(
+            "SELECT * FROM importacoes_planilha_historico WHERE resultado = 'SUCESSO' ORDER BY data_hora DESC LIMIT 1"
+        ).fetchone()
+        return dict(linha) if linha else None
 
 
 # ---------------------------------------------------------------------------

@@ -46,7 +46,6 @@ def render(usuario: dict) -> None:
     if pode_area(usuario, "configuracoes"):
         abas_disponiveis.append("Configurações")
         abas_disponiveis.append("Central de Codificação")
-        abas_disponiveis.append("Importar Planilha")
 
     abas = st.tabs(abas_disponiveis)
     indice = 0
@@ -73,11 +72,6 @@ def render(usuario: dict) -> None:
     if "Central de Codificação" in abas_disponiveis:
         with abas[indice]:
             _renderizar_central_codificacao(usuario)
-        indice += 1
-
-    if "Importar Planilha" in abas_disponiveis:
-        with abas[indice]:
-            _renderizar_importar_planilha(usuario)
         indice += 1
 
 
@@ -209,6 +203,16 @@ def _renderizar_historico() -> None:
 
 
 def _renderizar_configuracoes(usuario: dict) -> None:
+    aba_geral, aba_planilha, aba_persistencia = st.tabs(["Geral", "Atualização por Planilha", "Persistência e Backup"])
+    with aba_geral:
+        _renderizar_configuracoes_gerais(usuario)
+    with aba_planilha:
+        _renderizar_atualizacao_planilha(usuario)
+    with aba_persistencia:
+        _renderizar_persistencia_dados(usuario)
+
+
+def _renderizar_configuracoes_gerais(usuario: dict) -> None:
     st.markdown("##### Criticidade de projetos sem PEP")
     st.caption(
         "Define, em dias corridos desde a Data de Solicitação, quando um projeto sem PEP passa a ser "
@@ -284,60 +288,154 @@ def _renderizar_central_codificacao(usuario: dict) -> None:
         st.rerun()
 
 
-def _renderizar_importar_planilha(usuario: dict) -> None:
-    st.markdown("##### Atualizar dados a partir da planilha oficial")
-    st.caption(
-        "Lê as abas PROJ_PREST e PROJ_CESS da planilha \"Controle GAT Projetos\" e atualiza Prestadores e "
-        "Cessionários de forma incremental: um registro já existente (mesmo código + disciplina + revisão + "
-        "nº AT) é **atualizado**, nunca duplicado; um campo vazio na planilha nunca apaga um dado já "
-        "cadastrado no sistema; nada é excluído. Um backup automático é criado antes de aplicar qualquer "
-        "mudança."
-    )
-    arquivo = st.file_uploader("Planilha (.xlsx / .xlsm)", type=["xlsx", "xlsm"], key="admin_upload_planilha")
+def _renderizar_atualizacao_planilha(usuario: dict) -> None:
+    from gat.database import listar_importacoes_planilha, obter_ultima_importacao_planilha
 
-    if arquivo is not None and st.button("Importar planilha", icon=":material/upload_file:", type="primary", key="admin_importar_planilha_btn"):
-        from gat.planilha_import import importar_cessionarios, importar_prestadores
+    st.markdown("##### Atualização por Planilha")
+    st.caption(
+        "Alternativa para quando os analistas ainda não atualizaram diretamente o sistema: envie a planilha "
+        "\"Controle GAT Projetos\" (abas PROJ_PREST e PROJ_CESS) para sincronizar Prestadores e Cessionários. "
+        "O preenchimento direto no sistema continua sendo o fluxo principal — isto é só um complemento. Nada "
+        "é apagado nem duplicado, e nenhuma mudança é aplicada sem você revisar e confirmar a prévia."
+    )
+
+    ultima = obter_ultima_importacao_planilha()
+    if ultima:
+        st.info(
+            f"Última atualização por planilha: {formatar_datahora_br(ultima['data_hora'])} — {ultima['usuario']} "
+            f"— arquivo \"{ultima['nome_arquivo']}\".",
+            icon=":material/history:",
+        )
+
+    arquivo = st.file_uploader("Planilha (.xlsx / .xlsm)", type=["xlsx", "xlsm"], key="admin_upload_planilha_v2")
+
+    if arquivo is not None and st.button("Validar planilha", icon=":material/fact_check:", type="primary", key="admin_validar_planilha_btn"):
+        from gat.planilha_import import planejar_importacao_cessionarios, planejar_importacao_prestadores
 
         conteudo = arquivo.getvalue()
-        with st.spinner("Criando backup de segurança..."):
-            criar_backup()
         try:
-            with st.spinner("Importando Prestadores (aba PROJ_PREST)..."):
-                relatorio_prest = importar_prestadores(conteudo, usuario["username"])
-            with st.spinner("Importando Cessionários (aba PROJ_CESS)..."):
-                relatorio_cess = importar_cessionarios(conteudo, usuario["username"])
+            with st.spinner("Lendo e validando a planilha..."):
+                plano_p = planejar_importacao_prestadores(conteudo)
+                plano_c = planejar_importacao_cessionarios(conteudo)
         except Exception as exc:
-            st.error(f"Falha ao importar a planilha: {exc}")
+            st.error(f"Não foi possível ler a planilha \"{arquivo.name}\": {exc}. Nenhuma alteração foi realizada.")
+            st.session_state.pop("admin_plano_importacao", None)
             return
+        st.session_state["admin_plano_importacao"] = {"nome_arquivo": arquivo.name, "plano_p": plano_p, "plano_c": plano_c}
+        st.session_state.pop("admin_resultado_importacao", None)
+        st.rerun()
 
+    plano_estado = st.session_state.get("admin_plano_importacao")
+    if plano_estado:
+        _renderizar_previa_importacao(plano_estado, usuario)
+
+    resultado = st.session_state.get("admin_resultado_importacao")
+    if resultado:
+        st.success("Importação concluída — veja o relatório abaixo.", icon=":material/check_circle:")
+        for relatorio in resultado:
+            _renderizar_relatorio_importacao(relatorio)
+
+    with st.expander("Histórico de importações"):
+        historico = listar_importacoes_planilha()
+        if historico.empty:
+            st.caption("Nenhuma importação registrada ainda.")
+        else:
+            exibicao = formatar_datahoras_df(historico, ["data_hora"])[[
+                "data_hora", "usuario", "nome_arquivo", "origem", "resultado",
+                "lidos", "novos", "atualizados", "conflitos_tratados", "inconsistencias",
+            ]].rename(columns={
+                "data_hora": "Data/Hora", "usuario": "Usuário", "nome_arquivo": "Arquivo", "origem": "Origem",
+                "resultado": "Resultado", "lidos": "Lidos", "novos": "Novos", "atualizados": "Atualizados",
+                "conflitos_tratados": "Conflitos", "inconsistencias": "Inconsistências",
+            })
+            st.dataframe(exibicao, use_container_width=True, hide_index=True)
+
+
+def _renderizar_previa_importacao(plano_estado: dict, usuario: dict) -> None:
+    from gat.planilha_import import confirmar_importacao
+
+    plano_p, plano_c, nome_arquivo = plano_estado["plano_p"], plano_estado["plano_c"], plano_estado["nome_arquivo"]
+
+    st.markdown("###### Prévia da atualização")
+    for plano in (plano_p, plano_c):
+        st.markdown(f"**{plano.origem}**")
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric("Lidos", plano.lidos)
+        col2.metric("Novos", plano.novos)
+        col3.metric("Atualizados", plano.atualizados)
+        col4.metric("Sem mudança", plano.sem_mudanca)
+        col5.metric("Com conflito", plano.total_conflitos)
+        if plano.arquivados:
+            st.caption(f"{plano.arquivados} já arquivado(s) — ignorado(s), arquivamento é decisão manual separada.")
+        if plano.inconsistentes:
+            with st.expander(f"{plano.inconsistentes} linha(s) com inconsistência — não puderam ser processadas"):
+                for item in plano.itens:
+                    if item.tipo == "inconsistente":
+                        st.caption(f"• Item {item.item_origem or '?'} ({item.identificacao}): {item.motivo_inconsistencia}.")
+        if plano.colunas_nao_mapeadas:
+            st.caption(f"Colunas da planilha não reconhecidas (ignoradas): {', '.join(plano.colunas_nao_mapeadas)}")
+
+    resolucoes_p: dict[tuple, dict[str, str]] = {}
+    resolucoes_c: dict[tuple, dict[str, str]] = {}
+    total_conflitos = plano_p.total_conflitos + plano_c.total_conflitos
+
+    if total_conflitos:
+        st.markdown(f"###### Conflito de informação — {total_conflitos} registro(s)")
+        st.caption(
+            "O sistema e a planilha têm valores diferentes para estes campos. Por padrão o valor já cadastrado "
+            "no sistema é mantido — escolha \"Usar planilha\" só onde quiser substituir."
+        )
+        for plano, resolucoes, prefixo in ((plano_p, resolucoes_p, "p"), (plano_c, resolucoes_c, "c")):
+            for indice, item in enumerate(plano.itens_com_conflito):
+                with st.expander(f"{plano.origem} — {item.identificacao} (item {item.item_origem or '?'})"):
+                    escolhas_item: dict[str, str] = {}
+                    for campo, (valor_sistema, valor_planilha) in item.conflitos.items():
+                        escolha = st.radio(
+                            f"**{campo}** — sistema: `{valor_sistema}` · planilha: `{valor_planilha}`",
+                            ["Manter sistema", "Usar planilha"], horizontal=True,
+                            key=f"admin_conflito_{prefixo}_{indice}_{campo}",
+                        )
+                        if escolha == "Usar planilha":
+                            escolhas_item[campo] = "planilha"
+                    if escolhas_item:
+                        resolucoes[item.chave] = escolhas_item
+
+    col_confirmar, col_cancelar = st.columns(2)
+    if col_confirmar.button("Confirmar atualização", type="primary", icon=":material/check:", use_container_width=True, key="admin_confirmar_importacao"):
+        try:
+            with st.spinner("Aplicando atualização..."):
+                relatorio_p, relatorio_c = confirmar_importacao(nome_arquivo, plano_p, resolucoes_p, plano_c, resolucoes_c, usuario["username"])
+        except Exception as exc:
+            st.error(f"Falha ao aplicar a importação — nenhuma alteração foi mantida (estado anterior restaurado). Detalhe: {exc}")
+            return
         registrar_atividade(
             usuario["username"], usuario.get("perfil"), "IMPORTACAO_PLANILHA",
-            detalhe=f"{relatorio_prest.resumo_texto()} | {relatorio_cess.resumo_texto()}",
+            detalhe=f"{relatorio_p.resumo_texto()} | {relatorio_c.resumo_texto()}",
         )
-        st.session_state["admin_ultimo_relatorio_importacao"] = (relatorio_prest, relatorio_cess)
-        st.success("Importação concluída — veja o relatório abaixo.")
+        st.session_state.pop("admin_plano_importacao", None)
+        st.session_state["admin_resultado_importacao"] = (relatorio_p, relatorio_c)
         atualizar_apos_mutacao()
+    if col_cancelar.button("Cancelar", icon=":material/close:", use_container_width=True, key="admin_cancelar_importacao"):
+        st.session_state.pop("admin_plano_importacao", None)
+        st.rerun()
 
-    relatorios = st.session_state.get("admin_ultimo_relatorio_importacao")
-    if relatorios:
-        for relatorio in relatorios:
-            st.markdown(f"###### {relatorio.origem}")
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Lidos", relatorio.lidos)
-            col2.metric("Novos", relatorio.novos)
-            col3.metric("Atualizados", relatorio.atualizados)
-            col4.metric("Sem mudança", relatorio.ignorados_sem_mudanca)
-            col1.metric("Já arquivados (ignorados)", relatorio.ignorados_arquivados)
-            col2.metric("Com inconsistência", relatorio.inconsistentes)
-            if relatorio.colunas_nao_mapeadas:
-                st.caption(f"Colunas da planilha não reconhecidas (ignoradas): {', '.join(relatorio.colunas_nao_mapeadas)}")
-            if relatorio.detalhes_inconsistencia:
-                with st.expander(f"Detalhe das {relatorio.inconsistentes} inconsistências"):
-                    for detalhe in relatorio.detalhes_inconsistencia:
-                        st.caption(f"• {detalhe}")
 
-    st.divider()
-    _renderizar_persistencia_dados(usuario)
+def _renderizar_relatorio_importacao(relatorio) -> None:
+    st.markdown(f"###### {relatorio.origem}")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Lidos", relatorio.lidos)
+    col2.metric("Novos", relatorio.novos)
+    col3.metric("Atualizados", relatorio.atualizados)
+    col4.metric("Conflitos tratados", relatorio.conflitos_tratados)
+    col1.metric("Sem mudança", relatorio.ignorados_sem_mudanca)
+    col2.metric("Já arquivados", relatorio.ignorados_arquivados)
+    col3.metric("Inconsistências", relatorio.inconsistentes)
+    if relatorio.colunas_nao_mapeadas:
+        st.caption(f"Colunas da planilha não reconhecidas (ignoradas): {', '.join(relatorio.colunas_nao_mapeadas)}")
+    if relatorio.detalhes_inconsistencia:
+        with st.expander(f"Detalhe das {relatorio.inconsistentes} inconsistências"):
+            for detalhe in relatorio.detalhes_inconsistencia:
+                st.caption(f"• {detalhe}")
 
 
 def _renderizar_persistencia_dados(usuario: dict) -> None:
