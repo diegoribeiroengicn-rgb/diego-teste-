@@ -154,27 +154,50 @@ def ler_planilha_cessionarios(conteudo: bytes, nome_aba: str = "PROJ_CESS") -> t
 def _num_at_normalizado(num_at: str | None) -> str | None:
     """Só a parte numérica do nº AT (antes da '/'), sem zeros à esquerda,
     para comparação — o valor original (com zeros à esquerda) nunca é
-    alterado ao gravar; isto é só a chave de correspondência."""
+    alterado ao gravar; isto é só a chave de correspondência. Um nº AT que
+    não é um número (ex.: "***", "AT", "% TODO" — valores de rascunho ou
+    de células de fora da tabela de dados) NUNCA é usado como identificador
+    de correspondência: várias análises diferentes usam o mesmo texto de
+    rascunho para "ainda não tem AT", então usá-lo como chave faria
+    análises diferentes colidirem na mesma chave (mesclando uma na outra,
+    ou criando duplicidade, conforme a ordem de leitura)."""
     if not num_at:
         return None
     parte = str(num_at).split("/")[0].strip()
     if parte.isdigit():
         return str(int(parte))
-    return parte or None
+    return None
 
 
-def chave_registro(linha: dict[str, Any], campo_extra: str | None = None) -> tuple:
+def chave_registro(linha: dict[str, Any], campo_nome_entidade: str, campo_extra: str | None = None) -> tuple:
     """Chave de identificação única de uma análise (item 3): código +
-    disciplina + revisão + nº AT; quando o nº AT está ausente, o campo
-    extra (Obra de Referência, só para Prestadores) entra como critério
-    adicional para reduzir falsos positivos de correspondência."""
+    disciplina + revisão + nº AT.
+
+    Um Prestador/Cessionário legítimo pode ainda não ter código atribuído
+    (ex.: análise prévia enviada antes da pasta ser criada) — nesse caso o
+    nome da entidade substitui o código na chave, em vez de descartar o
+    registro só por faltar o código (item 3: "se não existir, criar um
+    novo registro" — a ausência do código não significa que o registro é
+    inválido).
+
+    Quando o nº AT não é um identificador confiável (ausente ou um valor
+    de rascunho não numérico — ver `_num_at_normalizado`), a Data de
+    Solicitação entra na chave como critério adicional (é um dado real da
+    análise, muito improvável de coincidir por acaso entre duas análises
+    realmente diferentes) — e, para Prestadores, também a Obra de
+    Referência — para não misturar duas análises diferentes que ainda não
+    têm AT na mesma chave."""
     codigo = _texto(linha.get("codigo"), maiusculo=True)
+    identificador = codigo or _texto(linha.get(campo_nome_entidade), maiusculo=True)
     disciplina = _texto(linha.get("disciplina"), maiusculo=True)
     revisao = linha.get("revisao")
     num_at = _num_at_normalizado(linha.get("num_at"))
-    if num_at is None and campo_extra:
-        return (codigo, disciplina, revisao, num_at, _texto(linha.get(campo_extra), maiusculo=True))
-    return (codigo, disciplina, revisao, num_at)
+    if num_at is not None:
+        return (identificador, disciplina, revisao, num_at)
+    extras: tuple = (_texto(linha.get("data_solicitacao")),)
+    if campo_extra:
+        extras = (*extras, _texto(linha.get(campo_extra), maiusculo=True))
+    return (identificador, disciplina, revisao, num_at, *extras)
 
 
 def mesclar_preservando(existente: dict[str, Any], novo: dict[str, Any]) -> dict[str, Any]:
@@ -225,18 +248,25 @@ def _aplicar(
     arquivados = listar_arquivados_fn()
     indice_ativos: dict[tuple, dict[str, Any]] = {}
     for _, linha in ativos.iterrows():
-        indice_ativos[chave_registro(linha.to_dict(), campo_nome_obra)] = linha.to_dict()
-    chaves_arquivadas = {chave_registro(linha.to_dict(), campo_nome_obra) for _, linha in arquivados.iterrows()}
+        indice_ativos[chave_registro(linha.to_dict(), campo_nome_entidade, campo_nome_obra)] = linha.to_dict()
+    chaves_arquivadas = {
+        chave_registro(linha.to_dict(), campo_nome_entidade, campo_nome_obra) for _, linha in arquivados.iterrows()
+    }
 
     for linha in linhas:
-        if not linha.get(campo_codigo) or not linha.get("disciplina"):
+        # O código é usado na chave quando existe, mas sua ausência sozinha
+        # não invalida a linha (item 3) — um Prestador/Cessionário real
+        # pode ainda não ter código atribuído (ex.: análise prévia enviada
+        # antes da pasta ser criada no Citadon). O que realmente falta para
+        # a linha ser um registro reconhecível é o nome da entidade.
+        if not linha.get(campo_nome_entidade) or not linha.get("disciplina"):
             relatorio.inconsistentes += 1
             relatorio.detalhes_inconsistencia.append(
-                f"Item {linha.get('item') or '?'}: sem {campo_codigo} ou disciplina — linha ignorada."
+                f"Item {linha.get('item') or '?'}: sem {campo_nome_entidade} ou disciplina — linha ignorada."
             )
             continue
 
-        chave = chave_registro(linha, campo_nome_obra)
+        chave = chave_registro(linha, campo_nome_entidade, campo_nome_obra)
         existente = indice_ativos.get(chave)
 
         if existente is None and chave in chaves_arquivadas:
@@ -246,21 +276,25 @@ def _aplicar(
         campos_planilha = {c: linha.get(c) for c in colunas_tabela if c in linha}
 
         if existente is None:
-            faltando = [
-                campo for campo in (campo_nome_entidade, *_CAMPOS_OBRIGATORIOS_PARA_NOVO)
-                if _vazio(campos_planilha.get(campo))
-            ]
+            faltando = [campo for campo in _CAMPOS_OBRIGATORIOS_PARA_NOVO if _vazio(campos_planilha.get(campo))]
             if faltando:
                 relatorio.inconsistentes += 1
+                identificacao = linha.get(campo_codigo) or linha.get(campo_nome_entidade)
                 relatorio.detalhes_inconsistencia.append(
-                    f"Item {linha.get('item') or '?'} (código {linha.get(campo_codigo)}): registro novo sem "
+                    f"Item {linha.get('item') or '?'} ({identificacao}): registro novo sem "
                     f"{', '.join(faltando)} — não é possível cadastrar sem esse(s) dado(s)."
                 )
                 continue
             for campo, padrao in _PADROES_SO_PARA_INSERCAO.items():
                 if campo in colunas_tabela and _vazio(campos_planilha.get(campo)):
                     campos_planilha[campo] = padrao
-            inserir_fn(campos_planilha, usuario)
+            novo_id = inserir_fn(campos_planilha, usuario)
+            # Registra o novo registro no índice imediatamente — se outra
+            # linha da MESMA planilha cair na mesma chave (ex.: duas
+            # análises diferentes sem nº AT, mesmo código/disciplina/revisão
+            # e mesma Data de Solicitação), ela deve atualizar este
+            # registro que acabou de ser criado, nunca criar um segundo.
+            indice_ativos[chave] = {**campos_planilha, "id": novo_id}
             relatorio.novos += 1
             continue
 
@@ -271,6 +305,7 @@ def _aplicar(
             relatorio.atualizados += 1
         else:
             relatorio.ignorados_sem_mudanca += 1
+        indice_ativos[chave] = mesclado
 
     return relatorio
 
