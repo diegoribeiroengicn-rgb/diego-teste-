@@ -84,18 +84,30 @@ def rotulos_canais_selecionados(mfiles: bool, drive: bool, email: bool) -> list[
     return selecionados
 
 
-def montar_numero_at(num_at: str | None, codigo: str | None, revisao: int | None) -> str:
+def montar_numero_at(
+    num_at: str | None, codigo: str | None, revisao: int | None, codigo_disciplina: str | None = None,
+) -> str:
     """
-    Número completo da AT usado no Resumo de Conclusão:
-    AT-{nº AT}-{código}-{revisão de 2 dígitos}, ex.: AT-0303-26-P256-01.
-    O nº AT já cadastrado (ex. "0303/26") tem a barra normalizada para
-    hífen; segmentos ausentes são simplesmente omitidos.
+    Número completo da AT usado no Resumo de Conclusão, no padrão
+    AT-NNN-AA-PPP-DDD-RR: AT-{nº AT}-{código}-{código da disciplina}-
+    {revisão de 2 dígitos}, ex.: AT-0303-26-P256-400-01.
+
+    O nº AT já cadastrado (ex. "0303/26") já contém NNN e AA juntos — a
+    barra é só normalizada para hífen, sem separar em campos novos, para
+    manter exatamente o padrão já usado no sistema (nº AT continua sendo
+    um único campo digitado). `codigo_disciplina` (DDD) vem da Central de
+    Codificação (`gat.database.obter_codigo_disciplina`); quando a
+    disciplina não tem código cadastrado, o segmento é simplesmente
+    omitido — nunca preenchido com "None"/"NaN" — para não travar a
+    geração do Resumo por uma disciplina ainda sem código definido.
     """
     partes = ["AT"]
     if num_at:
         partes.append(str(num_at).strip().replace("/", "-"))
     if codigo:
         partes.append(str(codigo).strip())
+    if codigo_disciplina:
+        partes.append(str(codigo_disciplina).strip())
     if revisao is not None:
         try:
             partes.append(f"{int(revisao):02d}")
@@ -124,11 +136,15 @@ def montar_disciplina_revisao(disciplina: str | None, revisao: int | None) -> st
         return disciplina
 
 
-def montar_dados_resumo(tabela: str, dados: dict[str, Any], mfiles: bool, drive: bool, email: bool) -> dict[str, Any]:
+def montar_dados_resumo(
+    tabela: str, dados: dict[str, Any], mfiles: bool, drive: bool, email: bool, codigo_disciplina: str | None = None,
+) -> dict[str, Any]:
     """
     Monta o conjunto de campos exibidos no Resumo de Conclusão a partir do
     cadastro já existente da análise — nenhuma digitação adicional é
-    exigida do analista (seção 5/6 da solicitação).
+    exigida do analista (seção 5/6 da solicitação). `codigo_disciplina`
+    (segmento DDD do número da AT) é responsabilidade do chamador buscar
+    na Central de Codificação — esta função continua pura (sem banco).
     """
     if tabela == "prestadores":
         nome_entidade = dados.get("prestador")
@@ -137,7 +153,7 @@ def montar_dados_resumo(tabela: str, dados: dict[str, Any], mfiles: bool, drive:
         nome_entidade = dados.get("cessionario")
         referencia = dados.get("tipo")
     return {
-        "numero_at": montar_numero_at(dados.get("num_at"), dados.get("codigo"), dados.get("revisao")),
+        "numero_at": montar_numero_at(dados.get("num_at"), dados.get("codigo"), dados.get("revisao"), codigo_disciplina),
         "texto_disponibilizacao": montar_texto_disponibilizacao(mfiles, drive, email),
         "entidade_obra": montar_entidade_obra(nome_entidade, referencia),
         "disciplina_revisao": montar_disciplina_revisao(dados.get("disciplina"), dados.get("revisao")),

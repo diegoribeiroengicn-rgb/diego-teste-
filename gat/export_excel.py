@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 
 import pandas as pd
+import streamlit as st
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -55,7 +56,8 @@ def _escrever_dataframe(ws: Worksheet, df: pd.DataFrame, titulo: str) -> None:
         ws.auto_filter.ref = f"A{linha_cabecalho}:{ultima_coluna}{linha_cabecalho}"
 
 
-def gerar_relatorio_excel(modulos_permitidos: set[str] | None = None) -> bytes:
+@st.cache_data(show_spinner=False, ttl=120)
+def gerar_relatorio_excel(modulos_permitidos: frozenset[str] | None = None) -> bytes:
     """
     Gera o relatório consolidado em Excel com as abas: PRESTADORES,
     CESSIONARIOS, AVALIACOES, ALERTAS CRÍTICOS e PAINEL CONSOLIDADO, prontas
@@ -66,6 +68,15 @@ def gerar_relatorio_excel(modulos_permitidos: set[str] | None = None) -> bytes:
     internamente/pelo administrador). Um módulo bloqueado nunca aparece no
     arquivo gerado — nem seus dados, nem os indicadores derivados dele nas
     abas consolidadas (Alertas Críticos e Painel Consolidado).
+
+    Cacheado (`st.cache_data`, TTL de 2 minutos) porque esta função monta o
+    workbook inteiro a partir do banco — sem cache, ela reconstruía todas as
+    abas a cada navegação de página (o botão "Exportar Relatório Excel" fica
+    na barra lateral em toda tela, e o Streamlit recalcula o `data=` do botão
+    a cada rerun). Os fluxos de gravação que passam por
+    `gat.ui.pos_mutacao.atualizar_apos_mutacao` invalidam o cache
+    imediatamente; o TTL curto é a rede de segurança para os demais — o
+    relatório nunca fica desatualizado por mais de 2 minutos.
     """
     permitir_prest = modulos_permitidos is None or "prestadores" in modulos_permitidos
     permitir_cess = modulos_permitidos is None or "cessionarios" in modulos_permitidos

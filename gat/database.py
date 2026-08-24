@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import shutil
 import sqlite3
+import unicodedata
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -1297,6 +1298,57 @@ def _migracao_0029_manual_ranking_avaliacoes(conn: sqlite3.Connection) -> None:
         )
 
 
+def _migracao_0030_central_codificacao(conn: sqlite3.Connection) -> None:
+    """
+    Central de Codificação: tabela `codigos_disciplina`, que guarda o
+    código numérico de especialidade (procedimento PR-PRO-002) usado para
+    montar o segmento DDD do número da AT no Resumo de Conclusão
+    (`AT-NNN-AA-PPP-DDD-RR`). Semeada com o mapeamento inicial de
+    `gat.codificacao_disciplinas`; depois disso, gerida via Administração
+    > Central de Codificação — puramente aditiva, não recria nem altera
+    nenhuma tabela existente.
+    """
+    from gat.codificacao_disciplinas import CODIGOS_DISCIPLINA_SEED
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS codigos_disciplina (
+            disciplina TEXT PRIMARY KEY,
+            codigo TEXT,
+            descricao TEXT,
+            atualizado_em TEXT NOT NULL,
+            atualizado_por TEXT NOT NULL
+        )
+        """
+    )
+    agora = agora_br().isoformat()
+    for disciplina, (codigo, descricao) in CODIGOS_DISCIPLINA_SEED.items():
+        conn.execute(
+            "INSERT OR IGNORE INTO codigos_disciplina (disciplina, codigo, descricao, atualizado_em, atualizado_por) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (disciplina, codigo, descricao, agora, "MIGRACAO_0030"),
+        )
+
+
+def _migracao_0031_manual_atualizacao_dados(conn: sqlite3.Connection) -> None:
+    """Acrescenta os capítulos sobre importação da planilha oficial,
+    Central de Codificação/número da AT e atualização automática dos
+    dashboards ao Manual do Sistema, ao final da lista já existente, sem
+    alterar nenhum capítulo anterior."""
+    from gat.atualizacao_dados_manual_conteudo import CAPITULOS_ATUALIZACAO_DADOS
+
+    agora = agora_br().isoformat()
+    maior_ordem = conn.execute("SELECT COALESCE(MAX(ordem), 0) FROM manual_capitulos").fetchone()[0]
+    for indice, (titulo, conteudo) in enumerate(CAPITULOS_ATUALIZACAO_DADOS, start=1):
+        existe = conn.execute("SELECT id FROM manual_capitulos WHERE titulo = ?", (titulo,)).fetchone()
+        if existe:
+            continue
+        conn.execute(
+            "INSERT INTO manual_capitulos (ordem, titulo, conteudo, perfis_visiveis, criado_em) VALUES (?, ?, ?, NULL, ?)",
+            (maior_ordem + indice, titulo, conteudo, agora),
+        )
+
+
 def _migracao_0025_manual_consolidacao_atraso_hold(conn: sqlite3.Connection) -> None:
     """Acrescenta o capítulo 'SLA, Atraso, HOLD e Alerta Máximo' ao Manual
     do Sistema, ao final da lista já existente, sem alterar nenhum
@@ -1346,6 +1398,8 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (27, "Manual do Sistema: capítulo 'Devolutiva Externa'", _migracao_0027_manual_devolutiva_externa),
     (28, "Manual do Sistema: capítulo 'Filtros de Análises — Mês/Ano e Intervalo Personalizado'", _migracao_0028_manual_filtro_periodo),
     (29, "Manual do Sistema: capítulo 'Ranking de Prestadores e Projetistas de Cessionários' (marco oficial das avaliações, 01/07/2026)", _migracao_0029_manual_ranking_avaliacoes),
+    (30, "Central de Codificação: tabela codigos_disciplina (código PR-PRO-002 usado no número da AT)", _migracao_0030_central_codificacao),
+    (31, "Manual do Sistema: capítulos 'Atualização de Dados pela Planilha Oficial', 'Central de Codificação e o Número da AT' e 'Atualização Automática dos Dashboards'", _migracao_0031_manual_atualizacao_dados),
 ]
 
 
@@ -2130,6 +2184,59 @@ def obter_cessionario(registro_id: int) -> dict[str, Any] | None:
     with _conectar() as conn:
         linha = conn.execute("SELECT * FROM cessionarios WHERE id = ?", (registro_id,)).fetchone()
         return dict(linha) if linha else None
+
+
+# ---------------------------------------------------------------------------
+# Central de Codificação — código de disciplina (PR-PRO-002) usado no
+# segmento DDD do número da AT no Resumo de Conclusão.
+# ---------------------------------------------------------------------------
+
+
+def listar_codigos_disciplina() -> pd.DataFrame:
+    with _conectar() as conn:
+        return pd.read_sql_query("SELECT * FROM codigos_disciplina ORDER BY disciplina", conn)
+
+
+def _sem_acentos(texto: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFKD", texto) if not unicodedata.combining(c))
+
+
+def obter_codigo_disciplina(disciplina: str | None) -> str | None:
+    """Código PR-PRO-002 cadastrado para a disciplina, ou `None` quando a
+    disciplina não tem código definido — nunca lança exceção. A busca
+    ignora acentuação (ex.: "COMBATE A INCENDIO" encontra o código
+    cadastrado para "COMBATE A INCÊNDIO") porque análises antigas do
+    banco às vezes têm a disciplina digitada sem acento."""
+    if not disciplina:
+        return None
+    alvo = str(disciplina).strip().upper()
+    with _conectar() as conn:
+        linha = conn.execute("SELECT codigo FROM codigos_disciplina WHERE disciplina = ?", (alvo,)).fetchone()
+        if linha is None:
+            alvo_sem_acento = _sem_acentos(alvo)
+            for candidata in conn.execute("SELECT disciplina, codigo FROM codigos_disciplina").fetchall():
+                if _sem_acentos(candidata["disciplina"]) == alvo_sem_acento:
+                    linha = candidata
+                    break
+        codigo = linha["codigo"] if linha else None
+        return str(codigo).strip() if codigo and str(codigo).strip() else None
+
+
+def definir_codigo_disciplina(disciplina: str, codigo: str | None, descricao: str | None, usuario: str) -> None:
+    """Cria ou atualiza o código de uma disciplina na Central de
+    Codificação (upsert por nome da disciplina)."""
+    agora = agora_br().isoformat()
+    with _conectar() as conn:
+        conn.execute(
+            """
+            INSERT INTO codigos_disciplina (disciplina, codigo, descricao, atualizado_em, atualizado_por)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(disciplina) DO UPDATE SET
+                codigo = excluded.codigo, descricao = excluded.descricao,
+                atualizado_em = excluded.atualizado_em, atualizado_por = excluded.atualizado_por
+            """,
+            (disciplina.strip().upper(), (codigo or "").strip() or None, (descricao or "").strip() or None, agora, usuario),
+        )
 
 
 # ---------------------------------------------------------------------------

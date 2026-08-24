@@ -7,13 +7,15 @@ import streamlit as st
 
 from gat import backup_externo
 from gat.arquivo_business_rules import perfil_pode_arquivar_e_restaurar
-from gat.config import MAX_BACKUPS, PERFIS_OPCOES, RESPONSAVEIS
+from gat.config import DISCIPLINAS, MAX_BACKUPS, PERFIS_OPCOES, RESPONSAVEIS
 from gat.database import (
     criar_backup,
     criar_usuario,
+    definir_codigo_disciplina,
     definir_configuracao,
     exportar_banco_bytes,
     listar_backups,
+    listar_codigos_disciplina,
     listar_historico,
     listar_usuarios,
     obter_configuracao,
@@ -27,6 +29,7 @@ from gat.permissions import exigir_area, pode_area
 from gat.ui.formatos import formatar_datahora_br, formatar_datahoras_df
 from gat.ui.modals_arquivo import dialog_arquivar
 from gat.ui.modals_usuarios import renderizar_editor_usuario
+from gat.ui.pos_mutacao import atualizar_apos_mutacao
 
 _TIPOS_HISTORICO = ["Todas", "prestadores", "cessionarios", "reunioes", "planos_acao", "seguranca"]
 
@@ -42,6 +45,8 @@ def render(usuario: dict) -> None:
         abas_disponiveis.append("Histórico e Auditoria")
     if pode_area(usuario, "configuracoes"):
         abas_disponiveis.append("Configurações")
+        abas_disponiveis.append("Central de Codificação")
+        abas_disponiveis.append("Importar Planilha")
 
     abas = st.tabs(abas_disponiveis)
     indice = 0
@@ -63,6 +68,16 @@ def render(usuario: dict) -> None:
     if "Configurações" in abas_disponiveis:
         with abas[indice]:
             _renderizar_configuracoes(usuario)
+        indice += 1
+
+    if "Central de Codificação" in abas_disponiveis:
+        with abas[indice]:
+            _renderizar_central_codificacao(usuario)
+        indice += 1
+
+    if "Importar Planilha" in abas_disponiveis:
+        with abas[indice]:
+            _renderizar_importar_planilha(usuario)
         indice += 1
 
 
@@ -231,6 +246,95 @@ def _renderizar_configuracoes(usuario: dict) -> None:
         definir_configuracao("meta_aprovacao_rev2", str(meta_rev2))
         st.success("Meta atualizada com sucesso.")
         st.rerun()
+
+
+def _renderizar_central_codificacao(usuario: dict) -> None:
+    st.markdown("##### Central de Codificação — código de disciplina")
+    st.caption(
+        "Código numérico de especialidade (procedimento PR-PRO-002 \"Codificação de Documentação Técnica\") "
+        "usado para montar o segmento de disciplina (DDD) do número da AT no Resumo de Conclusão: "
+        "AT-NNN-AA-PPP-DDD-RR. Uma disciplina sem código cadastrado não trava o Resumo — o segmento fica "
+        "apenas omitido no número da AT até que o código seja definido aqui."
+    )
+
+    df_codigos = listar_codigos_disciplina()
+    disciplinas_sem_codigo = sorted(set(DISCIPLINAS) - set(df_codigos["disciplina"]))
+    for disciplina in disciplinas_sem_codigo:
+        df_codigos = pd.concat(
+            [df_codigos, pd.DataFrame([{"disciplina": disciplina, "codigo": None, "descricao": None}])],
+            ignore_index=True,
+        )
+    df_codigos = df_codigos.sort_values("disciplina").reset_index(drop=True)
+
+    editado = st.data_editor(
+        df_codigos[["disciplina", "codigo", "descricao"]],
+        column_config={
+            "disciplina": st.column_config.TextColumn("Disciplina", disabled=True),
+            "codigo": st.column_config.TextColumn("Código (DDD)", help="Ex.: 400. Deixe em branco para omitir o segmento no número da AT."),
+            "descricao": st.column_config.TextColumn("Descrição (PR-PRO-002)"),
+        },
+        hide_index=True, use_container_width=True, key="admin_codigos_disciplina_editor",
+    )
+
+    if st.button("Salvar códigos de disciplina", icon=":material/save:", type="primary", key="admin_salvar_codigos_disciplina"):
+        for _, linha in editado.iterrows():
+            definir_codigo_disciplina(linha["disciplina"], linha.get("codigo"), linha.get("descricao"), usuario["username"])
+        registrar_atividade(usuario["username"], usuario.get("perfil"), "CENTRAL_CODIFICACAO_ATUALIZADA")
+        st.success("Códigos de disciplina atualizados com sucesso.")
+        st.rerun()
+
+
+def _renderizar_importar_planilha(usuario: dict) -> None:
+    st.markdown("##### Atualizar dados a partir da planilha oficial")
+    st.caption(
+        "Lê as abas PROJ_PREST e PROJ_CESS da planilha \"Controle GAT Projetos\" e atualiza Prestadores e "
+        "Cessionários de forma incremental: um registro já existente (mesmo código + disciplina + revisão + "
+        "nº AT) é **atualizado**, nunca duplicado; um campo vazio na planilha nunca apaga um dado já "
+        "cadastrado no sistema; nada é excluído. Um backup automático é criado antes de aplicar qualquer "
+        "mudança."
+    )
+    arquivo = st.file_uploader("Planilha (.xlsx / .xlsm)", type=["xlsx", "xlsm"], key="admin_upload_planilha")
+
+    if arquivo is not None and st.button("Importar planilha", icon=":material/upload_file:", type="primary", key="admin_importar_planilha_btn"):
+        from gat.planilha_import import importar_cessionarios, importar_prestadores
+
+        conteudo = arquivo.getvalue()
+        with st.spinner("Criando backup de segurança..."):
+            criar_backup()
+        try:
+            with st.spinner("Importando Prestadores (aba PROJ_PREST)..."):
+                relatorio_prest = importar_prestadores(conteudo, usuario["username"])
+            with st.spinner("Importando Cessionários (aba PROJ_CESS)..."):
+                relatorio_cess = importar_cessionarios(conteudo, usuario["username"])
+        except Exception as exc:
+            st.error(f"Falha ao importar a planilha: {exc}")
+            return
+
+        registrar_atividade(
+            usuario["username"], usuario.get("perfil"), "IMPORTACAO_PLANILHA",
+            detalhe=f"{relatorio_prest.resumo_texto()} | {relatorio_cess.resumo_texto()}",
+        )
+        st.session_state["admin_ultimo_relatorio_importacao"] = (relatorio_prest, relatorio_cess)
+        st.success("Importação concluída — veja o relatório abaixo.")
+        atualizar_apos_mutacao()
+
+    relatorios = st.session_state.get("admin_ultimo_relatorio_importacao")
+    if relatorios:
+        for relatorio in relatorios:
+            st.markdown(f"###### {relatorio.origem}")
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Lidos", relatorio.lidos)
+            col2.metric("Novos", relatorio.novos)
+            col3.metric("Atualizados", relatorio.atualizados)
+            col4.metric("Sem mudança", relatorio.ignorados_sem_mudanca)
+            col1.metric("Já arquivados (ignorados)", relatorio.ignorados_arquivados)
+            col2.metric("Com inconsistência", relatorio.inconsistentes)
+            if relatorio.colunas_nao_mapeadas:
+                st.caption(f"Colunas da planilha não reconhecidas (ignoradas): {', '.join(relatorio.colunas_nao_mapeadas)}")
+            if relatorio.detalhes_inconsistencia:
+                with st.expander(f"Detalhe das {relatorio.inconsistentes} inconsistências"):
+                    for detalhe in relatorio.detalhes_inconsistencia:
+                        st.caption(f"• {detalhe}")
 
     st.divider()
     _renderizar_persistencia_dados(usuario)

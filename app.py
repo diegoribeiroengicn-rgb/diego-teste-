@@ -246,7 +246,7 @@ if st.session_state.get("_gat_ultima_pagina_logada") != pagina_atual.url_path:
 with st.sidebar:
     st.divider()
     if pode_area(usuario, "relatorios"):
-        modulos_permitidos = {m for m in MODULOS_CONTROLADOS if pode_modulo(usuario, m)}
+        modulos_permitidos = frozenset(m for m in MODULOS_CONTROLADOS if pode_modulo(usuario, m))
         st.download_button(
             "Exportar Relatório Excel",
             data=gerar_relatorio_excel(modulos_permitidos),

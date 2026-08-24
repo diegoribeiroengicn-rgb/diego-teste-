@@ -13,6 +13,7 @@ import streamlit as st
 
 from gat.database import (
     obter_cessionario,
+    obter_codigo_disciplina,
     obter_prestador,
     registrar_atividade,
     registrar_download_resumo,
@@ -54,11 +55,17 @@ def renderizar_nucleo_resumo(tabela: str, registro_id: int, dados: dict[str, Any
     drive = col2.checkbox("Drive", value=bool(dados.get("resumo_drive")), key=f"{chave_prefixo}_drive")
     email = col3.checkbox("E-mail", value=bool(dados.get("resumo_email")), key=f"{chave_prefixo}_email")
 
-    dados_card = montar_dados_resumo(tabela, dados, mfiles, drive, email)
+    codigo_disciplina = obter_codigo_disciplina(dados.get("disciplina"))
+    dados_card = montar_dados_resumo(tabela, dados, mfiles, drive, email, codigo_disciplina)
     imagem = gerar_card_resumo(dados_card)
 
     st.markdown("###### Prévia do Resumo de Conclusão")
     st.image(imagem, use_container_width=True)
+    if dados.get("disciplina") and not codigo_disciplina:
+        st.caption(
+            f"⚠️ A disciplina \"{dados['disciplina']}\" ainda não tem código cadastrado na Central de "
+            "Codificação (Administração) — o número da AT acima ficou sem o segmento de código da disciplina."
+        )
 
     confirmado_key = f"{chave_prefixo}_confirmado"
     if not st.session_state.get(confirmado_key):
