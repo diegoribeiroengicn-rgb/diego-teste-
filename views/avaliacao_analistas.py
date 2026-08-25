@@ -220,7 +220,11 @@ def _dialog_confirmar_recalculo(usuario: dict, linha: pd.Series, analista: str, 
         st.rerun()
 
 
-@st.dialog("Avaliação do Analista", width="large")
+@st.dialog("Avaliação do Analista", width="large", dismissible=False)
+# dismissible=False: mesmo risco do checklist de Prestadores/Cessionários —
+# vários critérios e campos de texto tornam fácil clicar fora do modal por
+# engano e perder uma avaliação parcialmente preenchida sem aviso. Só sai
+# pelos botões Salvar/Cancelar, que sempre chamam st.rerun().
 def _dialog_avaliacao(usuario: dict, registro: dict | None = None) -> None:
     editando = registro is not None
     sufixo = f"edit_{registro['id']}" if editando else "novo"

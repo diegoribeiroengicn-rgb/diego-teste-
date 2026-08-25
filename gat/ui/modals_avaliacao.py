@@ -36,7 +36,11 @@ def _idx(opcoes: list[str], valor: Any) -> int:
         return 0
 
 
-@st.dialog("Avaliação — Checklist", width="large")
+@st.dialog("Avaliação — Checklist", width="large", dismissible=False)
+# dismissible=False: com 15 perguntas em 5 categorias, um clique fora do
+# modal (ou ESC sem querer) fecharia o checklist parcialmente preenchido
+# sem aviso. Só sai daqui pelos botões Salvar/Cancelar (ambos chamam
+# st.rerun() explicitamente), nunca ficando "preso" sem saída.
 def dialog_avaliacao_checklist(
     usuario: str, tipo_entidade: str, registro: dict[str, Any] | None = None,
     prefill: dict[str, Any] | None = None,
