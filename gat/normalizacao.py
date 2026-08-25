@@ -16,6 +16,7 @@ padrao)` aplicado sobre uma linha de DataFrame é uma fonte recorrente de
 from __future__ import annotations
 
 import logging
+import unicodedata
 from typing import Any, Callable, TypeVar
 
 import pandas as pd
@@ -90,6 +91,18 @@ def inteiro_ou_none(valor: Any) -> int | None:
     sentinela = object()
     resultado = inteiro_seguro(valor, sentinela)  # type: ignore[arg-type]
     return None if resultado is sentinela else resultado
+
+
+def texto_sem_acentos(valor: Any) -> str:
+    """Maiúsculas e sem acentos — usado só como CHAVE de agrupamento/
+    comparação (nunca para exibição), para que uma mesma disciplina
+    gravada com grafias diferentes ao longo do tempo (ex.: "ELETRICA" vindo
+    de uma importação antiga e "ELÉTRICA", a grafia padrão do cadastro) não
+    seja tratada como duas disciplinas diferentes. Não corrige nem
+    sobrescreve o valor original armazenado."""
+    texto = texto_seguro(valor).strip().upper()
+    sem_acentos = unicodedata.normalize("NFKD", texto)
+    return "".join(c for c in sem_acentos if not unicodedata.combining(c))
 
 
 def calculo_seguro(func: Callable[..., T], *args: Any, contexto: str | None = None, **kwargs: Any) -> T | None:

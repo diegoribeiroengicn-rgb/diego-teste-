@@ -16,6 +16,15 @@ Registros sem N° AT utilizável (vazio ou placeholder como "***") não têm
 como ser agrupados de forma confiável em uma sequência de revisões de um
 único projeto — são reportados como "incompletos" e não entram no cálculo,
 em vez de inventar uma correspondência.
+
+A chave de agrupamento usa a disciplina SEM acentos (`texto_sem_acentos`),
+nunca o valor bruto: algumas revisões antigas foram gravadas com uma
+grafia diferente da grafia padrão do cadastro (ex.: "ELETRICA" em vez de
+"ELÉTRICA") — comparar o valor bruto splitava as revisões de um mesmo
+projeto em dois grupos diferentes, fazendo a Linha do Tempo detalhada
+mostrar cada um como um projeto incompleto e à parte. O valor exibido
+(coluna `disciplina`) continua sendo o originalmente gravado na revisão
+mais recente — só a chave de comparação é normalizada.
 """
 
 from __future__ import annotations
@@ -23,6 +32,7 @@ from __future__ import annotations
 import pandas as pd
 
 from gat.calendario import dias_corridos_entre, dias_uteis_entre
+from gat.normalizacao import texto_sem_acentos
 
 SLA_RETORNO_EXTERNO_DIAS_UTEIS = 10
 _LIMIAR_PROXIMO_LIMITE = SLA_RETORNO_EXTERNO_DIAS_UTEIS - 2  # 8 e 9 dias
@@ -90,7 +100,7 @@ def linha_mais_recente_por_projeto(df: pd.DataFrame, coluna_nome: str, coluna_co
     base = df.copy()
     base["_chave_entidade"] = chave_entidade_serie(base, coluna_nome, coluna_codigo)
     base["_at_valido"] = base["num_at"].apply(at_valido)
-    chave_at = base["_chave_entidade"].astype(str) + "||" + base["num_at"].astype(str) + "||" + base["disciplina"].fillna("").astype(str)
+    chave_at = base["_chave_entidade"].astype(str) + "||" + base["num_at"].astype(str) + "||" + base["disciplina"].apply(texto_sem_acentos)
     chave_unica = base["_chave_entidade"].astype(str) + "||SEMAT||" + base["id"].astype(str)
     base["_chave_projeto"] = chave_at.where(base["_at_valido"], chave_unica)
     idx_max = base.groupby("_chave_projeto")["revisao"].idxmax()
@@ -121,7 +131,7 @@ def calcular_intervalos_revisao(df: pd.DataFrame, coluna_nome: str, coluna_codig
         return pd.DataFrame(columns=colunas_saida)
 
     base["_chave_entidade"] = chave_entidade_serie(base, coluna_nome, coluna_codigo)
-    base["chave_grupo"] = base["_chave_entidade"].astype(str) + "||" + base["num_at"].astype(str) + "||" + base["disciplina"].fillna("").astype(str)
+    base["chave_grupo"] = base["_chave_entidade"].astype(str) + "||" + base["num_at"].astype(str) + "||" + base["disciplina"].apply(texto_sem_acentos)
 
     linhas = []
     for chave, grupo in base.groupby("chave_grupo"):
@@ -241,7 +251,7 @@ def projetos_por_entidade(df: pd.DataFrame, coluna_nome: str, coluna_codigo: str
     # Registros sem AT válido (placeholder "***"/"-"/etc.) nunca são agrupados
     # entre si — cada um vira seu próprio projeto (chave única pelo id), já
     # que um AT placeholder repetido não indica que sejam o mesmo projeto.
-    chave_at = base["_chave_entidade"].astype(str) + "||" + base["num_at"].astype(str) + "||" + base["disciplina"].fillna("").astype(str)
+    chave_at = base["_chave_entidade"].astype(str) + "||" + base["num_at"].astype(str) + "||" + base["disciplina"].apply(texto_sem_acentos)
     chave_unica = base["_chave_entidade"].astype(str) + "||SEMAT||" + base["id"].astype(str)
     base["_chave_projeto"] = chave_at.where(base["_at_valido"], chave_unica)
 

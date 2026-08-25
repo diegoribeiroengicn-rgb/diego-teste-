@@ -24,7 +24,7 @@ from gat.database import (
     listar_reunioes_do_projeto,
     registrar_atividade,
 )
-from gat.normalizacao import inteiro_ou_none, inteiro_seguro, texto_seguro
+from gat.normalizacao import inteiro_ou_none, inteiro_seguro, texto_seguro, texto_sem_acentos
 from gat.permissions import exigir_area, pode_modulo
 from gat.relatorio_prestador import gerar_relatorio_prestador, nome_arquivo_relatorio
 from gat.revisoes import calcular_intervalos_revisao, consolidado_por_entidade, projetos_por_entidade, situacao_sla_externo
@@ -214,7 +214,10 @@ def render(usuario: dict) -> None:
     if f_at.strip():
         df = df[df["num_at"].fillna("").astype(str).str.contains(f_at.strip(), case=False, na=False, regex=False)]
     if f_disciplina != "Todas":
-        df = df[df["disciplina"] == f_disciplina]
+        # Comparação sem acentos: revisões antigas gravadas com uma grafia
+        # diferente da grafia padrão do cadastro (ex.: "ELETRICA" em vez de
+        # "ELÉTRICA") não podem desaparecer do filtro por causa disso.
+        df = df[df["disciplina"].apply(texto_sem_acentos) == texto_sem_acentos(f_disciplina)]
     if f_analista != "Todos":
         df = df[df["responsavel"] == f_analista]
     if f_revisao.strip():

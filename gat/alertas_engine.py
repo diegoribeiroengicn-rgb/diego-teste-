@@ -7,15 +7,19 @@ cobrança ou pendência de avaliação —
 * avaliação (checklist) classificada como Crítica ou Baixa;
 * atraso no reenvio — retorno externo do Prestador/Cessionário acima do
   SLA de 10 dias úteis entre uma revisão e a seguinte (`gat/revisoes.py`);
-* avaliação obrigatória (checklist) ainda não realizada desde que a
-  Rev.01 foi concluída (revisão >= 1 e Data de Conclusão da Análise
-  preenchida) — nasce quando a Rev.01 é concluída e permanece ativo em
-  qualquer revisão seguinte até a avaliação ser realmente registrada,
-  sem gerar um novo alerta a cada revisão. O mesmo critério (`rev1_concluida`
-  + `chaves_avaliadas_obrigatoria`) também alimenta o selo visual de
-  pendência em Projetos (`gat/business_rules.py::status_avaliacao_obrigatoria`)
-  e a lista de pendências na área de Avaliações (`pendencias_avaliacao_obrigatoria`
-  abaixo), garantindo que as três telas nunca divirjam sobre o que está pendente.
+* avaliação obrigatória (checklist) ainda não realizada para uma análise
+  cuja revisão ATUAL é exatamente a Rev.01 e já foi concluída (Data de
+  Conclusão da Análise preenchida) — a Rev.00 nunca gera esta obrigação, e
+  a Rev.02 em diante é sempre uma avaliação OPCIONAL (pergunta "deseja
+  avaliar esta revisão?" em vez de pendência obrigatória — ver
+  `_detectar_pendencia_avaliacao_opcional` em `gat/ui/modals.py`), mesmo
+  que este código+disciplina nunca tenha sido avaliado. O mesmo critério
+  (`rev1_concluida` + `chaves_avaliadas_obrigatoria`) também alimenta o
+  selo visual de pendência em Projetos
+  (`gat/business_rules.py::status_avaliacao_obrigatoria`) e a lista de
+  pendências na área de Avaliações (`pendencias_avaliacao_obrigatoria`
+  abaixo), garantindo que as três telas nunca divirjam sobre o que está
+  pendente.
 
 Cada alerta carrega seu ciclo de vida (Pendente/Em tratamento/Tratado/
 Adiado/Retirado do radar/Reaberto), armazenado em `alertas_radar`. A
@@ -91,13 +95,18 @@ def chaves_avaliadas_obrigatoria(avaliacoes: pd.DataFrame) -> set[tuple[str, str
 
 
 def rev1_concluida(revisao, data_analise) -> bool:
-    """"AT concluiu a Rev.01": revisão >= 1 E a análise já foi concluída
-    (Data de Conclusão da Análise preenchida) — não basta o número da
-    revisão ter avançado enquanto a análise ainda está em andamento. Esta
-    data também é a referência usada para saber a qual competência
+    """"AT concluiu a Rev.01": revisão EXATAMENTE 1 (nem antes, nem depois)
+    E a análise já foi concluída (Data de Conclusão da Análise preenchida)
+    — não basta o número da revisão ter avançado enquanto a análise ainda
+    está em andamento. Só a Rev.01 gera avaliação OBRIGATÓRIA; a Rev.00
+    nunca gera (regra já respeitada antes) e a Rev.02 em diante é sempre
+    OPCIONAL (pergunta "deseja avaliar?" em vez de pendência obrigatória —
+    ver `_detectar_pendencia_avaliacao_opcional` em `gat/ui/modals.py`),
+    mesmo quando esta combinação código+disciplina nunca foi avaliada.
+    Esta data também é a referência usada para saber a qual competência
     (mês/ano) a pendência pertence, no fechamento mensal (Fase 2)."""
     try:
-        if int(revisao or 0) < 1:
+        if int(revisao or 0) != 1:
             return False
     except (TypeError, ValueError):
         return False

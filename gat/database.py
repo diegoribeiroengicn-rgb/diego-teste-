@@ -1495,6 +1495,16 @@ def _migracao_0036_manual_backup_sistema(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migracao_0037_avaliacao_opcional_revisao(conn: sqlite3.Connection) -> None:
+    """Avaliação de Prestadores/Projetistas de Cessionários: a partir da
+    Rev.02, a avaliação é opcional (pergunta "deseja avaliar esta
+    revisão?" em vez de pendência obrigatória). Coluna aditiva que registra
+    a última revisão para a qual essa pergunta já foi exibida, para não
+    repeti-la a cada salvamento seguinte da mesma revisão já concluída."""
+    _garantir_coluna(conn, "prestadores", "avaliacao_opcional_perguntada_revisao", "INTEGER")
+    _garantir_coluna(conn, "cessionarios", "avaliacao_opcional_perguntada_revisao", "INTEGER")
+
+
 def _migracao_0033_atualizar_capitulo_importacao_planilha(conn: sqlite3.Connection) -> None:
     """A funcionalidade de importação por planilha foi movida de
     Administração > Importar Planilha para Configurações > Atualização
@@ -1599,6 +1609,7 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (34, "Manual do Sistema: atualiza o capítulo 'Atualização de Dados pela Planilha Oficial' — planilha é a referência, conflito atualiza o sistema por padrão", _migracao_0034_atualizar_capitulo_planilha_referencia),
     (35, "Configurações > Backup do Sistema: tabela backups_historico (tipo/usuário/situação/observações) e importacoes_planilha_historico.backup_ref", _migracao_0035_historico_backups),
     (36, "Manual do Sistema: atualiza o capítulo 'Backup e preservação dos dados' com Gerar Backup Agora, tipos de backup, histórico por item e vínculo com importações", _migracao_0036_manual_backup_sistema),
+    (37, "Avaliação de Prestadores/Cessionários: coluna avaliacao_opcional_perguntada_revisao (pergunta opcional da Rev.02 em diante, uma vez por revisão)", _migracao_0037_avaliacao_opcional_revisao),
 ]
 
 
@@ -2505,6 +2516,20 @@ def marcar_popup_resumo_disparado(tabela: str, registro_id: int) -> None:
         conn.execute(
             f"UPDATE {tabela} SET resumo_popup_disparado_em = ? WHERE id = ? AND resumo_popup_disparado_em IS NULL",
             (agora, registro_id),
+        )
+
+
+def marcar_avaliacao_opcional_perguntada(tabela: str, registro_id: int, revisao: int) -> None:
+    """Registra a revisão para a qual a pergunta opcional "Deseja realizar
+    a avaliação desta revisão?" (Rev.02 em diante) já foi exibida — para
+    não perguntar de novo a cada salvamento seguinte da mesma revisão já
+    concluída. Uma revisão nova (Rev.03, Rev.04...) sempre gera uma nova
+    pergunta, pois o valor gravado deixa de bater com a revisão atual."""
+    _validar_tabela_resumo(tabela)
+    with _conectar() as conn:
+        conn.execute(
+            f"UPDATE {tabela} SET avaliacao_opcional_perguntada_revisao = ? WHERE id = ?",
+            (int(revisao), registro_id),
         )
 
 

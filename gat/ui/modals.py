@@ -50,14 +50,17 @@ from gat.database import (
     listar_cadastro_prestadores,
     listar_obras_prestador,
     listar_repactuacoes_prazo,
+    marcar_avaliacao_opcional_perguntada,
     marcar_popup_resumo_disparado,
     nome_exibicao_obra,
+    obter_avaliacao_checklist_por_revisao,
     registrar_atividade,
     registrar_repactuacao_prazo,
 )
 from gat.resumo_conclusao import deve_disparar_popup_resumo
 from gat.ui.modals_resumo import renderizar_nucleo_resumo
 from gat.ui.pos_mutacao import atualizar_apos_mutacao
+from gat.ui.validacao_campos import destacar_campo, mensagem_erros, validar_at_data_status
 
 
 def _parse_data(valor: Any) -> date | None:
@@ -367,6 +370,64 @@ def _renderizar_confirmacao_avaliacao(pendencia: dict[str, Any], chave_confirmac
         st.rerun()
 
 
+def _detectar_pendencia_avaliacao_opcional(
+    tipo_entidade: str, modulo: str, dados: dict[str, Any], projeto_id: int, coluna_nome: str,
+    revisao_ja_perguntada: int | None,
+) -> dict[str, Any] | None:
+    """Rev.02 em diante: avaliação sempre OPCIONAL (itens 10/12) — nunca diz
+    respeito à pendência obrigatória (essa é exclusiva da Rev.01, ver
+    `rev1_concluida`/`_detectar_pendencia_avaliacao`), só oferece ir para a
+    avaliação. Mostrada uma única vez por revisão (`revisao_ja_perguntada`
+    é o que já foi gravado em `avaliacao_opcional_perguntada_revisao` —
+    uma revisão nova sempre gera uma nova pergunta) e nunca se a própria
+    revisão atual já tiver sido avaliada (item 14: uma avaliação da Rev.01
+    não impede nem substitui a da Rev.02, mas se a Rev.02 já tem a sua
+    própria, não há por que perguntar de novo)."""
+    try:
+        revisao_atual = int(dados.get("revisao") or 0)
+    except (TypeError, ValueError):
+        return None
+    if revisao_atual < 2 or not dados.get("data_analise"):
+        return None
+    if revisao_ja_perguntada is not None and int(revisao_ja_perguntada) == revisao_atual:
+        return None
+    if obter_avaliacao_checklist_por_revisao(
+        tipo_entidade, dados.get("num_at"), dados.get("disciplina"), revisao_atual, dados.get("responsavel"),
+    ):
+        return None
+    return {
+        "tipo_entidade": tipo_entidade, "modulo": modulo, "nome_entidade": dados.get(coluna_nome),
+        "codigo_entidade": dados.get("codigo"), "disciplina": dados.get("disciplina"),
+        "at_referencia": dados.get("num_at"), "revisao": revisao_atual,
+        "analista_responsavel": dados.get("responsavel"), "projeto_id": int(projeto_id),
+    }
+
+
+def _renderizar_confirmacao_avaliacao_opcional(pendencia: dict[str, Any], chave_confirmacao: str) -> None:
+    """Pergunta opcional do item 12: nunca cria pendência obrigatória nem
+    alerta — só direciona para a avaliação (Sim) ou segue em frente sem
+    mais perguntar por esta revisão (Não). Marca a revisão como "já
+    perguntada" nos dois casos, para não repetir a pergunta a cada
+    salvamento seguinte desta mesma revisão já concluída."""
+    st.success("Análise salva com sucesso.", icon=":material/check_circle:")
+    st.info(f"Deseja realizar a avaliação desta revisão (REV{pendencia['revisao']:02d})?", icon=":material/rate_review:")
+    tabela = "prestadores" if pendencia["tipo_entidade"] == "PRESTADOR" else "cessionarios"
+    col_sim, col_nao = st.columns(2)
+    if col_sim.button("Sim", type="primary", use_container_width=True, key=f"{chave_confirmacao}_sim"):
+        marcar_avaliacao_opcional_perguntada(tabela, pendencia["projeto_id"], pendencia["revisao"])
+        st.session_state.pop(chave_confirmacao, None)
+        st.session_state["_gat_avaliacao_auto_abrir"] = pendencia
+        pagina = st.session_state.get("_gat_paginas", {}).get("prestadores_avaliacao")
+        if pagina is not None:
+            st.switch_page(pagina)
+        else:
+            st.rerun()
+    if col_nao.button("Não", use_container_width=True, key=f"{chave_confirmacao}_nao"):
+        marcar_avaliacao_opcional_perguntada(tabela, pendencia["projeto_id"], pendencia["revisao"])
+        st.session_state.pop(chave_confirmacao, None)
+        st.rerun()
+
+
 _STATUS_MENSAGEM_OBRIGATORIA_PRIORIDADE = {"LIBERADO C/ REST.", "NÃO LIBERADO"}
 
 
@@ -454,6 +515,12 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
         _renderizar_confirmacao_avaliacao(pendencia_avaliacao, chave_confirmacao_avaliacao)
         return
 
+    chave_confirmacao_avaliacao_opcional = f"pr_confirmar_avaliacao_opcional_{sufixo}"
+    pendencia_avaliacao_opcional = st.session_state.get(chave_confirmacao_avaliacao_opcional)
+    if pendencia_avaliacao_opcional:
+        _renderizar_confirmacao_avaliacao_opcional(pendencia_avaliacao_opcional, chave_confirmacao_avaliacao_opcional)
+        return
+
     chave_confirmacao_prioridade = f"pr_confirmar_prioridade_{sufixo}"
     pendencia_prioridade = st.session_state.get(chave_confirmacao_prioridade)
     if pendencia_prioridade:
@@ -526,13 +593,15 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
         else:
             obra_referencia = st.text_input("Obra de Referência", value=registro.get("obra_referencia", "") if registro else "", key=f"pr_obra_{sufixo}")
             obra_id = registro.get("obra_id") if registro else None
-        num_at = st.text_input("N° AT", value=registro.get("num_at", "") if registro else "", key=f"pr_at_{sufixo}")
+        with st.container(key=f"pr_erro_at_{sufixo}"):
+            num_at = st.text_input("N° AT *", value=registro.get("num_at", "") if registro else "", key=f"pr_at_{sufixo}")
     with col2:
         revisao = st.number_input("Revisão", min_value=0, step=1, value=int(registro.get("revisao", 0)) if registro else 0, key=f"pr_rev_{sufixo}")
         revisao_at = st.number_input("REV. AT", min_value=0, step=1, value=int(registro.get("revisao_at") or 0) if registro else 0, key=f"pr_revat_{sufixo}")
         num_documentos = st.number_input("N° de Doc.", min_value=0, step=1, value=int(registro.get("num_documentos", 0)) if registro else 0, key=f"pr_ndoc_{sufixo}")
         responsavel = st.selectbox("Responsável (Analista)", RESPONSAVEIS, index=_idx(RESPONSAVEIS, registro.get("responsavel") if registro else None), key=f"pr_resp_{sufixo}")
-        status_analise = st.selectbox("Status Análise", STATUS_ANALISE_OPCOES, index=_idx(STATUS_ANALISE_OPCOES, registro.get("status_analise") if registro else "EM ANÁLISE"), key=f"pr_status_{sufixo}")
+        with st.container(key=f"pr_erro_status_{sufixo}"):
+            status_analise = st.selectbox("Status Análise", STATUS_ANALISE_OPCOES, index=_idx(STATUS_ANALISE_OPCOES, registro.get("status_analise") if registro else "EM ANÁLISE"), key=f"pr_status_{sufixo}")
 
     st.markdown("##### Prioridade e SLA")
     col_p1, col_p2 = st.columns(2)
@@ -600,7 +669,8 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
             key=chave_dlim,
         )
     with col5:
-        data_analise = st.date_input("Data Análise (se concluída)", value=_parse_data(registro.get("data_analise")) if registro else None, format="DD/MM/YYYY", key=f"pr_dana_{sufixo}")
+        with st.container(key=f"pr_erro_data_{sufixo}"):
+            data_analise = st.date_input("Data Análise (se concluída)", value=_parse_data(registro.get("data_analise")) if registro else None, format="DD/MM/YYYY", key=f"pr_dana_{sufixo}")
 
     _renderizar_confirmacao_recalculo(chave_dlim, sla_efetivo)
 
@@ -669,18 +739,35 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
         _limpar_estado_recalculo_data_limite(chave_dlim)
         st.rerun()
 
-    if salvar and (not prestador or not data_solicitacao):
+    # A partir daqui, `tentativa_pendente` (em vez do retorno do próprio
+    # botão "Salvar") controla a validação: uma vez iniciada uma tentativa
+    # de salvar, ela persiste — via `chave_tentativa` — em qualquer rerun
+    # seguinte (o usuário digitando em outro campo, por exemplo), para que
+    # o destaque vermelho e a mensagem de erro permaneçam visíveis até o
+    # campo ser corrigido ou o formulário ser cancelado, e não apenas no
+    # exato clique em que "Salvar" foi apertado.
+    tentativa_pendente = _tentativa_salvar_iniciada(chave_tentativa, salvar)
+
+    if tentativa_pendente and (not prestador or not data_solicitacao):
         st.error("Preencha ao menos Prestador de Serviço e Data de Solicitação.")
-        salvar = False
-    if salvar and sla_reduzido and not justificativa_sla.strip():
+        tentativa_pendente = False
+    if tentativa_pendente and sla_reduzido and not justificativa_sla.strip():
         st.error("Informe a justificativa do SLA reduzido para salvar.")
-        salvar = False
-    if salvar and nivel_prioridade is not None and not sla_reduzido and not justificativa_sla.strip():
+        tentativa_pendente = False
+    if tentativa_pendente and nivel_prioridade is not None and not sla_reduzido and not justificativa_sla.strip():
         st.error("Informe a justificativa da prioridade para salvar.")
-        salvar = False
+        tentativa_pendente = False
+
+    erros_campos = validar_at_data_status(num_at, data_analise, status_analise) if tentativa_pendente else {}
+    destacar_campo(f"pr_erro_at_{sufixo}", "at" in erros_campos)
+    destacar_campo(f"pr_erro_status_{sufixo}", "status" in erros_campos)
+    destacar_campo(f"pr_erro_data_{sufixo}", "data" in erros_campos)
+    if erros_campos:
+        st.error(mensagem_erros(erros_campos))
+        tentativa_pendente = False
 
     if (
-        _tentativa_salvar_iniciada(chave_tentativa, salvar)
+        tentativa_pendente
         and _pode_persistir_com_pep(peps, f"pr_confirma_sem_pep_{sufixo}")
         and _pode_repactuar(repactuando, motivo_repactuacao)
     ):
@@ -740,6 +827,14 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
             st.session_state[chave_confirmacao_avaliacao] = pendencia_avaliacao
             _renderizar_confirmacao_avaliacao(pendencia_avaliacao, chave_confirmacao_avaliacao)
             return
+        pendencia_avaliacao_opcional = _detectar_pendencia_avaliacao_opcional(
+            "PRESTADOR", "prestadores", dados, projeto_id_salvo, "prestador",
+            registro.get("avaliacao_opcional_perguntada_revisao") if editando else None,
+        )
+        if pendencia_avaliacao_opcional:
+            st.session_state[chave_confirmacao_avaliacao_opcional] = pendencia_avaliacao_opcional
+            _renderizar_confirmacao_avaliacao_opcional(pendencia_avaliacao_opcional, chave_confirmacao_avaliacao_opcional)
+            return
         pendencia_prioridade = _detectar_mensagem_obrigatoria_prioridade("PRESTADOR", dados)
         if pendencia_prioridade:
             st.session_state[chave_confirmacao_prioridade] = pendencia_prioridade
@@ -767,6 +862,12 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
     pendencia_avaliacao = st.session_state.get(chave_confirmacao_avaliacao)
     if pendencia_avaliacao:
         _renderizar_confirmacao_avaliacao(pendencia_avaliacao, chave_confirmacao_avaliacao)
+        return
+
+    chave_confirmacao_avaliacao_opcional = f"ce_confirmar_avaliacao_opcional_{sufixo}"
+    pendencia_avaliacao_opcional = st.session_state.get(chave_confirmacao_avaliacao_opcional)
+    if pendencia_avaliacao_opcional:
+        _renderizar_confirmacao_avaliacao_opcional(pendencia_avaliacao_opcional, chave_confirmacao_avaliacao_opcional)
         return
 
     chave_confirmacao_prioridade = f"ce_confirmar_prioridade_{sufixo}"
@@ -823,14 +924,16 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
         disciplina = st.selectbox("Disciplina", DISCIPLINAS, index=_idx(DISCIPLINAS, registro.get("disciplina") if registro else None), key=f"ce_disc_{sufixo}")
         disciplina_sla = st.selectbox("Disciplina (SLA)", DISCIPLINAS_SLA, index=_idx(DISCIPLINAS_SLA, registro.get("disciplina_sla") if registro else None), key=f"ce_discsla_{sufixo}")
         tipo = st.selectbox("Tipo", TIPO_CESSIONARIO_OPCOES, index=_idx(TIPO_CESSIONARIO_OPCOES, registro.get("tipo") if registro else None), key=f"ce_tipo_{sufixo}")
-        num_at = st.text_input("N° AT", value=registro.get("num_at", "") if registro else "", key=f"ce_at_{sufixo}")
+        with st.container(key=f"ce_erro_at_{sufixo}"):
+            num_at = st.text_input("N° AT *", value=registro.get("num_at", "") if registro else "", key=f"ce_at_{sufixo}")
         luc = st.text_input("LUC", value=registro.get("luc", "") if registro else "", key=f"ce_luc_{sufixo}")
     with col2:
         revisao = st.number_input("Revisão", min_value=0, step=1, value=int(registro.get("revisao", 0)) if registro else 0, key=f"ce_rev_{sufixo}")
         revisao_at = st.number_input("REV. AT", min_value=0, step=1, value=int(registro.get("revisao_at") or 0) if registro else 0, key=f"ce_revat_{sufixo}")
         num_documentos = st.number_input("N° de Doc.", min_value=0, step=1, value=int(registro.get("num_documentos", 0)) if registro else 0, key=f"ce_ndoc_{sufixo}")
         responsavel = st.selectbox("Responsável (Analista)", RESPONSAVEIS, index=_idx(RESPONSAVEIS, registro.get("responsavel") if registro else None), key=f"ce_resp_{sufixo}")
-        status_analise = st.selectbox("Status Análise", STATUS_ANALISE_OPCOES, index=_idx(STATUS_ANALISE_OPCOES, registro.get("status_analise") if registro else "EM ANÁLISE"), key=f"ce_status_{sufixo}")
+        with st.container(key=f"ce_erro_status_{sufixo}"):
+            status_analise = st.selectbox("Status Análise", STATUS_ANALISE_OPCOES, index=_idx(STATUS_ANALISE_OPCOES, registro.get("status_analise") if registro else "EM ANÁLISE"), key=f"ce_status_{sufixo}")
 
     st.markdown("##### RCI e RVP")
     st.caption("Informe apenas o RCI, apenas o RVP, ou ambos — nenhum dos dois é obrigatório.")
@@ -896,7 +999,8 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
             key=chave_dlim,
         )
     with col5:
-        data_analise = st.date_input("Data Análise (se concluída)", value=_parse_data(registro.get("data_analise")) if registro else None, format="DD/MM/YYYY", key=f"ce_dana_{sufixo}")
+        with st.container(key=f"ce_erro_data_{sufixo}"):
+            data_analise = st.date_input("Data Análise (se concluída)", value=_parse_data(registro.get("data_analise")) if registro else None, format="DD/MM/YYYY", key=f"ce_dana_{sufixo}")
 
     _renderizar_confirmacao_recalculo(chave_dlim, sla_efetivo)
 
@@ -968,15 +1072,29 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
         _limpar_estado_recalculo_data_limite(chave_dlim)
         st.rerun()
 
-    if salvar and (not cessionario or not data_solicitacao):
+    # Ver comentário equivalente em `dialog_prestador`: `tentativa_pendente`
+    # persiste entre reruns (via `chave_tentativa`) para que o destaque
+    # vermelho e a mensagem de erro continuem visíveis até o campo ser
+    # corrigido, não só no exato clique em "Salvar".
+    tentativa_pendente = _tentativa_salvar_iniciada(chave_tentativa, salvar)
+
+    if tentativa_pendente and (not cessionario or not data_solicitacao):
         st.error("Preencha ao menos Cessionário e Data de Solicitação.")
-        salvar = False
-    if salvar and sla_reduzido and not justificativa_sla.strip():
+        tentativa_pendente = False
+    if tentativa_pendente and sla_reduzido and not justificativa_sla.strip():
         st.error("Informe a justificativa do SLA reduzido para salvar.")
-        salvar = False
+        tentativa_pendente = False
+
+    erros_campos = validar_at_data_status(num_at, data_analise, status_analise) if tentativa_pendente else {}
+    destacar_campo(f"ce_erro_at_{sufixo}", "at" in erros_campos)
+    destacar_campo(f"ce_erro_status_{sufixo}", "status" in erros_campos)
+    destacar_campo(f"ce_erro_data_{sufixo}", "data" in erros_campos)
+    if erros_campos:
+        st.error(mensagem_erros(erros_campos))
+        tentativa_pendente = False
 
     if (
-        _tentativa_salvar_iniciada(chave_tentativa, salvar)
+        tentativa_pendente
         and _pode_repactuar(repactuando, motivo_repactuacao)
     ):
         campos_sla = _calcular_campos_sla_persistidos(
@@ -1037,6 +1155,14 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
         if pendencia_avaliacao:
             st.session_state[chave_confirmacao_avaliacao] = pendencia_avaliacao
             _renderizar_confirmacao_avaliacao(pendencia_avaliacao, chave_confirmacao_avaliacao)
+            return
+        pendencia_avaliacao_opcional = _detectar_pendencia_avaliacao_opcional(
+            "CESSIONARIO", "cessionarios", dados, projeto_id_salvo, "cessionario",
+            registro.get("avaliacao_opcional_perguntada_revisao") if editando else None,
+        )
+        if pendencia_avaliacao_opcional:
+            st.session_state[chave_confirmacao_avaliacao_opcional] = pendencia_avaliacao_opcional
+            _renderizar_confirmacao_avaliacao_opcional(pendencia_avaliacao_opcional, chave_confirmacao_avaliacao_opcional)
             return
         pendencia_prioridade = _detectar_mensagem_obrigatoria_prioridade("CESSIONARIO", dados)
         if pendencia_prioridade:

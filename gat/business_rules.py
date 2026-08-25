@@ -69,15 +69,17 @@ def status_avaliacao_obrigatoria(
     Indica, por linha, a situação da avaliação (checklist) obrigatória da
     Rev.01: "PENDENTE" enquanto ela não for realizada, "CONCLUIDA" assim
     que for (o selo muda de vermelho para verde automaticamente, sem ação
-    manual), ou "" quando a obrigatoriedade ainda não nasceu (Rev.01 não
-    concluída) ou o projeto está na lista de isentos (grandfathering —
-    ver `listar_avaliacao_obrigatoria_isentos`).
+    manual), ou "" quando a obrigatoriedade ainda não nasceu/não se aplica
+    (revisão atual diferente de 1, Rev.01 ainda não concluída, ou o projeto
+    está na lista de isentos — ver `listar_avaliacao_obrigatoria_isentos`).
 
     Usa exatamente o mesmo critério do alerta em `gat/alertas_engine.py`
-    (`rev1_concluida` + `chaves_avaliadas_obrigatoria`) — antes deste selo
-    usava uma regra própria, mais restrita (só marcava exatamente na
-    Rev.01), o que deixava o indicador "sumir" a partir da Rev.02 mesmo com
-    a avaliação obrigatória ainda pendente, divergindo da Central de Alertas.
+    (`rev1_concluida` + `chaves_avaliadas_obrigatoria`) — apenas a revisão
+    ATUAL igual a 1 é obrigatória; a partir da Rev.02 a avaliação é sempre
+    opcional (pergunta "deseja avaliar?" no pop-up de salvamento, nunca
+    pendência obrigatória nem alerta), mesmo que a Rev.01 nunca tenha sido
+    avaliada — o selo "sumir" a partir da Rev.02 é o comportamento
+    deliberado desta regra, não uma omissão.
 
     Uma quarta situação, "OPCIONAL", cobre a avaliação cuja Rev.01 foi
     concluída antes do marco oficial das avaliações (01/07/2026 — ver
