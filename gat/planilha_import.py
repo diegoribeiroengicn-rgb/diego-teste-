@@ -18,6 +18,16 @@ Um registro cuja chave só é encontrada entre os já arquivados é apenas
 sinalizado no relatório, nunca modificado nem duplicado — arquivamento é
 uma decisão manual separada.
 
+Uma linha com Data de Análise preenchida mas Status Análise ainda "EM
+ANÁLISE"/"EM HOLD" (`STATUS_ATIVO_ANALISE`) é um erro de preenchimento da
+própria planilha — a análise foi concluída, mas o status não foi
+atualizado para refletir isso. Em vez de importar esse status
+desatualizado (o que faz a contagem de projetos por status do sistema não
+bater com a planilha), a linha é sinalizada como inconsistência no
+relatório para o usuário corrigir o status na fonte antes de reimportar —
+mesmo critério de consistência data/status já usado ao salvar uma análise
+manualmente (`gat.ui.validacao_campos.validar_at_data_status`).
+
 A planilha é a referência: quando um campo tem valor diferente e não
 vazio nos dois lados (conflito), o padrão é atualizar o sistema para
 acompanhar a planilha — o usuário só precisa agir para o caso contrário
@@ -50,6 +60,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pandas as pd
+
+from gat.business_rules import STATUS_ATIVO_ANALISE
 
 _LINHA_CABECALHO = 5  # 1-indexed — linha real do cabeçalho nas abas PROJ_PREST/PROJ_CESS
 
@@ -407,6 +419,18 @@ def _planejar(
         chave = chave_registro(linha, campo_nome_entidade, campo_nome_obra)
         identificacao = str(linha.get(campo_codigo) or linha.get(campo_nome_entidade))
         campos_planilha = {c: linha.get(c) for c in colunas_tabela if c in linha}
+
+        status_planilha = str(campos_planilha.get("status_analise") or "").strip().upper()
+        if campos_planilha.get("data_analise") and status_planilha in STATUS_ATIVO_ANALISE:
+            plano.itens.append(ItemPlanoImportacao(
+                item_origem=item_origem, identificacao=identificacao, chave=chave, tipo="inconsistente",
+                motivo_inconsistencia=(
+                    f"Data Análise preenchida ({campos_planilha.get('data_analise')}) mas Status Análise "
+                    f"ainda \"{campos_planilha.get('status_analise')}\" na planilha — corrija o status antes "
+                    "de importar, ou a contagem de projetos em análise não vai bater"
+                ),
+            ))
+            continue
 
         indice_repetido = indice_planejados.get(chave)
         if indice_repetido is not None:

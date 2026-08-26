@@ -20,23 +20,23 @@ from __future__ import annotations
 
 import streamlit as st
 
+from gat.business_rules import STATUS_ATIVO_ANALISE
 from gat.resumo_conclusao import eh_status_final_resumo
-
-# Únicos status que representam a análise "ainda em andamento" — uma Data de
-# Análise preenchida junto com um destes é a combinação inconsistente do
-# item 4 (data indicando conclusão, status ainda dizendo que não concluiu).
-_STATUS_EM_ANDAMENTO = {"EM ANÁLISE", "EM HOLD"}
 
 
 def validar_at_data_status(num_at: str | None, data_analise, status_analise: str | None) -> dict[str, str]:
     """Retorna um dict {campo: mensagem} apenas para os campos que falharem
     — campo vazio no retorno (dict vazio) significa que está tudo certo.
-    Chaves possíveis: "at", "status", "data"."""
+    Chaves possíveis: "at", "status", "data". `STATUS_ATIVO_ANALISE`
+    (EM ANÁLISE, EM HOLD) é o mesmo critério de "análise em andamento" já
+    usado no resto do sistema — a mesma combinação data+status também é
+    sinalizada como inconsistência na Atualização por Planilha
+    (`gat.planilha_import`), para as duas telas nunca divergirem."""
     erros: dict[str, str] = {}
     if not str(num_at or "").strip():
         erros["at"] = "Informe o número da AT antes de salvar."
     status_normalizado = str(status_analise or "").strip().upper()
-    if data_analise and status_normalizado in _STATUS_EM_ANDAMENTO:
+    if data_analise and status_normalizado in STATUS_ATIVO_ANALISE:
         erros["status"] = "Informe o status da análise antes de salvar."
     if eh_status_final_resumo(status_analise) and not data_analise:
         erros["data"] = "Informe a data correspondente antes de salvar."
