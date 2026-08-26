@@ -513,9 +513,37 @@ def _planejar(
                 "revisao": registro_ativo.get("revisao"),
                 "status_analise": registro_ativo.get("status_analise"),
                 "data_solicitacao": registro_ativo.get("data_solicitacao"),
+                "sugestao_continuacao": _sugestao_continuacao(registro_ativo, linhas, campo_codigo, campo_nome_entidade),
             })
 
     return plano
+
+
+def _sugestao_continuacao(
+    registro_ativo: dict[str, Any], linhas: list[dict[str, Any]], campo_codigo: str, campo_nome_entidade: str,
+) -> str | None:
+    """Só uma DICA visual para ajudar a decidir se um registro "preso"
+    (`registros_nao_encontrados`) deve ser arquivado: procura, na planilha
+    atual, uma única linha com o mesmo código/nome + disciplina do
+    registro (ignorando revisão e nº AT — podem ter mudado exatamente por
+    isso o registro ter ficado sem correspondência exata). Nunca decide
+    nem aplica nada sozinha — é só texto para o usuário conferir antes de
+    arquivar; se houver mais de uma candidata, ou nenhuma, não sugere nada
+    (mais vale não sugerir do que sugerir errado)."""
+    identificador = _texto(registro_ativo.get(campo_codigo), maiusculo=True) or _texto(registro_ativo.get(campo_nome_entidade), maiusculo=True)
+    disciplina = _texto(registro_ativo.get("disciplina"), maiusculo=True)
+    candidatas = [
+        linha for linha in linhas
+        if (_texto(linha.get(campo_codigo), maiusculo=True) or _texto(linha.get(campo_nome_entidade), maiusculo=True)) == identificador
+        and _texto(linha.get("disciplina"), maiusculo=True) == disciplina
+    ]
+    if len(candidatas) != 1:
+        return None
+    candidata = candidatas[0]
+    return (
+        f"Linha {candidata.get('_linha_excel') or '?'} da planilha — REV{int(candidata.get('revisao') or 0):02d}, "
+        f"AT {candidata.get('num_at') or '(sem AT)'}, status {candidata.get('status_analise') or '?'}"
+    )
 
 
 def executar_plano(

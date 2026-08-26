@@ -450,7 +450,9 @@ def _renderizar_registros_nao_encontrados(plano, tabela: str, usuario: dict) -> 
         st.caption(
             "Estes registros continuam com o status antigo porque nenhuma linha da planilha bate mais com eles "
             "(normalmente por não terem N° AT ainda). Não são apagados nem alterados automaticamente — revise e "
-            "arquive manualmente os que não existirem mais."
+            "arquive manualmente os que não existirem mais. Quando há uma única linha na planilha com o mesmo "
+            "código/nome e disciplina, ela aparece como sugestão de continuação — é só uma dica para conferir, "
+            "nunca aplicada sozinha."
         )
         for registro in plano.registros_nao_encontrados:
             col_info, col_acao = st.columns([4, 1])
@@ -461,6 +463,8 @@ def _renderizar_registros_nao_encontrados(plano, tabela: str, usuario: dict) -> 
                     f"Status: {registro.get('status_analise') or '—'}"
                 )
                 st.caption(f"Data de Solicitação: {registro.get('data_solicitacao') or '—'} · id #{registro['id']}")
+                if registro.get("sugestao_continuacao"):
+                    st.caption(f":material/lightbulb: Possível continuação na planilha: {registro['sugestao_continuacao']}")
             with col_acao:
                 if pode_arquivar and st.button(
                     "Arquivar", icon=":material/archive:", key=f"admin_arquivar_orfao_{tabela}_{registro['id']}",
