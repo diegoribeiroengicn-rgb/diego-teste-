@@ -364,7 +364,7 @@ def _renderizar_previa_importacao(plano_estado: dict, usuario: dict) -> None:
     plano_p, plano_c, nome_arquivo = plano_estado["plano_p"], plano_estado["plano_c"], plano_estado["nome_arquivo"]
 
     st.markdown("###### Prévia da atualização")
-    for plano in (plano_p, plano_c):
+    for plano, tabela in ((plano_p, "prestadores"), (plano_c, "cessionarios")):
         st.markdown(f"**{plano.origem}**")
         col1, col2, col3, col4, col5 = st.columns(5)
         col1.metric("Lidos", plano.lidos)
@@ -378,9 +378,14 @@ def _renderizar_previa_importacao(plano_estado: dict, usuario: dict) -> None:
             with st.expander(f"{plano.inconsistentes} linha(s) com inconsistência — não puderam ser processadas"):
                 for item in plano.itens:
                     if item.tipo == "inconsistente":
-                        st.caption(f"• Item {item.item_origem or '?'} ({item.identificacao}): {item.motivo_inconsistencia}.")
+                        st.caption(
+                            f"• Linha {item.linha_planilha or '?'} da planilha — Item {item.item_origem or '?'} "
+                            f"({item.identificacao}): {item.motivo_inconsistencia}."
+                        )
         if plano.colunas_nao_mapeadas:
             st.caption(f"Colunas da planilha não reconhecidas (ignoradas): {', '.join(plano.colunas_nao_mapeadas)}")
+        if plano.registros_nao_encontrados:
+            _renderizar_registros_nao_encontrados(plano, tabela, usuario)
 
     resolucoes_p: dict[tuple, dict[str, str]] = {}
     resolucoes_c: dict[tuple, dict[str, str]] = {}
@@ -394,7 +399,7 @@ def _renderizar_previa_importacao(plano_estado: dict, usuario: dict) -> None:
         )
         for plano, resolucoes, prefixo in ((plano_p, resolucoes_p, "p"), (plano_c, resolucoes_c, "c")):
             for indice, item in enumerate(plano.itens_com_conflito):
-                with st.expander(f"{plano.origem} — {item.identificacao} (item {item.item_origem or '?'})"):
+                with st.expander(f"{plano.origem} — {item.identificacao} (linha {item.linha_planilha or '?'} da planilha, item {item.item_origem or '?'})"):
                     escolhas_item: dict[str, str] = {}
                     for campo, (valor_sistema, valor_planilha) in item.conflitos.items():
                         escolha = st.radio(
@@ -425,6 +430,46 @@ def _renderizar_previa_importacao(plano_estado: dict, usuario: dict) -> None:
     if col_cancelar.button("Cancelar", icon=":material/close:", use_container_width=True, key="admin_cancelar_importacao"):
         st.session_state.pop("admin_plano_importacao", None)
         st.rerun()
+
+
+def _renderizar_registros_nao_encontrados(plano, tabela: str, usuario: dict) -> None:
+    """Registros ativos com status "em andamento" (Em Análise/Em Hold) que
+    não bateram com nenhuma linha da planilha atual — normalmente análises
+    sem N° AT cuja chave de identificação (código+disciplina+revisão+data)
+    mudou um pouco na planilha antes da AT ser emitida. A importação nunca
+    apaga nem atualiza sozinha o que não está na planilha, então esses
+    registros ficam "presos" no status antigo indefinidamente até alguém
+    revisar — por isso aparecem aqui à parte, nunca arquivados
+    automaticamente."""
+    pode_arquivar = perfil_pode_arquivar_e_restaurar(usuario.get("perfil"))
+    with st.expander(
+        f":material/warning: {len(plano.registros_nao_encontrados)} registro(s) \"em andamento\" sem correspondência "
+        "na planilha atual",
+        icon=":material/warning:",
+    ):
+        st.caption(
+            "Estes registros continuam com o status antigo porque nenhuma linha da planilha bate mais com eles "
+            "(normalmente por não terem N° AT ainda). Não são apagados nem alterados automaticamente — revise e "
+            "arquive manualmente os que não existirem mais."
+        )
+        for registro in plano.registros_nao_encontrados:
+            col_info, col_acao = st.columns([4, 1])
+            with col_info:
+                st.markdown(
+                    f"**{registro['identificacao'] or '—'}** — {registro.get('disciplina') or '—'} — "
+                    f"REV{int(registro['revisao'] or 0):02d} — AT: {registro.get('num_at') or '— (sem AT)'} — "
+                    f"Status: {registro.get('status_analise') or '—'}"
+                )
+                st.caption(f"Data de Solicitação: {registro.get('data_solicitacao') or '—'} · id #{registro['id']}")
+            with col_acao:
+                if pode_arquivar and st.button(
+                    "Arquivar", icon=":material/archive:", key=f"admin_arquivar_orfao_{tabela}_{registro['id']}",
+                    use_container_width=True,
+                ):
+                    dialog_arquivar(
+                        tabela, int(registro["id"]),
+                        f"{registro['identificacao'] or '—'} — {registro.get('disciplina') or '—'}", usuario["username"],
+                    )
 
 
 def _renderizar_relatorio_importacao(relatorio) -> None:

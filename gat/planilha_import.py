@@ -144,7 +144,9 @@ def _data_iso(valor: Any) -> str | None:
 def _normalizar_linha(bruta: dict[str, Any]) -> dict[str, Any]:
     linha: dict[str, Any] = {}
     for campo, valor in bruta.items():
-        if campo in CAMPOS_DATA:
+        if campo == "_linha_excel":
+            linha[campo] = valor
+        elif campo in CAMPOS_DATA:
             linha[campo] = _data_iso(valor)
         elif campo in CAMPOS_INTEIROS:
             linha[campo] = _inteiro(valor)
@@ -168,12 +170,16 @@ def _ler_aba(conteudo: bytes, nome_aba: str, mapa_colunas: dict[str, str]) -> tu
     )
 
     linhas: list[dict[str, Any]] = []
-    for _, linha_bruta in bruto.iterrows():
+    for posicao, (_, linha_bruta) in enumerate(bruto.iterrows()):
         candidata = {campo: linha_bruta.get(coluna) for coluna, campo in mapa_colunas.items()}
         # "item" costuma vir preenchido por fórmula em linhas de template
         # vazias, bem além do fim dos dados reais — não conta como conteúdo.
         if all(_vazio(v) for campo, v in candidata.items() if campo != "item"):
             continue  # linha em branco (rodapé/espaçamento da planilha) — não é um registro
+        # Linha física da planilha (1-indexada, a mesma numeração que aparece
+        # no Excel) — para o usuário conseguir ir direto corrigir a origem
+        # de uma inconsistência, em vez de só saber o código/disciplina.
+        candidata["_linha_excel"] = _LINHA_CABECALHO + 1 + posicao
         linhas.append(_normalizar_linha(candidata))
     return linhas, colunas_nao_mapeadas
 
@@ -307,6 +313,7 @@ class ItemPlanoImportacao:
     identificacao: str
     chave: tuple
     tipo: str  # "novo" | "atualizacao" | "sem_mudanca" | "arquivado" | "inconsistente"
+    linha_planilha: int | None = None
     dados_novos: dict[str, Any] = field(default_factory=dict)
     existente_id: int | None = None
     existente: dict[str, Any] = field(default_factory=dict)
@@ -319,10 +326,24 @@ class ItemPlanoImportacao:
 class PlanoImportacao:
     """Resultado da pré-visualização (item 6): classifica cada linha da
     planilha sem gravar nada no banco. `executar_plano` aplica este plano
-    depois que o usuário confirma (e resolve os conflitos, se houver)."""
+    depois que o usuário confirma (e resolve os conflitos, se houver).
+
+    `registros_nao_encontrados`: o inverso de uma inconsistência — em vez
+    de uma linha da planilha com problema, é um registro ATIVO do sistema,
+    com status "em andamento" (EM ANÁLISE/EM HOLD), que não corresponde a
+    NENHUMA linha da planilha atual. Isso acontece sobretudo com análises
+    sem N° AT (identificadas por código+disciplina+revisão+data, já que
+    não há AT para servir de chave única): se esses dados mudarem um
+    pouco na planilha antes da AT ser emitida, o sistema deixa de
+    reconhecer que é o "mesmo" projeto. Como a importação nunca apaga ou
+    atualiza algo que não está na planilha, esse registro fica "preso" no
+    status antigo indefinidamente — por isso é listado à parte, para o
+    usuário decidir (arquivar manualmente se não existir mais, ou apenas
+    confirmar que ainda é válido)."""
     origem: str
     itens: list[ItemPlanoImportacao] = field(default_factory=list)
     colunas_nao_mapeadas: list[str] = field(default_factory=list)
+    registros_nao_encontrados: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def lidos(self) -> int:
@@ -409,10 +430,12 @@ def _planejar(
 
     for linha in linhas:
         item_origem = linha.get("item")
+        linha_planilha = linha.get("_linha_excel")
         if not linha.get(campo_nome_entidade) or not linha.get("disciplina"):
             plano.itens.append(ItemPlanoImportacao(
                 item_origem=item_origem, identificacao=str(linha.get(campo_codigo) or "?"), chave=(),
-                tipo="inconsistente", motivo_inconsistencia=f"sem {campo_nome_entidade} ou disciplina",
+                tipo="inconsistente", linha_planilha=linha_planilha,
+                motivo_inconsistencia=f"sem {campo_nome_entidade} ou disciplina",
             ))
             continue
 
@@ -424,6 +447,7 @@ def _planejar(
         if campos_planilha.get("data_analise") and status_planilha in STATUS_ATIVO_ANALISE:
             plano.itens.append(ItemPlanoImportacao(
                 item_origem=item_origem, identificacao=identificacao, chave=chave, tipo="inconsistente",
+                linha_planilha=linha_planilha,
                 motivo_inconsistencia=(
                     f"Data Análise preenchida ({campos_planilha.get('data_analise')}) mas Status Análise "
                     f"ainda \"{campos_planilha.get('status_analise')}\" na planilha — corrija o status antes "
@@ -445,7 +469,10 @@ def _planejar(
 
         existente = indice_ativos.get(chave)
         if existente is None and chave in chaves_arquivadas:
-            plano.itens.append(ItemPlanoImportacao(item_origem=item_origem, identificacao=identificacao, chave=chave, tipo="arquivado"))
+            plano.itens.append(ItemPlanoImportacao(
+                item_origem=item_origem, identificacao=identificacao, chave=chave, tipo="arquivado",
+                linha_planilha=linha_planilha,
+            ))
             continue
 
         if existente is None:
@@ -453,12 +480,13 @@ def _planejar(
             if faltando:
                 plano.itens.append(ItemPlanoImportacao(
                     item_origem=item_origem, identificacao=identificacao, chave=chave, tipo="inconsistente",
+                    linha_planilha=linha_planilha,
                     motivo_inconsistencia=f"registro novo sem {', '.join(faltando)}",
                 ))
                 continue
             item_plano = ItemPlanoImportacao(
                 item_origem=item_origem, identificacao=identificacao, chave=chave,
-                tipo="novo", dados_novos=campos_planilha,
+                tipo="novo", dados_novos=campos_planilha, linha_planilha=linha_planilha,
             )
             plano.itens.append(item_plano)
             indice_planejados[chave] = len(plano.itens) - 1
@@ -469,9 +497,23 @@ def _planejar(
         plano.itens.append(ItemPlanoImportacao(
             item_origem=item_origem, identificacao=identificacao, chave=chave, tipo=tipo,
             existente_id=existente.get("id"), existente=existente, dados_novos=campos_planilha,
-            preenchimentos=preenchimentos, conflitos=conflitos,
+            preenchimentos=preenchimentos, conflitos=conflitos, linha_planilha=linha_planilha,
         ))
         indice_planejados[chave] = len(plano.itens) - 1
+
+    chaves_encontradas = {item.chave for item in plano.itens if item.tipo in ("atualizacao", "sem_mudanca")}
+    for chave_ativo, registro_ativo in indice_ativos.items():
+        status_ativo = str(registro_ativo.get("status_analise") or "").strip().upper()
+        if chave_ativo not in chaves_encontradas and status_ativo in STATUS_ATIVO_ANALISE:
+            plano.registros_nao_encontrados.append({
+                "id": registro_ativo.get("id"),
+                "identificacao": registro_ativo.get(campo_codigo) or registro_ativo.get(campo_nome_entidade),
+                "disciplina": registro_ativo.get("disciplina"),
+                "num_at": registro_ativo.get("num_at"),
+                "revisao": registro_ativo.get("revisao"),
+                "status_analise": registro_ativo.get("status_analise"),
+                "data_solicitacao": registro_ativo.get("data_solicitacao"),
+            })
 
     return plano
 
@@ -493,7 +535,10 @@ def executar_plano(
     for item in plano.itens:
         if item.tipo == "inconsistente":
             relatorio.inconsistentes += 1
-            relatorio.detalhes_inconsistencia.append(f"Item {item.item_origem or '?'} ({item.identificacao}): {item.motivo_inconsistencia}.")
+            relatorio.detalhes_inconsistencia.append(
+                f"Linha {item.linha_planilha or '?'} da planilha — Item {item.item_origem or '?'} "
+                f"({item.identificacao}): {item.motivo_inconsistencia}."
+            )
             continue
         if item.tipo == "arquivado":
             relatorio.ignorados_arquivados += 1
