@@ -363,6 +363,15 @@ def injetar_css_global(tema: str = TEMA_CLARO) -> None:
         ".js-plotly-plot .xzl, .js-plotly-plot .yzl { stroke: " + cores['borda_forte'] + " !important; }",
     ]) if escuro else ""}
 
+    /* ---- Moldura padrão do Streamlit ----
+       `[client] toolbarMode = "minimal"` (.streamlit/config.toml) já
+       remove a barra de ferramentas (Deploy/Rerun/Clear cache/GitHub) na
+       maioria dos casos; o CSS abaixo é reforço para versões/temas em
+       que algum resquício ainda aparece. `#MainMenu`/`footer` (seletores
+       de versões antigas do Streamlit) ficam mantidos por segurança,
+       mas o seletor que importa na versão atual (1.6x) é o testid abaixo. */
+    [data-testid="stToolbar"] {{visibility: hidden; height: 0;}}
+    [data-testid="stDecoration"] {{display: none;}}
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     </style>

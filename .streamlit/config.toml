@@ -1,0 +1,11 @@
+# Configuração do Streamlit — identidade visual GAT 2026 (Tecnoplano).
+# Puramente de apresentação: não altera nenhuma lógica, dado ou rota do
+# sistema.
+
+[client]
+# Esconde a barra de ferramentas nativa do Streamlit (Deploy, Rerun,
+# Clear cache, menu de 3 pontos com link do GitHub etc.) — "minimal" só
+# mantém itens explicitamente configurados via st.set_page_config
+# (menu_items), que este projeto não define, então o menu inteiro some.
+# Testado contra o Streamlit 1.61.1 (versão instalada, ver requirements.txt).
+toolbarMode = "minimal"
