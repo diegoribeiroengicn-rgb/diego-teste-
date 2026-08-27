@@ -145,32 +145,53 @@ CONFIGURACOES_PADRAO = {
 
 
 def _garantir_coluna(conn: sqlite3.Connection, tabela: str, coluna: str, definicao_tipo: str) -> None:
-    """Adiciona `coluna` à `tabela` caso ainda não exista (migração idempotente)."""
-    colunas_existentes = {linha[1] for linha in conn.execute(f"PRAGMA table_info({tabela})").fetchall()}
+    """
+    Adiciona `coluna` à `tabela` caso ainda não exista (migração idempotente).
+
+    `PRAGMA table_info` é exclusivo do SQLite — no backend Postgres, a
+    mesma pergunta ("essa coluna já existe?") é respondida via
+    `information_schema.columns`, padrão SQL suportado pelos dois.
+    """
+    if db_backend.backend_ativo() == "postgres":
+        colunas_existentes = {
+            linha["column_name"] for linha in conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = ?", (tabela,)
+            ).fetchall()
+        }
+    else:
+        colunas_existentes = {linha[1] for linha in conn.execute(f"PRAGMA table_info({tabela})").fetchall()}
     if coluna not in colunas_existentes:
         conn.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {definicao_tipo}")
 
 
 def _semear_configuracoes_padrao(conn: sqlite3.Connection) -> None:
     for chave, valor in CONFIGURACOES_PADRAO.items():
-        conn.execute("INSERT OR IGNORE INTO configuracoes (chave, valor) VALUES (?, ?)", (chave, valor))
+        conn.execute(
+            "INSERT INTO configuracoes (chave, valor) VALUES (?, ?) ON CONFLICT (chave) DO NOTHING", (chave, valor),
+        )
 
 
 def _semear_permissoes_perfil(conn: sqlite3.Connection, usuario_id: int, perfil: str) -> None:
     """Materializa, para `usuario_id`, as permissões padrão de `perfil` como
     linhas individuais em permissoes_modulo/permissoes_area — a partir daí
-    são permissões do usuário (editáveis livremente), não mais do perfil."""
+    são permissões do usuário (editáveis livremente), não mais do perfil.
+
+    `ON CONFLICT ... DO UPDATE` (upsert padrão SQL, suportado desde o
+    SQLite 3.24 e por qualquer versão do Postgres) substitui o `INSERT OR
+    REPLACE` exclusivo do SQLite — mesmo comportamento nos dois backends."""
     template = PERFIS_PADRAO.get(perfil, PERFIS_PADRAO[PERFIL_ADMIN])
     for modulo in MODULOS_CONTROLADOS:
         permitido = template["modulos"].get(modulo, True)
         conn.execute(
-            "INSERT OR REPLACE INTO permissoes_modulo (usuario_id, modulo, permitido) VALUES (?, ?, ?)",
+            "INSERT INTO permissoes_modulo (usuario_id, modulo, permitido) VALUES (?, ?, ?) "
+            "ON CONFLICT (usuario_id, modulo) DO UPDATE SET permitido = excluded.permitido",
             (usuario_id, modulo, 1 if permitido else 0),
         )
     for area in AREAS_PERMISSAO:
         permitido = template["areas"].get(area, True)
         conn.execute(
-            "INSERT OR REPLACE INTO permissoes_area (usuario_id, area, permitido) VALUES (?, ?, ?)",
+            "INSERT INTO permissoes_area (usuario_id, area, permitido) VALUES (?, ?, ?) "
+            "ON CONFLICT (usuario_id, area) DO UPDATE SET permitido = excluded.permitido",
             (usuario_id, area, 1 if permitido else 0),
         )
 
@@ -449,7 +470,7 @@ def _migracao_0004_cadastro_mestre(conn: sqlite3.Connection) -> None:
     de projeto/análise `prestadores`/`cessionarios`, que continuam com sua
     função original intacta. Faz backfill automático: cria um cadastro
     para cada código já usado nos projetos existentes (nunca duplica —
-    `INSERT OR IGNORE` respeita a UNIQUE(codigo) — e nunca inventa dados,
+    `ON CONFLICT (codigo) DO NOTHING` respeita a UNIQUE(codigo) — e nunca inventa dados,
     herda nome/PEP do registro mais recente daquele código) e vincula os
     projetos existentes ao cadastro correspondente pelo código."""
     conn.execute(
@@ -528,7 +549,7 @@ def _migracao_0004_cadastro_mestre(conn: sqlite3.Connection) -> None:
 
     conn.execute(
         """
-        INSERT OR IGNORE INTO cadastro_prestadores
+        INSERT INTO cadastro_prestadores
             (codigo, nome_empresa, possui_pep, numero_pep, status, criado_em, criado_por, atualizado_em, atualizado_por)
         SELECT
             p1.codigo,
@@ -539,6 +560,7 @@ def _migracao_0004_cadastro_mestre(conn: sqlite3.Connection) -> None:
         FROM prestadores p1
         WHERE p1.codigo IS NOT NULL AND TRIM(p1.codigo) <> ''
         GROUP BY p1.codigo
+        ON CONFLICT (codigo) DO NOTHING
         """,
         (agora, agora),
     )
@@ -552,7 +574,7 @@ def _migracao_0004_cadastro_mestre(conn: sqlite3.Connection) -> None:
 
     conn.execute(
         """
-        INSERT OR IGNORE INTO cadastro_cessionarios
+        INSERT INTO cadastro_cessionarios
             (codigo, nome_empresa, status, criado_em, criado_por, atualizado_em, atualizado_por)
         SELECT
             c1.codigo,
@@ -561,6 +583,7 @@ def _migracao_0004_cadastro_mestre(conn: sqlite3.Connection) -> None:
         FROM cessionarios c1
         WHERE c1.codigo IS NOT NULL AND TRIM(c1.codigo) <> ''
         GROUP BY c1.codigo
+        ON CONFLICT (codigo) DO NOTHING
         """,
         (agora, agora),
     )
@@ -663,7 +686,8 @@ def _migracao_0008_avaliacao_obrigatoria_isentos(conn: sqlite3.Connection) -> No
             if (codigo_projeto, linha["disciplina"] or "") in avaliados:
                 continue
             conn.execute(
-                "INSERT OR IGNORE INTO avaliacao_obrigatoria_isentos (modulo, projeto_id, criado_em) VALUES (?, ?, ?)",
+                "INSERT INTO avaliacao_obrigatoria_isentos (modulo, projeto_id, criado_em) VALUES (?, ?, ?) "
+                "ON CONFLICT (modulo, projeto_id) DO NOTHING",
                 (modulo, linha["id"], agora),
             )
 
@@ -1416,8 +1440,8 @@ def _migracao_0030_central_codificacao(conn: sqlite3.Connection) -> None:
     agora = agora_br().isoformat()
     for disciplina, (codigo, descricao) in CODIGOS_DISCIPLINA_SEED.items():
         conn.execute(
-            "INSERT OR IGNORE INTO codigos_disciplina (disciplina, codigo, descricao, atualizado_em, atualizado_por) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO codigos_disciplina (disciplina, codigo, descricao, atualizado_em, atualizado_por) "
+            "VALUES (?, ?, ?, ?, ?) ON CONFLICT (disciplina) DO NOTHING",
             (disciplina, codigo, descricao, agora, "MIGRACAO_0030"),
         )
 
@@ -3746,7 +3770,8 @@ def confirmar_leitura_manual(usuario: str, versao: int) -> None:
     agora = agora_br().isoformat()
     with _conectar() as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO manual_confirmacoes_leitura (usuario, versao, confirmado_em) VALUES (?, ?, ?)",
+            "INSERT INTO manual_confirmacoes_leitura (usuario, versao, confirmado_em) VALUES (?, ?, ?) "
+            "ON CONFLICT (usuario, versao) DO NOTHING",
             (usuario, versao, agora),
         )
 
