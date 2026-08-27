@@ -48,7 +48,9 @@ from gat.database import (
     listar_avaliacoes_checklist,
     listar_cadastro_cessionarios,
     listar_cadastro_prestadores,
+    listar_cessionarios,
     listar_obras_prestador,
+    listar_prestadores,
     listar_repactuacoes_prazo,
     marcar_avaliacao_opcional_perguntada,
     marcar_popup_resumo_disparado,
@@ -74,6 +76,40 @@ def _parse_data(valor: Any) -> date | None:
         except ValueError:
             return None
     return None
+
+
+def _duplicata_ativa(df: pd.DataFrame, codigo: str, disciplina: str, revisao: int) -> dict[str, Any] | None:
+    """
+    Registro ATIVO (não arquivado) que já bate em código + disciplina +
+    revisão com o que está sendo digitado em um cadastro de Novo Registro —
+    sinal de que o usuário devia estar EDITANDO esse registro em vez de
+    criar um segundo. Só um aviso: nunca bloqueia o salvamento, porque
+    reaproveitar código+disciplina+revisão é, em casos raros, legítimo
+    (ex.: retrabalho registrado como uma nova análise).
+    """
+    codigo_norm = str(codigo or "").strip().upper()
+    if not codigo_norm or df.empty or "codigo" not in df.columns:
+        return None
+    disciplina_norm = str(disciplina or "").strip().upper()
+    candidatos = df[
+        (df["codigo"].astype(str).str.strip().str.upper() == codigo_norm)
+        & (df["disciplina"].astype(str).str.strip().str.upper() == disciplina_norm)
+        & (df["revisao"].fillna(0).astype(int) == int(revisao or 0))
+    ]
+    return candidatos.iloc[0].to_dict() if not candidatos.empty else None
+
+
+def _avisar_duplicata_ativa(duplicata: dict[str, Any] | None, nome_campo_entidade: str) -> None:
+    if not duplicata:
+        return
+    st.warning(
+        f"Já existe um projeto **ativo** com este Código + Disciplina + Revisão: "
+        f"**{duplicata.get(nome_campo_entidade) or '—'}** — AT {duplicata.get('num_at') or '(sem AT)'} — "
+        f"Status: {duplicata.get('status_analise') or '—'} (id #{int(duplicata['id'])}). "
+        "Se for a mesma análise, cancele e edite esse registro em vez de salvar um novo — "
+        "para não duplicar o projeto.",
+        icon=":material/content_copy:",
+    )
 
 
 def _tentativa_salvar_iniciada(chave_tentativa: str, clicou_salvar: bool) -> bool:
@@ -727,6 +763,9 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
     }
     houve_alteracoes = _houve_alteracoes_nao_salvas(f"pr_snapshot_{sufixo}", valores_atuais)
 
+    if not editando:
+        _avisar_duplicata_ativa(_duplicata_ativa(listar_prestadores(), codigo, disciplina, revisao), "prestador")
+
     col_salvar, col_cancelar = st.columns(2)
     salvar = col_salvar.button("Salvar", icon=":material/save:", type="primary", use_container_width=True, key=f"pr_salvar_{sufixo}")
     cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"pr_cancelar_{sufixo}")
@@ -1059,6 +1098,9 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
         "sla_reduzido": sla_reduzido, "dias_reduzidos": dias_reduzidos, "justificativa_sla": justificativa_sla,
     }
     houve_alteracoes = _houve_alteracoes_nao_salvas(f"ce_snapshot_{sufixo}", valores_atuais)
+
+    if not editando:
+        _avisar_duplicata_ativa(_duplicata_ativa(listar_cessionarios(), codigo, disciplina, revisao), "cessionario")
 
     col_salvar, col_cancelar = st.columns(2)
     salvar = col_salvar.button("Salvar", icon=":material/save:", type="primary", use_container_width=True, key=f"ce_salvar_{sufixo}")
