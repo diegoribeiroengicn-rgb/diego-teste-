@@ -134,14 +134,25 @@ def _renderizar_filtros(df: pd.DataFrame) -> pd.DataFrame:
 def _renderizar_kpis_executivos(df: pd.DataFrame, lista_prioridades: pd.DataFrame, alertas_ativos: pd.DataFrame, painel: pd.DataFrame) -> None:
     status_upper = df["status_analise"].astype(str).str.strip().str.upper()
     em_andamento = df[status_upper.isin(STATUS_ATIVO_ANALISE)]
+    em_analise = df[status_upper == "EM ANÁLISE"]
     kpis_equipe = calcular_kpis_prazo_analista(df, None)
 
     col1, col2, col3, col4, col_hold = st.columns(5)
-    col1.metric("Total em andamento", len(em_andamento))
+    col1.metric("Total ativo (Análise + Hold)", len(em_andamento))
     col2.metric("Total prioritárias", len(lista_prioridades))
     col3.metric("Total atrasadas", kpis_equipe["atrasados_em_analise"])
     col4.metric("Vencendo em ≤2 dias úteis", kpis_equipe["vencem_2_dias_uteis"])
     col_hold.metric("Em HOLD", kpis_equipe.get("em_hold", 0))
+
+    st.caption(
+        "\"Total ativo (Análise + Hold)\" soma Em Análise + Em HOLD. \"Em Análise\" abaixo usa o mesmo "
+        "critério dos dashboards de Prestadores/Cessionários (só status_analise = EM ANÁLISE, sem Hold)."
+    )
+    col_ea1, col_ea2, col_ea3 = st.columns(3)
+    col_ea1.metric("Em Análise", len(em_analise))
+    if "tipo_modulo" in em_analise.columns:
+        col_ea2.metric("Em Análise — Prestadores", int((em_analise["tipo_modulo"] == "Prestador").sum()))
+        col_ea3.metric("Em Análise — Cessionários", int((em_analise["tipo_modulo"] == "Cessionário").sum()))
 
     col5, col6, col7 = st.columns(3)
     col5.metric("Com SLA reduzido", int(em_andamento["sla_reduzido"].fillna(False).astype(bool).sum()) if "sla_reduzido" in em_andamento.columns else 0)
@@ -455,8 +466,10 @@ def render(usuario: dict) -> None:
     with aba5:
         kpis_equipe = calcular_kpis_prazo_analista(df_filtrado, None)
         status_upper = df_filtrado["status_analise"].astype(str).str.strip().str.upper()
+        em_analise_relatorio = df_filtrado[status_upper == "EM ANÁLISE"]
         kpis_relatorio = {
-            "Total em andamento": int(status_upper.isin(STATUS_ATIVO_ANALISE).sum()),
+            "Total ativo (Análise + Hold)": int(status_upper.isin(STATUS_ATIVO_ANALISE).sum()),
+            "Em Análise": len(em_analise_relatorio),
             "Total prioritárias": len(lista_prioridades_filtrada),
             "Total atrasadas": kpis_equipe["atrasados_em_analise"],
             "Vencendo em ≤2 dias úteis": kpis_equipe["vencem_2_dias_uteis"],
