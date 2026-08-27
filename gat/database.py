@@ -20,6 +20,7 @@ from typing import Any, Callable, Iterator
 
 import bcrypt
 import pandas as pd
+import streamlit as st
 
 from gat import backup_externo
 from gat.config import (
@@ -2256,7 +2257,13 @@ def registrar_historico(conn: sqlite3.Connection, tabela: str, registro_id: int,
     _registrar_historico(conn, tabela, registro_id, antigo, novo, usuario)
 
 
-def listar_historico(tabela: str | None = None, registro_id: int | None = None) -> pd.DataFrame:
+def listar_historico(tabela: str | None = None, registro_id: int | None = None, limite: int | None = None) -> pd.DataFrame:
+    """`limite` é opcional e não trunca nada por padrão (`None`) — as telas
+    de histórico/auditoria (Configurações, Histórico de Ativ., exportações
+    de avaliação) esperam o histórico completo. Passe um valor explícito só
+    quando o chamador realmente precisar de um recorte (ex.: histórico de
+    um único registro específico, onde algumas dezenas de linhas recentes
+    já bastam)."""
     query = "SELECT * FROM historico_edicoes WHERE 1=1"
     params: list[Any] = []
     if tabela:
@@ -2266,8 +2273,26 @@ def listar_historico(tabela: str | None = None, registro_id: int | None = None) 
         query += " AND registro_id = ?"
         params.append(registro_id)
     query += " ORDER BY data_hora DESC"
+    if limite is not None:
+        query += " LIMIT ?"
+        params.append(limite)
     with _conectar() as conn:
         return pd.read_sql_query(query, conn, params=params)
+
+
+def listar_historico_varios_registros(tabela: str, registro_ids: list[int]) -> pd.DataFrame:
+    """Histórico de VÁRIOS registros de uma vez (`WHERE registro_id IN (...)`)
+    — para telas que precisam do histórico de uma lista inteira (ex.: todos
+    os alertas manuais encerrados exibidos numa página), evitando uma
+    consulta por registro dentro de um loop."""
+    if not registro_ids:
+        return pd.DataFrame()
+    with _conectar() as conn:
+        marcadores = ", ".join("?" * len(registro_ids))
+        return pd.read_sql_query(
+            f"SELECT * FROM historico_edicoes WHERE tabela = ? AND registro_id IN ({marcadores}) ORDER BY data_hora DESC",
+            conn, params=[tabela, *registro_ids],
+        )
 
 
 def registrar_repactuacao_prazo(tabela: str, registro_id: int, data_anterior: str | None, data_nova: str | None, motivo: str, usuario: str) -> None:
@@ -2329,9 +2354,13 @@ def excluir_prestador(registro_id: int) -> None:
         conn.execute("DELETE FROM prestadores WHERE id = ?", (registro_id,))
 
 
+@st.cache_data(ttl=60, show_spinner=False)
 def listar_prestadores() -> pd.DataFrame:
     """Só análises ativas — as arquivadas pelo módulo Arquivo ficam
-    disponíveis exclusivamente em `gat.arquivo_database`."""
+    disponíveis exclusivamente em `gat.arquivo_database`. Cacheada (TTL de
+    60s, invalidada explicitamente em `gat.ui.pos_mutacao.atualizar_apos_mutacao`
+    a cada gravação) por ser lida repetidamente, sem filtro, em várias telas
+    (Início, Consolidado, Dashboard de Prestadores, Painel de Analistas)."""
     with _conectar() as conn:
         return pd.read_sql_query("SELECT * FROM prestadores WHERE arquivado_em IS NULL ORDER BY item, id", conn)
 
@@ -2383,9 +2412,12 @@ def excluir_cessionario(registro_id: int) -> None:
         conn.execute("DELETE FROM cessionarios WHERE id = ?", (registro_id,))
 
 
+@st.cache_data(ttl=60, show_spinner=False)
 def listar_cessionarios() -> pd.DataFrame:
     """Só análises ativas — as arquivadas pelo módulo Arquivo ficam
-    disponíveis exclusivamente em `gat.arquivo_database`."""
+    disponíveis exclusivamente em `gat.arquivo_database`. Cacheada (TTL de
+    60s, invalidada explicitamente em `gat.ui.pos_mutacao.atualizar_apos_mutacao`
+    a cada gravação) pelo mesmo motivo de `listar_prestadores`."""
     with _conectar() as conn:
         return pd.read_sql_query("SELECT * FROM cessionarios WHERE arquivado_em IS NULL ORDER BY item, id", conn)
 
@@ -3775,8 +3807,12 @@ def registrar_atividade(usuario: str, perfil: str | None, tipo_evento: str, modu
 
 
 def listar_atividades(
-    usuario: str | None = None, tipo_evento: str | None = None, modulo: str | None = None,
+    usuario: str | None = None, tipo_evento: str | None = None, modulo: str | None = None, limite: int | None = None,
 ) -> pd.DataFrame:
+    """`limite` é opcional e não trunca nada por padrão (`None`) — mesmo
+    motivo de `listar_historico`: a tela de Histórico de Atividades espera
+    a lista completa (ela já tem seus próprios filtros de usuário/tipo/
+    módulo/período aplicados em memória)."""
     with _conectar() as conn:
         query = "SELECT * FROM atividades_usuario WHERE 1=1"
         params: list[Any] = []
@@ -3790,6 +3826,9 @@ def listar_atividades(
             query += " AND modulo = ?"
             params.append(modulo)
         query += " ORDER BY data_hora DESC"
+        if limite is not None:
+            query += " LIMIT ?"
+            params.append(limite)
         return pd.read_sql_query(query, conn, params=params)
 
 

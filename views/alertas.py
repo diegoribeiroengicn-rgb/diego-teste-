@@ -19,7 +19,7 @@ from gat.database import (
     iniciar_tratamento_alerta,
     listar_alertas_manuais,
     listar_cessionarios,
-    listar_historico,
+    listar_historico_varios_registros,
     listar_obras_prestador,
     listar_prestadores,
     marcar_tratado_alerta,
@@ -252,11 +252,12 @@ def _secao_alertas_manuais(usuario: dict, modulos_incluidos: list[str], modulo_c
 
         if not encerrados.empty:
             with st.expander(f"Encerrados ({len(encerrados)})", icon=":material/history:"):
+                historico_encerrados = listar_historico_varios_registros("alertas_manuais", encerrados["id"].astype(int).tolist())
                 for _, alerta in encerrados.iterrows():
                     st.markdown(f"**{alerta['titulo']}** — {_ou_traco(alerta.get('nome_entidade'))} · *Encerrado em {formatar_datahora_br(alerta.get('encerrado_em')) or '—'} por {alerta.get('encerrado_por')}*")
                     if alerta.get("motivo_encerramento"):
                         st.caption(f"Motivo: {alerta['motivo_encerramento']}")
-                    historico = listar_historico("alertas_manuais", int(alerta["id"]))
+                    historico = historico_encerrados[historico_encerrados["registro_id"] == int(alerta["id"])]
                     if not historico.empty:
                         st.dataframe(
                             formatar_datahoras_df(historico, ["data_hora"])[["campo", "valor_anterior", "valor_novo", "usuario", "data_hora"]],
