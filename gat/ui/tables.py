@@ -161,6 +161,8 @@ def lista_cards_com_edicao(
     tabela_arquivo: str | None = None,
     usuario: dict | None = None,
     descricao_arquivo: Callable[[dict], str] | None = None,
+    campo_destaque_extra: str | None = None,
+    agrupar_por: str | None = None,
 ) -> None:
     """
     Alternativa a `tabela_com_edicao` para listas de projeto (Prestadores/
@@ -178,13 +180,21 @@ def lista_cards_com_edicao(
       identificação que difere entre os dois módulos.
     - `df_ids`/`tabela_arquivo`/`usuario`/`descricao_arquivo`: mesmo
       significado de `tabela_com_edicao`.
+    - `campo_destaque_extra`: opcional — nome de uma coluna adicional de
+      `df_exibicao` a destacar em cada card (ex.: "Responsável"), além
+      das colunas fixas. Some do "Ver mais" (já aparece em destaque).
+    - `agrupar_por`: opcional — nome de coluna (normalmente igual a
+      `campo_destaque_extra`) usada para agrupar os cards visualmente sob
+      um cabeçalho de seção sempre que o valor mudar de uma linha para a
+      próxima. Pressupõe que `df_exibicao` já chegue ordenado por essa
+      coluna — a função não reordena nada.
 
     Paginado (25 cards por página) — os módulos têm várias centenas de
     registros ativos, e renderizar todos de uma vez pesaria a rolagem.
     "Restaurar ordem de chegada" aqui não desfaz nenhuma reordenação
     visual (cards não têm cabeçalho clicável como o grid) — só volta a
-    lista pra página 1, no critério padrão (Item) que `df_exibicao` já
-    chega ordenado.
+    lista pra página 1, na ordenação que `df_exibicao` já chega pronta
+    (por Item, ou por `agrupar_por` quando informado).
     """
     chave_pagina = f"_pagina_cards_{chave}"
     chave_total_anterior = f"_pagina_cards_{chave}_total"
@@ -211,14 +221,26 @@ def lista_cards_com_edicao(
 
     inicio = pagina * _CARDS_POR_PAGINA
     fim = min(inicio + _CARDS_POR_PAGINA, total_registros)
-    colunas_detalhe = [c for c in df_exibicao.columns if c not in (*_CAMPOS_CARD_FIXOS, campo_nome_entidade)]
+    campos_fixos_extra = (campo_destaque_extra,) if campo_destaque_extra else ()
+    colunas_detalhe = [c for c in df_exibicao.columns if c not in (*_CAMPOS_CARD_FIXOS, campo_nome_entidade, *campos_fixos_extra)]
 
+    grupo_anterior = None
     for posicao in range(inicio, fim):
         linha = df_exibicao.iloc[posicao]
         registro_id = int(df_ids.iloc[posicao])
+
+        if agrupar_por:
+            valor_grupo = str(linha[agrupar_por]).strip() or "—"
+            if valor_grupo != grupo_anterior:
+                st.subheader(f":material/person: {valor_grupo}", divider="gray")
+                grupo_anterior = valor_grupo
+
         with st.container(border=True):
             st.markdown(f"**{linha['Código']} — {linha[campo_nome_entidade]}**")
             st.caption(f"{linha['Disciplina']} · Item {linha['Item']}")
+            if campo_destaque_extra:
+                valor_destaque = str(linha[campo_destaque_extra]).strip() or "—"
+                st.markdown(f":material/person: **{campo_destaque_extra}:** {valor_destaque}")
 
             col_badge1, col_badge2, _resto = st.columns([1, 1, 3])
             with col_badge1:
