@@ -56,12 +56,19 @@ def logo_base64() -> str:
     return base64.b64encode(LOGO_PATH.read_bytes()).decode("utf-8")
 
 
+def _rgb(cor_hex: str) -> str:
+    """'#1B3A8A' -> '27, 58, 138' (para compor rgba() com opacidade)."""
+    h = cor_hex.lstrip("#")
+    return f"{int(h[0:2], 16)}, {int(h[2:4], 16)}, {int(h[4:6], 16)}"
+
+
 def injetar_css_global(tema: str = TEMA_CLARO) -> None:
     """Injeta o CSS institucional Tecnoplano em toda a aplicação, no Tema
     Claro (padrão) ou Escuro conforme a preferência do usuário logado."""
     cores = _paleta(tema)
     escuro = tema == TEMA_ESCURO
     superficie_1 = cores["superficie_1"]
+    navy_rgb = _rgb(cores["navy"])
     css = f"""
     <style>
     :root {{
@@ -362,6 +369,27 @@ def injetar_css_global(tema: str = TEMA_CLARO) -> None:
         ".js-plotly-plot .xgridlayer path, .js-plotly-plot .ygridlayer path { stroke: " + cores['borda'] + " !important; }",
         ".js-plotly-plot .xzl, .js-plotly-plot .yzl { stroke: " + cores['borda_forte'] + " !important; }",
     ]) if escuro else ""}
+
+    /* ---- Animação de carregamento (st.spinner) ----
+       O ícone giratório nativo é um anel CSS (border-radius:50% com um
+       lado sólido girando sobre 3 lados translúcidos, via animação
+       própria do Streamlit — não um SVG) na cor neutra padrão
+       (rgb(49,51,63)). Recolorimos os 4 lados na mesma proporção
+       sólido/translúcido, só trocando pra cor da marca, e reduzimos
+       ligeiramente o tamanho para ficar mais discreto — a animação em
+       si (velocidade, easing) não muda. */
+    [data-testid="stSpinnerIcon"] {{
+        width: 14px !important;
+        height: 14px !important;
+        border-top-color: var(--gat-navy) !important;
+        border-right-color: rgba({navy_rgb}, .2) !important;
+        border-bottom-color: rgba({navy_rgb}, .2) !important;
+        border-left-color: rgba({navy_rgb}, .2) !important;
+    }}
+    div[data-testid="stSpinner"] p {{
+        color: var(--gat-texto-fraco);
+        font-size: .87rem;
+    }}
 
     /* ---- Moldura padrão do Streamlit ----
        `[client] toolbarMode = "minimal"` (.streamlit/config.toml) já
