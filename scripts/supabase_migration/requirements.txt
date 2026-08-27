@@ -1,0 +1,4 @@
+# Dependência exclusiva das ferramentas em scripts/supabase_migration/ —
+# NÃO faz parte do app Streamlit em produção (requirements.txt na raiz)
+# até a migração ser validada e o backend Postgres ser ativado de verdade.
+psycopg2-binary>=2.9

@@ -22,7 +22,7 @@ import bcrypt
 import pandas as pd
 import streamlit as st
 
-from gat import backup_externo
+from gat import backup_externo, db_backend
 from gat.config import (
     APP_VERSION,
     AREAS_PERMISSAO,
@@ -45,17 +45,26 @@ from gat.horario import FUSO_BRASILIA, agora_br, hoje_br
 
 @contextmanager
 def _conectar() -> Iterator[sqlite3.Connection]:
-    """Abre uma conexão SQLite com row_factory configurado, fechando ao final."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    """
+    Abre uma conexão com row_factory configurado, fechando ao final.
+
+    Backend controlado por `GAT_DB_BACKEND` (ver `gat.db_backend`) — sem
+    essa variável definida, o comportamento é EXATAMENTE o de sempre
+    (sqlite3 puro contra `DB_PATH`); só muda quando alguém explicitamente
+    configurar `GAT_DB_BACKEND=postgres` (ainda não validado em produção —
+    ver `scripts/supabase_migration/CHECKLIST.md`).
+    """
+    backend_postgres = db_backend.backend_ativo() == "postgres"
+    conn = db_backend.conectar_bruto(DB_PATH)
     try:
         yield conn
         conn.commit()
-        if conn.total_changes > 0:
+        if not backend_postgres and conn.total_changes > 0:
             # Ambientes com disco efêmero (ex.: Streamlit Community Cloud)
             # recriam o disco do zero a cada reinício — sem isto, qualquer
             # gravação feita pela interface se perderia no próximo reinício.
+            # Só faz sentido para o arquivo SQLite local; o Postgres/Supabase
+            # já é persistente e remoto por conta própria.
             sincronizar_para_persistencia()
             backup_externo.agendar_backup_apos_gravacao()
     finally:

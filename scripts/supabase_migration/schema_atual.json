@@ -1,0 +1,4976 @@
+[
+  {
+    "nome": "alertas_manuais",
+    "ddl_original": "CREATE TABLE alertas_manuais (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            modulo TEXT NOT NULL,\n            projeto_id INTEGER,\n            titulo TEXT NOT NULL,\n            descricao TEXT,\n            num_at TEXT,\n            codigo_projeto TEXT,\n            nome_entidade TEXT,\n            disciplina TEXT,\n            revisao INTEGER,\n            especialista TEXT,\n            prioridade TEXT NOT NULL DEFAULT 'Média',\n            vencimento TEXT,\n            observacoes TEXT,\n            destinatarios TEXT,\n            status TEXT NOT NULL DEFAULT 'ABERTO',\n            criado_por TEXT NOT NULL,\n            criado_em TEXT NOT NULL,\n            atualizado_por TEXT,\n            atualizado_em TEXT,\n            encerrado_por TEXT,\n            encerrado_em TEXT,\n            motivo_encerramento TEXT\n        , arquivado_em TEXT, arquivado_por TEXT, motivo_arquivamento TEXT, arquivado_teste INTEGER NOT NULL DEFAULT 0)",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "modulo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "projeto_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "titulo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "descricao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "num_at",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "codigo_projeto",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "nome_entidade",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "disciplina",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "revisao",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "especialista",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "prioridade",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'Média'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "vencimento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "observacoes",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "destinatarios",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "status",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'ABERTO'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "encerrado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "encerrado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "motivo_encerramento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "motivo_arquivamento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_teste",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "idx_alertas_manuais_status",
+        "colunas": [
+          "status"
+        ],
+        "unico": false
+      },
+      {
+        "nome": "idx_alertas_manuais_modulo",
+        "colunas": [
+          "modulo"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 1
+  },
+  {
+    "nome": "alertas_radar",
+    "ddl_original": "CREATE TABLE alertas_radar (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                modulo TEXT NOT NULL,\n                projeto_id INTEGER NOT NULL,\n                tipo_alerta TEXT NOT NULL,\n                status TEXT NOT NULL DEFAULT 'ATIVO',\n                justificativa TEXT,\n                atualizado_em TEXT NOT NULL,\n                atualizado_por TEXT, providencia TEXT, responsavel_tratamento TEXT, data_tratamento TEXT, observacao TEXT, adiado_para TEXT,\n                UNIQUE(modulo, projeto_id, tipo_alerta)\n            )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "modulo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "projeto_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "tipo_alerta",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "status",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'ATIVO'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "justificativa",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "providencia",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "responsavel_tratamento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_tratamento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "observacao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "adiado_para",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "idx_alertas_radar_status",
+        "colunas": [
+          "status"
+        ],
+        "unico": false
+      },
+      {
+        "nome": "idx_alertas_radar_projeto",
+        "colunas": [
+          "modulo",
+          "projeto_id"
+        ],
+        "unico": false
+      },
+      {
+        "nome": "sqlite_autoindex_alertas_radar_1",
+        "colunas": [
+          "modulo",
+          "projeto_id",
+          "tipo_alerta"
+        ],
+        "unico": true
+      }
+    ],
+    "total_linhas": 10
+  },
+  {
+    "nome": "arquivo_auditoria",
+    "ddl_original": "CREATE TABLE arquivo_auditoria (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            tabela TEXT NOT NULL,\n            registro_id INTEGER NOT NULL,\n            tipo_operacao TEXT NOT NULL,\n            usuario TEXT NOT NULL,\n            data_hora TEXT NOT NULL,\n            justificativa TEXT,\n            descricao_registro TEXT,\n            origem TEXT\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "tabela",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "registro_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "tipo_operacao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "usuario",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_hora",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "justificativa",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "descricao_registro",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "origem",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "idx_arquivo_auditoria_tabela",
+        "colunas": [
+          "tabela",
+          "registro_id"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 5
+  },
+  {
+    "nome": "atividades_usuario",
+    "ddl_original": "CREATE TABLE atividades_usuario (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                usuario TEXT NOT NULL,\n                perfil TEXT,\n                tipo_evento TEXT NOT NULL,\n                modulo TEXT,\n                detalhe TEXT,\n                data_hora TEXT NOT NULL\n            )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "usuario",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "perfil",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "tipo_evento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "modulo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "detalhe",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_hora",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "idx_atividades_usuario_periodo",
+        "colunas": [
+          "usuario",
+          "data_hora"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 2404
+  },
+  {
+    "nome": "avaliacao_obrigatoria_isentos",
+    "ddl_original": "CREATE TABLE avaliacao_obrigatoria_isentos (\n            modulo TEXT NOT NULL,\n            projeto_id INTEGER NOT NULL,\n            motivo TEXT NOT NULL DEFAULT 'PRE_EXISTENTE_NA_ATIVACAO',\n            criado_em TEXT NOT NULL,\n            PRIMARY KEY (modulo, projeto_id)\n        )",
+    "colunas": [
+      {
+        "nome": "modulo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "projeto_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "motivo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'PRE_EXISTENTE_NA_ATIVACAO'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "modulo",
+      "projeto_id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [],
+    "total_linhas": 0
+  },
+  {
+    "nome": "avaliacoes_analistas",
+    "ddl_original": "CREATE TABLE avaliacoes_analistas (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                analista TEXT NOT NULL,\n                avaliador TEXT,\n                mes INTEGER NOT NULL,\n                ano INTEGER NOT NULL,\n                etg INTEGER, horario INTEGER, reunioes INTEGER, disponibilidade INTEGER,\n                conhecimento_tecnico INTEGER, produtividade INTEGER, qualidade INTEGER,\n                qtd_documentos INTEGER, qtd_ats INTEGER, prazos INTEGER,\n                organizacao INTEGER, colaboracao INTEGER, comunicacao INTEGER,\n                justificativa TEXT,\n                observacoes TEXT,\n                criado_em TEXT NOT NULL,\n                criado_por TEXT\n            )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "analista",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "avaliador",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "mes",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "ano",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "etg",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "horario",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "reunioes",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "disponibilidade",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "conhecimento_tecnico",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "produtividade",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "qualidade",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "qtd_documentos",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "qtd_ats",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "prazos",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "organizacao",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "colaboracao",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "comunicacao",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "justificativa",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "observacoes",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "idx_avaliacoes_analistas_periodo",
+        "colunas": [
+          "analista",
+          "ano",
+          "mes"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 0
+  },
+  {
+    "nome": "avaliacoes_checklist",
+    "ddl_original": "CREATE TABLE avaliacoes_checklist (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                tipo_entidade TEXT NOT NULL,\n                codigo_entidade TEXT,\n                nome_entidade TEXT NOT NULL,\n                disciplina TEXT,\n                projeto_id INTEGER,\n                at_referencia TEXT,\n                revisao INTEGER,\n                data_avaliacao TEXT NOT NULL,\n                analista_responsavel TEXT,\n                respostas_json TEXT NOT NULL,\n                pontuacao INTEGER NOT NULL,\n                classificacao TEXT NOT NULL,\n                acompanhamento TEXT NOT NULL,\n                observacoes_gerais TEXT,\n                criado_em TEXT NOT NULL,\n                criado_por TEXT\n            , obra_id INTEGER)",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "tipo_entidade",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "codigo_entidade",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "nome_entidade",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "disciplina",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "projeto_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "at_referencia",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "revisao",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_avaliacao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "analista_responsavel",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "respostas_json",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "pontuacao",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "classificacao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "acompanhamento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "observacoes_gerais",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "obra_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "idx_avaliacoes_checklist_obra",
+        "colunas": [
+          "obra_id"
+        ],
+        "unico": false
+      },
+      {
+        "nome": "idx_avaliacoes_checklist_projeto",
+        "colunas": [
+          "projeto_id"
+        ],
+        "unico": false
+      },
+      {
+        "nome": "idx_avaliacoes_checklist_entidade",
+        "colunas": [
+          "tipo_entidade",
+          "codigo_entidade",
+          "disciplina"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 4
+  },
+  {
+    "nome": "avaliacoes_prestadores",
+    "ddl_original": "CREATE TABLE avaliacoes_prestadores (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                codigo_prestador TEXT,\n                nome_prestador TEXT NOT NULL,\n                data_avaliacao TEXT NOT NULL,\n                nome_projeto TEXT,\n                at_referencia TEXT,\n                nota INTEGER NOT NULL,\n                analista_responsavel TEXT,\n                observacoes TEXT,\n                criado_em TEXT NOT NULL,\n                criado_por TEXT\n            )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "codigo_prestador",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "nome_prestador",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_avaliacao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "nome_projeto",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "at_referencia",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "nota",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "analista_responsavel",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "observacoes",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [],
+    "total_linhas": 0
+  },
+  {
+    "nome": "backups_historico",
+    "ddl_original": "CREATE TABLE backups_historico (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            arquivo TEXT NOT NULL UNIQUE,\n            tipo TEXT NOT NULL DEFAULT 'AUTOMATICO',\n            usuario TEXT,\n            tamanho_bytes INTEGER,\n            criado_em TEXT NOT NULL,\n            situacao TEXT NOT NULL DEFAULT 'OK',\n            observacoes TEXT\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "arquivo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "tipo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'AUTOMATICO'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "usuario",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "tamanho_bytes",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "situacao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'OK'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "observacoes",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "idx_backups_historico_arquivo",
+        "colunas": [
+          "arquivo"
+        ],
+        "unico": false
+      },
+      {
+        "nome": "sqlite_autoindex_backups_historico_1",
+        "colunas": [
+          "arquivo"
+        ],
+        "unico": true
+      }
+    ],
+    "total_linhas": 11
+  },
+  {
+    "nome": "cadastro_cessionarios",
+    "ddl_original": "CREATE TABLE cadastro_cessionarios (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            codigo TEXT NOT NULL UNIQUE,\n            nome_empresa TEXT NOT NULL,\n            luc TEXT,\n            rvp TEXT,\n            rci TEXT,\n            responsavel TEXT,\n            telefone TEXT,\n            email TEXT,\n            contatos TEXT,\n            status TEXT NOT NULL DEFAULT 'ATIVO',\n            observacoes TEXT,\n            criado_em TEXT NOT NULL,\n            criado_por TEXT,\n            atualizado_em TEXT,\n            atualizado_por TEXT\n        , arquivado_em TEXT, arquivado_por TEXT, motivo_arquivamento TEXT, arquivado_teste INTEGER NOT NULL DEFAULT 0)",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "codigo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "nome_empresa",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "luc",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "rvp",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "rci",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "responsavel",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "telefone",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "email",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "contatos",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "status",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'ATIVO'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "observacoes",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "motivo_arquivamento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_teste",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "idx_cadastro_cessionarios_codigo",
+        "colunas": [
+          "codigo"
+        ],
+        "unico": false
+      },
+      {
+        "nome": "sqlite_autoindex_cadastro_cessionarios_1",
+        "colunas": [
+          "codigo"
+        ],
+        "unico": true
+      }
+    ],
+    "total_linhas": 52
+  },
+  {
+    "nome": "cadastro_prestadores",
+    "ddl_original": "CREATE TABLE cadastro_prestadores (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            codigo TEXT NOT NULL UNIQUE,\n            nome_empresa TEXT NOT NULL,\n            possui_pep TEXT NOT NULL DEFAULT 'NAO',\n            numero_pep TEXT,\n            responsavel TEXT,\n            telefone TEXT,\n            email TEXT,\n            contatos TEXT,\n            status TEXT NOT NULL DEFAULT 'ATIVO',\n            observacoes TEXT,\n            criado_em TEXT NOT NULL,\n            criado_por TEXT,\n            atualizado_em TEXT,\n            atualizado_por TEXT\n        , arquivado_em TEXT, arquivado_por TEXT, motivo_arquivamento TEXT, arquivado_teste INTEGER NOT NULL DEFAULT 0)",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "codigo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "nome_empresa",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "possui_pep",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'NAO'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "numero_pep",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "responsavel",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "telefone",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "email",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "contatos",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "status",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'ATIVO'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "observacoes",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "motivo_arquivamento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_teste",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "idx_cadastro_prestadores_codigo",
+        "colunas": [
+          "codigo"
+        ],
+        "unico": false
+      },
+      {
+        "nome": "sqlite_autoindex_cadastro_prestadores_1",
+        "colunas": [
+          "codigo"
+        ],
+        "unico": true
+      }
+    ],
+    "total_linhas": 38
+  },
+  {
+    "nome": "cessionarios",
+    "ddl_original": "CREATE TABLE cessionarios (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                item INTEGER,\n                codigo TEXT,\n                cessionario TEXT NOT NULL,\n                disciplina TEXT,\n                disciplina_sla TEXT,\n                revisao INTEGER NOT NULL DEFAULT 0,\n                num_documentos INTEGER NOT NULL DEFAULT 0,\n                data_solicitacao TEXT NOT NULL,\n                tipo TEXT,\n                sla_dias INTEGER,\n                data_limite TEXT,\n                data_analise TEXT,\n                hold_inicio TEXT,\n                hold_fim TEXT,\n                num_at TEXT,\n                revisao_at INTEGER,\n                responsavel TEXT,\n                status_analise TEXT NOT NULL DEFAULT 'EM ANÁLISE',\n                observacoes TEXT,\n                natureza_revisao TEXT,\n                num_erros INTEGER,\n                etg TEXT NOT NULL DEFAULT 'NÃO',\n                criado_em TEXT NOT NULL,\n                criado_por TEXT,\n                atualizado_em TEXT,\n                atualizado_por TEXT\n            , pep TEXT, cessionario_cadastro_id INTEGER, luc TEXT, numero_rci TEXT, numero_rvp TEXT, data_atualizacao_rci TEXT, data_atualizacao_rvp TEXT, sla_original INTEGER, sla_reduzido INTEGER NOT NULL DEFAULT 0, justificativa_sla TEXT, data_limite_original TEXT, sla_alterado_por TEXT, sla_alterado_em TEXT, data_limite_ajustada_manualmente INTEGER NOT NULL DEFAULT 0, arquivado_em TEXT, arquivado_por TEXT, motivo_arquivamento TEXT, arquivado_teste INTEGER NOT NULL DEFAULT 0, resumo_mfiles INTEGER NOT NULL DEFAULT 0, resumo_drive INTEGER NOT NULL DEFAULT 0, resumo_email INTEGER NOT NULL DEFAULT 0, resumo_popup_disparado_em TEXT, resumo_ultima_geracao_em TEXT, resumo_gerado_por TEXT, resumo_qtd_geracoes INTEGER NOT NULL DEFAULT 0, avaliacao_opcional_perguntada_revisao INTEGER)",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "item",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "codigo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "cessionario",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "disciplina",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "disciplina_sla",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "revisao",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "num_documentos",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_solicitacao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "tipo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "sla_dias",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_limite",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_analise",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "hold_inicio",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "hold_fim",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "num_at",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "revisao_at",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "responsavel",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "status_analise",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'EM ANÁLISE'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "observacoes",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "natureza_revisao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "num_erros",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "etg",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'NÃO'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "pep",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "cessionario_cadastro_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "luc",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "numero_rci",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "numero_rvp",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_atualizacao_rci",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_atualizacao_rvp",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "sla_original",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "sla_reduzido",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "justificativa_sla",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_limite_original",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "sla_alterado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "sla_alterado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_limite_ajustada_manualmente",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "motivo_arquivamento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_teste",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "resumo_mfiles",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "resumo_drive",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "resumo_email",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "resumo_popup_disparado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "resumo_ultima_geracao_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "resumo_gerado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "resumo_qtd_geracoes",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "avaliacao_opcional_perguntada_revisao",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "idx_cessionarios_cadastro_id",
+        "colunas": [
+          "cessionario_cadastro_id"
+        ],
+        "unico": false
+      },
+      {
+        "nome": "idx_cessionarios_nome",
+        "colunas": [
+          "cessionario"
+        ],
+        "unico": false
+      },
+      {
+        "nome": "idx_cessionarios_num_at",
+        "colunas": [
+          "num_at"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 640
+  },
+  {
+    "nome": "codigos_disciplina",
+    "ddl_original": "CREATE TABLE codigos_disciplina (\n            disciplina TEXT PRIMARY KEY,\n            codigo TEXT,\n            descricao TEXT,\n            atualizado_em TEXT NOT NULL,\n            atualizado_por TEXT NOT NULL\n        )",
+    "colunas": [
+      {
+        "nome": "disciplina",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "codigo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "descricao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "disciplina"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [],
+    "total_linhas": 35
+  },
+  {
+    "nome": "configuracoes",
+    "ddl_original": "CREATE TABLE configuracoes (\n                chave TEXT PRIMARY KEY,\n                valor TEXT NOT NULL\n            )",
+    "colunas": [
+      {
+        "nome": "chave",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "valor",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "chave"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [],
+    "total_linhas": 5
+  },
+  {
+    "nome": "devolutiva_cobrancas",
+    "ddl_original": "CREATE TABLE devolutiva_cobrancas (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            modulo TEXT NOT NULL,\n            projeto_id INTEGER NOT NULL,\n            numero_cobranca INTEGER NOT NULL,\n            data_cobranca TEXT NOT NULL,\n            hora_cobranca TEXT,\n            usuario TEXT NOT NULL,\n            canal TEXT,\n            observacao TEXT,\n            criado_em TEXT NOT NULL\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "modulo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "projeto_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "numero_cobranca",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_cobranca",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "hora_cobranca",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "usuario",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "canal",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "observacao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "idx_devolutiva_cobrancas_projeto",
+        "colunas": [
+          "modulo",
+          "projeto_id"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 0
+  },
+  {
+    "nome": "fechamentos_avaliacao_analista",
+    "ddl_original": "CREATE TABLE fechamentos_avaliacao_analista (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            avaliacao_analista_id INTEGER REFERENCES avaliacoes_analistas(id) ON DELETE SET NULL,\n            analista TEXT NOT NULL,\n            mes INTEGER NOT NULL,\n            ano INTEGER NOT NULL,\n            nota_original REAL NOT NULL,\n            avaliacoes_obrigatorias INTEGER NOT NULL DEFAULT 0,\n            avaliacoes_pendentes INTEGER NOT NULL DEFAULT 0,\n            ats_pendentes TEXT,\n            penalizacao_fracao REAL NOT NULL DEFAULT 0,\n            bonificacao REAL NOT NULL DEFAULT 0,\n            nota_final REAL NOT NULL,\n            justificativa_automatica TEXT NOT NULL,\n            recomendacao_gerencial TEXT,\n            data_fechamento TEXT NOT NULL,\n            usuario_fechamento TEXT NOT NULL,\n            UNIQUE(analista, mes, ano)\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "avaliacao_analista_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "analista",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "mes",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "ano",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "nota_original",
+        "tipo_sqlite": "REAL",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "avaliacoes_obrigatorias",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "avaliacoes_pendentes",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "ats_pendentes",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "penalizacao_fracao",
+        "tipo_sqlite": "REAL",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "bonificacao",
+        "tipo_sqlite": "REAL",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "nota_final",
+        "tipo_sqlite": "REAL",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "justificativa_automatica",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "recomendacao_gerencial",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_fechamento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "usuario_fechamento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [
+      {
+        "coluna": "avaliacao_analista_id",
+        "tabela_referenciada": "avaliacoes_analistas",
+        "coluna_referenciada": "id",
+        "on_delete": "SET NULL",
+        "on_update": "NO ACTION"
+      }
+    ],
+    "indices": [
+      {
+        "nome": "idx_fechamentos_avaliacao_analista_competencia",
+        "colunas": [
+          "mes",
+          "ano"
+        ],
+        "unico": false
+      },
+      {
+        "nome": "sqlite_autoindex_fechamentos_avaliacao_analista_1",
+        "colunas": [
+          "analista",
+          "mes",
+          "ano"
+        ],
+        "unico": true
+      }
+    ],
+    "total_linhas": 0
+  },
+  {
+    "nome": "historico_edicoes",
+    "ddl_original": "CREATE TABLE historico_edicoes (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                tabela TEXT NOT NULL,\n                registro_id INTEGER NOT NULL,\n                campo TEXT NOT NULL,\n                valor_anterior TEXT,\n                valor_novo TEXT,\n                usuario TEXT,\n                data_hora TEXT NOT NULL\n            )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "tabela",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "registro_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "campo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "valor_anterior",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "valor_novo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "usuario",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_hora",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [],
+    "total_linhas": 7730
+  },
+  {
+    "nome": "importacoes_planilha_historico",
+    "ddl_original": "CREATE TABLE importacoes_planilha_historico (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            data_hora TEXT NOT NULL,\n            usuario TEXT NOT NULL,\n            nome_arquivo TEXT NOT NULL,\n            origem TEXT NOT NULL,\n            lidos INTEGER NOT NULL DEFAULT 0,\n            novos INTEGER NOT NULL DEFAULT 0,\n            atualizados INTEGER NOT NULL DEFAULT 0,\n            conflitos_tratados INTEGER NOT NULL DEFAULT 0,\n            ignorados INTEGER NOT NULL DEFAULT 0,\n            inconsistencias INTEGER NOT NULL DEFAULT 0,\n            resultado TEXT NOT NULL,\n            erro TEXT\n        , backup_ref TEXT)",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "data_hora",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "usuario",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "nome_arquivo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "origem",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "lidos",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "novos",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizados",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "conflitos_tratados",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "ignorados",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "inconsistencias",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "resultado",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "erro",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "backup_ref",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "idx_importacoes_planilha_historico_data",
+        "colunas": [
+          "data_hora"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 14
+  },
+  {
+    "nome": "manual_anexos",
+    "ddl_original": "CREATE TABLE manual_anexos (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            capitulo_id INTEGER NOT NULL REFERENCES manual_capitulos(id) ON DELETE CASCADE,\n            tipo TEXT NOT NULL,\n            nome_arquivo TEXT NOT NULL,\n            conteudo BLOB NOT NULL,\n            criado_em TEXT NOT NULL,\n            criado_por TEXT NOT NULL\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "capitulo_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "tipo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "nome_arquivo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "conteudo",
+        "tipo_sqlite": "BLOB",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [
+      {
+        "coluna": "capitulo_id",
+        "tabela_referenciada": "manual_capitulos",
+        "coluna_referenciada": "id",
+        "on_delete": "CASCADE",
+        "on_update": "NO ACTION"
+      }
+    ],
+    "indices": [
+      {
+        "nome": "idx_manual_anexos_capitulo",
+        "colunas": [
+          "capitulo_id"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 0
+  },
+  {
+    "nome": "manual_capitulos",
+    "ddl_original": "CREATE TABLE manual_capitulos (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            ordem INTEGER NOT NULL,\n            titulo TEXT NOT NULL,\n            conteudo TEXT,\n            perfis_visiveis TEXT,\n            criado_em TEXT NOT NULL,\n            atualizado_em TEXT,\n            atualizado_por TEXT\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "ordem",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "titulo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "conteudo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "perfis_visiveis",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [],
+    "total_linhas": 42
+  },
+  {
+    "nome": "manual_confirmacoes_leitura",
+    "ddl_original": "CREATE TABLE manual_confirmacoes_leitura (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            usuario TEXT NOT NULL,\n            versao INTEGER NOT NULL,\n            confirmado_em TEXT NOT NULL,\n            UNIQUE(usuario, versao)\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "usuario",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "versao",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "confirmado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "sqlite_autoindex_manual_confirmacoes_leitura_1",
+        "colunas": [
+          "usuario",
+          "versao"
+        ],
+        "unico": true
+      }
+    ],
+    "total_linhas": 1
+  },
+  {
+    "nome": "manual_versoes",
+    "ddl_original": "CREATE TABLE manual_versoes (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            numero_versao INTEGER NOT NULL,\n            notas TEXT,\n            publicado_em TEXT NOT NULL,\n            publicado_por TEXT NOT NULL,\n            ativa INTEGER NOT NULL DEFAULT 0\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "numero_versao",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "notas",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "publicado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "publicado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "ativa",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [],
+    "total_linhas": 1
+  },
+  {
+    "nome": "obras_prestador",
+    "ddl_original": "CREATE TABLE obras_prestador (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            prestador_id INTEGER NOT NULL REFERENCES cadastro_prestadores(id) ON DELETE CASCADE,\n            nome_obra TEXT NOT NULL,\n            codigo_referencia TEXT,\n            status TEXT NOT NULL DEFAULT 'ATIVA',\n            e_canteiro INTEGER NOT NULL DEFAULT 0,\n            observacoes TEXT,\n            criado_em TEXT NOT NULL,\n            criado_por TEXT,\n            atualizado_em TEXT,\n            atualizado_por TEXT\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "prestador_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "nome_obra",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "codigo_referencia",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "status",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'ATIVA'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "e_canteiro",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "observacoes",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [
+      {
+        "coluna": "prestador_id",
+        "tabela_referenciada": "cadastro_prestadores",
+        "coluna_referenciada": "id",
+        "on_delete": "CASCADE",
+        "on_update": "NO ACTION"
+      }
+    ],
+    "indices": [
+      {
+        "nome": "idx_obras_prestador_prestador_id",
+        "colunas": [
+          "prestador_id"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 0
+  },
+  {
+    "nome": "observacoes_mensais",
+    "ddl_original": "CREATE TABLE observacoes_mensais (\n                competencia TEXT PRIMARY KEY,\n                texto TEXT NOT NULL,\n                atualizado_em TEXT NOT NULL,\n                atualizado_por TEXT\n            )",
+    "colunas": [
+      {
+        "nome": "competencia",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "texto",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "competencia"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [],
+    "total_linhas": 0
+  },
+  {
+    "nome": "permissoes_area",
+    "ddl_original": "CREATE TABLE permissoes_area (\n                usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,\n                area TEXT NOT NULL,\n                permitido INTEGER NOT NULL DEFAULT 1,\n                PRIMARY KEY (usuario_id, area)\n            )",
+    "colunas": [
+      {
+        "nome": "usuario_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "area",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "permitido",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "1",
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "usuario_id",
+      "area"
+    ],
+    "chaves_estrangeiras": [
+      {
+        "coluna": "usuario_id",
+        "tabela_referenciada": "usuarios",
+        "coluna_referenciada": "id",
+        "on_delete": "CASCADE",
+        "on_update": "NO ACTION"
+      }
+    ],
+    "indices": [],
+    "total_linhas": 1464
+  },
+  {
+    "nome": "permissoes_modulo",
+    "ddl_original": "CREATE TABLE permissoes_modulo (\n                usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,\n                modulo TEXT NOT NULL,\n                permitido INTEGER NOT NULL DEFAULT 1,\n                PRIMARY KEY (usuario_id, modulo)\n            )",
+    "colunas": [
+      {
+        "nome": "usuario_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "modulo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "permitido",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "1",
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "usuario_id",
+      "modulo"
+    ],
+    "chaves_estrangeiras": [
+      {
+        "coluna": "usuario_id",
+        "tabela_referenciada": "usuarios",
+        "coluna_referenciada": "id",
+        "on_delete": "CASCADE",
+        "on_update": "NO ACTION"
+      }
+    ],
+    "indices": [],
+    "total_linhas": 93
+  },
+  {
+    "nome": "planos_acao",
+    "ddl_original": "CREATE TABLE planos_acao (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                reuniao_id INTEGER REFERENCES reunioes(id) ON DELETE SET NULL,\n                descricao TEXT NOT NULL,\n                responsavel TEXT,\n                prazo TEXT,\n                status TEXT NOT NULL DEFAULT 'PENDENTE',\n                criado_em TEXT NOT NULL,\n                criado_por TEXT,\n                concluido_em TEXT,\n                concluido_por TEXT\n            , origem TEXT NOT NULL DEFAULT 'GAT', pmo_projeto_id INTEGER REFERENCES pmo_projetos(id), arquivado_em TEXT, arquivado_por TEXT, motivo_arquivamento TEXT, arquivado_teste INTEGER NOT NULL DEFAULT 0)",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "reuniao_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "descricao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "responsavel",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "prazo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "status",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'PENDENTE'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "concluido_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "concluido_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "origem",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'GAT'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "pmo_projeto_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "motivo_arquivamento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_teste",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [
+      {
+        "coluna": "pmo_projeto_id",
+        "tabela_referenciada": "pmo_projetos",
+        "coluna_referenciada": "id",
+        "on_delete": "NO ACTION",
+        "on_update": "NO ACTION"
+      },
+      {
+        "coluna": "reuniao_id",
+        "tabela_referenciada": "reunioes",
+        "coluna_referenciada": "id",
+        "on_delete": "SET NULL",
+        "on_update": "NO ACTION"
+      }
+    ],
+    "indices": [],
+    "total_linhas": 1
+  },
+  {
+    "nome": "pmo_alertas_cronograma",
+    "ddl_original": "CREATE TABLE pmo_alertas_cronograma (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            projeto_id INTEGER NOT NULL UNIQUE REFERENCES pmo_projetos(id) ON DELETE CASCADE,\n            alerta_manual_id INTEGER REFERENCES alertas_manuais(id),\n            status TEXT NOT NULL DEFAULT 'ATIVO',\n            criado_em TEXT NOT NULL,\n            qtd_lembretes INTEGER NOT NULL DEFAULT 0,\n            ultimo_lembrete_em TEXT,\n            proximo_lembrete_em TEXT,\n            encerrado_em TEXT,\n            anexado_por TEXT,\n            anexado_em TEXT\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "projeto_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "alerta_manual_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "status",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'ATIVO'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "qtd_lembretes",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "ultimo_lembrete_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "proximo_lembrete_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "encerrado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "anexado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "anexado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [
+      {
+        "coluna": "alerta_manual_id",
+        "tabela_referenciada": "alertas_manuais",
+        "coluna_referenciada": "id",
+        "on_delete": "NO ACTION",
+        "on_update": "NO ACTION"
+      },
+      {
+        "coluna": "projeto_id",
+        "tabela_referenciada": "pmo_projetos",
+        "coluna_referenciada": "id",
+        "on_delete": "CASCADE",
+        "on_update": "NO ACTION"
+      }
+    ],
+    "indices": [
+      {
+        "nome": "sqlite_autoindex_pmo_alertas_cronograma_1",
+        "colunas": [
+          "projeto_id"
+        ],
+        "unico": true
+      }
+    ],
+    "total_linhas": 0
+  },
+  {
+    "nome": "pmo_comunicacoes",
+    "ddl_original": "CREATE TABLE pmo_comunicacoes (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            projeto_id INTEGER NOT NULL REFERENCES pmo_projetos(id) ON DELETE CASCADE,\n            data TEXT NOT NULL,\n            tipo TEXT,\n            descricao TEXT NOT NULL,\n            responsavel TEXT,\n            criado_em TEXT NOT NULL,\n            criado_por TEXT NOT NULL\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "projeto_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "tipo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "descricao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "responsavel",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [
+      {
+        "coluna": "projeto_id",
+        "tabela_referenciada": "pmo_projetos",
+        "coluna_referenciada": "id",
+        "on_delete": "CASCADE",
+        "on_update": "NO ACTION"
+      }
+    ],
+    "indices": [
+      {
+        "nome": "idx_pmo_comunicacoes_projeto",
+        "colunas": [
+          "projeto_id"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 0
+  },
+  {
+    "nome": "pmo_cronograma_arquivos",
+    "ddl_original": "CREATE TABLE pmo_cronograma_arquivos (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            projeto_id INTEGER NOT NULL REFERENCES pmo_projetos(id) ON DELETE CASCADE,\n            nome_arquivo TEXT NOT NULL,\n            formato TEXT NOT NULL,\n            conteudo BLOB NOT NULL,\n            interpretado INTEGER NOT NULL DEFAULT 0,\n            ativo INTEGER NOT NULL DEFAULT 1,\n            enviado_por TEXT NOT NULL,\n            enviado_em TEXT NOT NULL,\n            removido_por TEXT,\n            removido_em TEXT\n        , arquivado_em TEXT, arquivado_por TEXT, motivo_arquivamento TEXT, arquivado_teste INTEGER NOT NULL DEFAULT 0)",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "projeto_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "nome_arquivo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "formato",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "conteudo",
+        "tipo_sqlite": "BLOB",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "interpretado",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "ativo",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "1",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "enviado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "enviado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "removido_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "removido_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "motivo_arquivamento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_teste",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [
+      {
+        "coluna": "projeto_id",
+        "tabela_referenciada": "pmo_projetos",
+        "coluna_referenciada": "id",
+        "on_delete": "CASCADE",
+        "on_update": "NO ACTION"
+      }
+    ],
+    "indices": [
+      {
+        "nome": "idx_pmo_cronograma_arquivos_projeto",
+        "colunas": [
+          "projeto_id"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 0
+  },
+  {
+    "nome": "pmo_cronograma_atividades",
+    "ddl_original": "CREATE TABLE pmo_cronograma_atividades (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            arquivo_id INTEGER NOT NULL REFERENCES pmo_cronograma_arquivos(id) ON DELETE CASCADE,\n            projeto_id INTEGER NOT NULL REFERENCES pmo_projetos(id) ON DELETE CASCADE,\n            identificador_origem TEXT,\n            nome TEXT NOT NULL,\n            data_inicio TEXT,\n            data_fim TEXT,\n            duracao_dias REAL,\n            percentual_concluido REAL NOT NULL DEFAULT 0,\n            e_marco INTEGER NOT NULL DEFAULT 0,\n            predecessoras TEXT,\n            caminho_critico INTEGER NOT NULL DEFAULT 0,\n            folga_dias REAL\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "arquivo_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "projeto_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "identificador_origem",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "nome",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_inicio",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_fim",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "duracao_dias",
+        "tipo_sqlite": "REAL",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "percentual_concluido",
+        "tipo_sqlite": "REAL",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "e_marco",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "predecessoras",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "caminho_critico",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "folga_dias",
+        "tipo_sqlite": "REAL",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [
+      {
+        "coluna": "projeto_id",
+        "tabela_referenciada": "pmo_projetos",
+        "coluna_referenciada": "id",
+        "on_delete": "CASCADE",
+        "on_update": "NO ACTION"
+      },
+      {
+        "coluna": "arquivo_id",
+        "tabela_referenciada": "pmo_cronograma_arquivos",
+        "coluna_referenciada": "id",
+        "on_delete": "CASCADE",
+        "on_update": "NO ACTION"
+      }
+    ],
+    "indices": [
+      {
+        "nome": "idx_pmo_cronograma_atividades_projeto",
+        "colunas": [
+          "projeto_id"
+        ],
+        "unico": false
+      },
+      {
+        "nome": "idx_pmo_cronograma_atividades_arquivo",
+        "colunas": [
+          "arquivo_id"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 0
+  },
+  {
+    "nome": "pmo_cronograma_lembretes",
+    "ddl_original": "CREATE TABLE pmo_cronograma_lembretes (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            projeto_id INTEGER NOT NULL REFERENCES pmo_projetos(id) ON DELETE CASCADE,\n            enviado_em TEXT NOT NULL,\n            mensagem TEXT NOT NULL\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "projeto_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "enviado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "mensagem",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [
+      {
+        "coluna": "projeto_id",
+        "tabela_referenciada": "pmo_projetos",
+        "coluna_referenciada": "id",
+        "on_delete": "CASCADE",
+        "on_update": "NO ACTION"
+      }
+    ],
+    "indices": [
+      {
+        "nome": "idx_pmo_cronograma_lembretes_projeto",
+        "colunas": [
+          "projeto_id"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 0
+  },
+  {
+    "nome": "pmo_entregaveis",
+    "ddl_original": "CREATE TABLE pmo_entregaveis (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            projeto_id INTEGER NOT NULL REFERENCES pmo_projetos(id) ON DELETE CASCADE,\n            nome TEXT NOT NULL,\n            previsto INTEGER NOT NULL DEFAULT 1,\n            entregue INTEGER NOT NULL DEFAULT 0,\n            data_prevista TEXT,\n            data_entrega TEXT,\n            percentual_documental REAL NOT NULL DEFAULT 0,\n            observacoes TEXT,\n            criado_em TEXT NOT NULL,\n            criado_por TEXT NOT NULL,\n            atualizado_em TEXT,\n            atualizado_por TEXT\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "projeto_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "nome",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "previsto",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "1",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "entregue",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_prevista",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_entrega",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "percentual_documental",
+        "tipo_sqlite": "REAL",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "observacoes",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [
+      {
+        "coluna": "projeto_id",
+        "tabela_referenciada": "pmo_projetos",
+        "coluna_referenciada": "id",
+        "on_delete": "CASCADE",
+        "on_update": "NO ACTION"
+      }
+    ],
+    "indices": [
+      {
+        "nome": "idx_pmo_entregaveis_projeto",
+        "colunas": [
+          "projeto_id"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 0
+  },
+  {
+    "nome": "pmo_medicoes",
+    "ddl_original": "CREATE TABLE pmo_medicoes (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            projeto_id INTEGER NOT NULL REFERENCES pmo_projetos(id) ON DELETE CASCADE,\n            competencia_mes INTEGER NOT NULL,\n            competencia_ano INTEGER NOT NULL,\n            percentual REAL,\n            valor_medido REAL,\n            situacao TEXT NOT NULL DEFAULT 'EM ANÁLISE',\n            valor_aprovado REAL,\n            data_aprovacao TEXT,\n            valor_pago REAL,\n            data_pagamento TEXT,\n            valor_glosado REAL NOT NULL DEFAULT 0,\n            criado_por TEXT NOT NULL,\n            criado_em TEXT NOT NULL,\n            atualizado_em TEXT,\n            atualizado_por TEXT\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "projeto_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "competencia_mes",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "competencia_ano",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "percentual",
+        "tipo_sqlite": "REAL",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "valor_medido",
+        "tipo_sqlite": "REAL",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "situacao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'EM ANÁLISE'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "valor_aprovado",
+        "tipo_sqlite": "REAL",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_aprovacao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "valor_pago",
+        "tipo_sqlite": "REAL",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_pagamento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "valor_glosado",
+        "tipo_sqlite": "REAL",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [
+      {
+        "coluna": "projeto_id",
+        "tabela_referenciada": "pmo_projetos",
+        "coluna_referenciada": "id",
+        "on_delete": "CASCADE",
+        "on_update": "NO ACTION"
+      }
+    ],
+    "indices": [
+      {
+        "nome": "idx_pmo_medicoes_projeto",
+        "colunas": [
+          "projeto_id"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 0
+  },
+  {
+    "nome": "pmo_projeto_kpis",
+    "ddl_original": "CREATE TABLE pmo_projeto_kpis (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            projeto_id INTEGER NOT NULL REFERENCES pmo_projetos(id) ON DELETE CASCADE,\n            kpi_chave TEXT NOT NULL,\n            habilitado INTEGER NOT NULL DEFAULT 1,\n            habilitado_em TEXT,\n            desabilitado_em TEXT,\n            UNIQUE(projeto_id, kpi_chave)\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "projeto_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "kpi_chave",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "habilitado",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "1",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "habilitado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "desabilitado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [
+      {
+        "coluna": "projeto_id",
+        "tabela_referenciada": "pmo_projetos",
+        "coluna_referenciada": "id",
+        "on_delete": "CASCADE",
+        "on_update": "NO ACTION"
+      }
+    ],
+    "indices": [
+      {
+        "nome": "sqlite_autoindex_pmo_projeto_kpis_1",
+        "colunas": [
+          "projeto_id",
+          "kpi_chave"
+        ],
+        "unico": true
+      }
+    ],
+    "total_linhas": 0
+  },
+  {
+    "nome": "pmo_projetos",
+    "ddl_original": "CREATE TABLE pmo_projetos (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            nome TEXT NOT NULL,\n            cliente TEXT,\n            contratada TEXT,\n            gerente TEXT,\n            data_inicio TEXT,\n            data_prevista_termino TEXT,\n            valor_contratual REAL,\n            tipo_contrato TEXT,\n            observacoes TEXT,\n            status TEXT NOT NULL DEFAULT 'EM ANDAMENTO',\n            saude TEXT NOT NULL DEFAULT 'VERDE',\n            percentual_execucao REAL NOT NULL DEFAULT 0,\n            proximo_marco TEXT,\n            proximo_marco_data TEXT,\n            criado_em TEXT NOT NULL,\n            criado_por TEXT NOT NULL,\n            atualizado_em TEXT,\n            atualizado_por TEXT\n        , arquivado_em TEXT, arquivado_por TEXT, motivo_arquivamento TEXT, arquivado_teste INTEGER NOT NULL DEFAULT 0)",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "nome",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "cliente",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "contratada",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "gerente",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_inicio",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_prevista_termino",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "valor_contratual",
+        "tipo_sqlite": "REAL",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "tipo_contrato",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "observacoes",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "status",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'EM ANDAMENTO'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "saude",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'VERDE'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "percentual_execucao",
+        "tipo_sqlite": "REAL",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "proximo_marco",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "proximo_marco_data",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "motivo_arquivamento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_teste",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [],
+    "total_linhas": 0
+  },
+  {
+    "nome": "pmo_riscos",
+    "ddl_original": "CREATE TABLE pmo_riscos (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            projeto_id INTEGER NOT NULL REFERENCES pmo_projetos(id) ON DELETE CASCADE,\n            descricao TEXT NOT NULL,\n            probabilidade INTEGER NOT NULL,\n            impacto INTEGER NOT NULL,\n            status TEXT NOT NULL DEFAULT 'ABERTO',\n            responsavel TEXT,\n            plano_mitigacao TEXT,\n            criado_em TEXT NOT NULL,\n            criado_por TEXT NOT NULL,\n            atualizado_em TEXT,\n            atualizado_por TEXT\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "projeto_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "descricao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "probabilidade",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "impacto",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "status",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'ABERTO'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "responsavel",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "plano_mitigacao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [
+      {
+        "coluna": "projeto_id",
+        "tabela_referenciada": "pmo_projetos",
+        "coluna_referenciada": "id",
+        "on_delete": "CASCADE",
+        "on_update": "NO ACTION"
+      }
+    ],
+    "indices": [
+      {
+        "nome": "idx_pmo_riscos_projeto",
+        "colunas": [
+          "projeto_id"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 0
+  },
+  {
+    "nome": "prestadores",
+    "ddl_original": "CREATE TABLE prestadores (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                item INTEGER,\n                codigo TEXT,\n                prestador TEXT NOT NULL,\n                disciplina TEXT,\n                disciplina_sla TEXT,\n                peps TEXT,\n                obra_referencia TEXT,\n                revisao INTEGER NOT NULL DEFAULT 0,\n                num_documentos INTEGER NOT NULL DEFAULT 0,\n                data_solicitacao TEXT NOT NULL,\n                data_limite TEXT,\n                data_analise TEXT,\n                hold_inicio TEXT,\n                hold_fim TEXT,\n                num_at TEXT,\n                revisao_at INTEGER,\n                responsavel TEXT,\n                status_analise TEXT NOT NULL DEFAULT 'EM ANÁLISE',\n                observacoes TEXT,\n                natureza_revisao TEXT,\n                num_erros INTEGER,\n                etg TEXT NOT NULL DEFAULT 'NÃO',\n                criado_em TEXT NOT NULL,\n                criado_por TEXT,\n                atualizado_em TEXT,\n                atualizado_por TEXT\n            , prestador_cadastro_id INTEGER, obra_id INTEGER, sla_dias INTEGER, sla_original INTEGER, sla_reduzido INTEGER NOT NULL DEFAULT 0, nivel_prioridade INTEGER, justificativa_sla TEXT, data_limite_original TEXT, sla_alterado_por TEXT, sla_alterado_em TEXT, data_limite_ajustada_manualmente INTEGER NOT NULL DEFAULT 0, arquivado_em TEXT, arquivado_por TEXT, motivo_arquivamento TEXT, arquivado_teste INTEGER NOT NULL DEFAULT 0, resumo_mfiles INTEGER NOT NULL DEFAULT 0, resumo_drive INTEGER NOT NULL DEFAULT 0, resumo_email INTEGER NOT NULL DEFAULT 0, resumo_popup_disparado_em TEXT, resumo_ultima_geracao_em TEXT, resumo_gerado_por TEXT, resumo_qtd_geracoes INTEGER NOT NULL DEFAULT 0, avaliacao_opcional_perguntada_revisao INTEGER)",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "item",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "codigo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "prestador",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "disciplina",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "disciplina_sla",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "peps",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "obra_referencia",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "revisao",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "num_documentos",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_solicitacao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_limite",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_analise",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "hold_inicio",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "hold_fim",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "num_at",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "revisao_at",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "responsavel",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "status_analise",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'EM ANÁLISE'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "observacoes",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "natureza_revisao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "num_erros",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "etg",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'NÃO'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "prestador_cadastro_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "obra_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "sla_dias",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "sla_original",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "sla_reduzido",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "nivel_prioridade",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "justificativa_sla",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_limite_original",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "sla_alterado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "sla_alterado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_limite_ajustada_manualmente",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "motivo_arquivamento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_teste",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "resumo_mfiles",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "resumo_drive",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "resumo_email",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "resumo_popup_disparado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "resumo_ultima_geracao_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "resumo_gerado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "resumo_qtd_geracoes",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "avaliacao_opcional_perguntada_revisao",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "idx_prestadores_obra_id",
+        "colunas": [
+          "obra_id"
+        ],
+        "unico": false
+      },
+      {
+        "nome": "idx_prestadores_cadastro_id",
+        "colunas": [
+          "prestador_cadastro_id"
+        ],
+        "unico": false
+      },
+      {
+        "nome": "idx_prestadores_nome",
+        "colunas": [
+          "prestador"
+        ],
+        "unico": false
+      },
+      {
+        "nome": "idx_prestadores_num_at",
+        "colunas": [
+          "num_at"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 583
+  },
+  {
+    "nome": "repactuacoes_prazo",
+    "ddl_original": "CREATE TABLE repactuacoes_prazo (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            tabela TEXT NOT NULL,\n            registro_id INTEGER NOT NULL,\n            data_anterior TEXT,\n            data_nova TEXT,\n            motivo TEXT NOT NULL,\n            usuario TEXT,\n            data_hora TEXT NOT NULL\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "tabela",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "registro_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_anterior",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_nova",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "motivo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "usuario",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_hora",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "idx_repactuacoes_prazo_registro",
+        "colunas": [
+          "tabela",
+          "registro_id"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 0
+  },
+  {
+    "nome": "resumo_conclusao_historico",
+    "ddl_original": "CREATE TABLE resumo_conclusao_historico (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            tabela TEXT NOT NULL,\n            registro_id INTEGER NOT NULL,\n            evento TEXT NOT NULL,\n            mfiles INTEGER NOT NULL DEFAULT 0,\n            drive INTEGER NOT NULL DEFAULT 0,\n            email INTEGER NOT NULL DEFAULT 0,\n            selecao_anterior TEXT,\n            usuario TEXT NOT NULL,\n            data_hora TEXT NOT NULL\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "tabela",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "registro_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "evento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "mfiles",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "drive",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "email",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "selecao_anterior",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "usuario",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_hora",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "idx_resumo_conclusao_historico_registro",
+        "colunas": [
+          "tabela",
+          "registro_id"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 22
+  },
+  {
+    "nome": "reuniao_participantes",
+    "ddl_original": "CREATE TABLE reuniao_participantes (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                reuniao_id INTEGER NOT NULL REFERENCES reunioes(id) ON DELETE CASCADE,\n                nome TEXT NOT NULL\n            )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "reuniao_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "nome",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [
+      {
+        "coluna": "reuniao_id",
+        "tabela_referenciada": "reunioes",
+        "coluna_referenciada": "id",
+        "on_delete": "CASCADE",
+        "on_update": "NO ACTION"
+      }
+    ],
+    "indices": [],
+    "total_linhas": 0
+  },
+  {
+    "nome": "reuniao_projetos",
+    "ddl_original": "CREATE TABLE reuniao_projetos (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                reuniao_id INTEGER NOT NULL REFERENCES reunioes(id) ON DELETE CASCADE,\n                modulo TEXT NOT NULL,\n                projeto_id INTEGER NOT NULL\n            )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "reuniao_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "modulo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "projeto_id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [
+      {
+        "coluna": "reuniao_id",
+        "tabela_referenciada": "reunioes",
+        "coluna_referenciada": "id",
+        "on_delete": "CASCADE",
+        "on_update": "NO ACTION"
+      }
+    ],
+    "indices": [],
+    "total_linhas": 0
+  },
+  {
+    "nome": "reunioes",
+    "ddl_original": "CREATE TABLE reunioes (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                titulo TEXT NOT NULL,\n                pauta TEXT,\n                data_prevista TEXT,\n                data_realizada TEXT,\n                ata TEXT,\n                decisoes TEXT,\n                criado_em TEXT NOT NULL,\n                criado_por TEXT,\n                atualizado_em TEXT,\n                atualizado_por TEXT\n            , origem TEXT NOT NULL DEFAULT 'GAT', arquivado_em TEXT, arquivado_por TEXT, motivo_arquivamento TEXT, arquivado_teste INTEGER NOT NULL DEFAULT 0)",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "titulo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "pauta",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_prevista",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "data_realizada",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "ata",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "decisoes",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "origem",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'GAT'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "motivo_arquivamento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_teste",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [],
+    "total_linhas": 1
+  },
+  {
+    "nome": "schema_version",
+    "ddl_original": "CREATE TABLE schema_version (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                versao INTEGER NOT NULL,\n                aplicado_em TEXT NOT NULL,\n                descricao TEXT NOT NULL,\n                status TEXT NOT NULL\n            )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "versao",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "aplicado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "descricao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "status",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [],
+    "total_linhas": 40
+  },
+  {
+    "nome": "usuarios",
+    "ddl_original": "CREATE TABLE usuarios (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                username TEXT UNIQUE NOT NULL,\n                senha_hash TEXT NOT NULL,\n                nome_completo TEXT,\n                perfil TEXT NOT NULL DEFAULT 'ANALISTA',\n                ativo INTEGER NOT NULL DEFAULT 1,\n                criado_em TEXT NOT NULL\n            , deve_trocar_senha INTEGER NOT NULL DEFAULT 0, ultimo_acesso TEXT, analista_vinculado TEXT, arquivado_em TEXT, arquivado_por TEXT, motivo_arquivamento TEXT, arquivado_teste INTEGER NOT NULL DEFAULT 0, tema_preferido TEXT NOT NULL DEFAULT 'claro')",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "username",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "senha_hash",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "nome_completo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "perfil",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'ANALISTA'",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "ativo",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "1",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "deve_trocar_senha",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "ultimo_acesso",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "analista_vinculado",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "motivo_arquivamento",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "arquivado_teste",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "tema_preferido",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": "'claro'",
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "sqlite_autoindex_usuarios_1",
+        "colunas": [
+          "username"
+        ],
+        "unico": true
+      }
+    ],
+    "total_linhas": 31
+  }
+]
