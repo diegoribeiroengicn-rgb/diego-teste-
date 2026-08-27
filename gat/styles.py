@@ -71,7 +71,10 @@ def injetar_css_global(tema: str = TEMA_CLARO) -> None:
     navy_rgb = _rgb(cores["navy"])
     css = f"""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
     :root {{
+        --gat-fonte: 'Inter', -apple-system, 'Segoe UI', sans-serif;
         --gat-navy: {cores['navy']};
         --gat-azul: {cores['azul']};
         --gat-azul-2: {cores['azul_2']};
@@ -93,14 +96,17 @@ def injetar_css_global(tema: str = TEMA_CLARO) -> None:
     html, body, .stApp {{
         background: var(--gat-bg);
         font-size: 16px;
+        font-family: var(--gat-fonte);
         color: var(--gat-texto);
     }}
     p, li, label, .stMarkdown {{
         font-size: 0.95rem;
         line-height: 1.55;
+        font-family: var(--gat-fonte);
         color: var(--gat-texto);
     }}
     h1, h2, h3 {{
+        font-family: var(--gat-fonte);
         color: var(--gat-navy);
         font-weight: 700;
         letter-spacing: -.2px;

@@ -9,3 +9,28 @@
 # (menu_items), que este projeto não define, então o menu inteiro some.
 # Testado contra o Streamlit 1.61.1 (versão instalada, ver requirements.txt).
 toolbarMode = "minimal"
+
+# ---------------------------------------------------------------------------
+# Tema — mesma paleta institucional Tecnoplano já usada pelo CSS customizado
+# (gat/styles.py::CORES / _PALETA_ESCURA), aqui como base nativa do
+# Streamlit para os poucos elementos que o CSS não alcança. O sistema de
+# troca de tema por usuário (segmented_control "Aparência" na barra
+# lateral, persistido por usuário) continua sendo o CSS customizado — este
+# bloco é só o "chão" claro que o app carrega antes de aplicar o tema
+# escolhido, e o [theme.dark] correspondente, para não haver um instante
+# de tema errado durante o carregamento inicial.
+[theme]
+primaryColor = "#1B3A8A"           # navy Tecnoplano
+backgroundColor = "#F8FAFC"
+secondaryBackgroundColor = "#F1F5F9"
+textColor = "#0F172A"              # cinza-escuro quase preto, não preto puro
+borderColor = "#E2E8F0"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+baseRadius = "0.5rem"
+
+[theme.dark]
+primaryColor = "#7FA8F2"
+backgroundColor = "#10141C"
+secondaryBackgroundColor = "#1A212C"
+textColor = "#E2E8F0"
+borderColor = "#2E3646"
