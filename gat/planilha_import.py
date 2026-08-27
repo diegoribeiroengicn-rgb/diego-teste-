@@ -18,6 +18,15 @@ Um registro cuja chave só é encontrada entre os já arquivados é apenas
 sinalizado no relatório, nunca modificado nem duplicado — arquivamento é
 uma decisão manual separada.
 
+Um Status Análise fora da lista oficial (`STATUS_ANALISE_OPCOES`, em
+`gat.config`) — erro de digitação/preenchimento na própria planilha, ou
+uma célula de outra coluna que vazou para a coluna errada — também é
+sinalizado como inconsistência, nunca gravado como está: um status
+desconhecido não aparece em nenhum filtro/contagem/dashboard do sistema,
+sumindo silenciosamente da contagem sem que ninguém perceba o motivo. Uma
+célula vazia não é considerada inválida (planilha não sobrescreve o
+status já salvo no banco, ver item 4 abaixo).
+
 Uma linha com Data de Análise preenchida mas Status Análise ainda "EM
 ANÁLISE"/"EM HOLD" (`STATUS_ATIVO_ANALISE`) é um erro de preenchimento da
 própria planilha — a análise foi concluída, mas o status não foi
@@ -71,8 +80,10 @@ from typing import Any
 import pandas as pd
 
 from gat.business_rules import STATUS_ATIVO_ANALISE
+from gat.config import STATUS_ANALISE_OPCOES
 
 _LINHA_CABECALHO = 5  # 1-indexed — linha real do cabeçalho nas abas PROJ_PREST/PROJ_CESS
+_STATUS_ANALISE_VALIDOS = {s.strip().upper() for s in STATUS_ANALISE_OPCOES}
 
 _MAPA_COLUNAS_PRESTADORES = {
     "Item": "item", "Código": "codigo", "Prestador de Serviço": "prestador",
@@ -453,6 +464,17 @@ def _planejar(
         campos_planilha = {c: linha.get(c) for c in colunas_tabela if c in linha}
 
         status_planilha = str(campos_planilha.get("status_analise") or "").strip().upper()
+        if status_planilha and status_planilha not in _STATUS_ANALISE_VALIDOS:
+            plano.itens.append(ItemPlanoImportacao(
+                item_origem=item_origem, identificacao=identificacao, chave=chave, tipo="inconsistente",
+                linha_planilha=linha_planilha,
+                motivo_inconsistencia=(
+                    f"Status Análise \"{campos_planilha.get('status_analise')}\" não é um valor válido "
+                    f"(esperado um de: {', '.join(STATUS_ANALISE_OPCOES)}) — corrija a planilha antes de importar"
+                ),
+            ))
+            continue
+
         if campos_planilha.get("data_analise") and status_planilha in STATUS_ATIVO_ANALISE:
             plano.itens.append(ItemPlanoImportacao(
                 item_origem=item_origem, identificacao=identificacao, chave=chave, tipo="inconsistente",
