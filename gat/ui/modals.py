@@ -758,7 +758,7 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
         st.error("Informe a justificativa da prioridade para salvar.")
         tentativa_pendente = False
 
-    erros_campos = validar_at_data_status(num_at, data_analise, status_analise) if tentativa_pendente else {}
+    erros_campos = validar_at_data_status(num_at, data_analise, status_analise, hold_inicio, hold_fim) if tentativa_pendente else {}
     destacar_campo(f"pr_erro_at_{sufixo}", "at" in erros_campos)
     destacar_campo(f"pr_erro_status_{sufixo}", "status" in erros_campos)
     destacar_campo(f"pr_erro_data_{sufixo}", "data" in erros_campos)
@@ -1085,7 +1085,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
         st.error("Informe a justificativa do SLA reduzido para salvar.")
         tentativa_pendente = False
 
-    erros_campos = validar_at_data_status(num_at, data_analise, status_analise) if tentativa_pendente else {}
+    erros_campos = validar_at_data_status(num_at, data_analise, status_analise, hold_inicio, hold_fim) if tentativa_pendente else {}
     destacar_campo(f"ce_erro_at_{sufixo}", "at" in erros_campos)
     destacar_campo(f"ce_erro_status_{sufixo}", "status" in erros_campos)
     destacar_campo(f"ce_erro_data_{sufixo}", "data" in erros_campos)

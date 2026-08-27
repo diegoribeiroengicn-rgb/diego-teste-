@@ -28,6 +28,15 @@ relatório para o usuário corrigir o status na fonte antes de reimportar —
 mesmo critério de consistência data/status já usado ao salvar uma análise
 manualmente (`gat.ui.validacao_campos.validar_at_data_status`).
 
+Da mesma forma, uma linha com Hold em aberto (Início de Hold preenchido e
+Fim de Hold vazio) mas Status Análise ainda "EM ANÁLISE" também é
+sinalizada — o registro ficaria aparecendo simultaneamente nos filtros de
+Em Análise e de Hold. Isso só é cobrado enquanto o status ainda é "EM
+ANÁLISE": um Hold aberto que sobrou de quando a análise estava em
+andamento, mas cujo status final (LIBERADO, NÃO LIBERADO, OBSOLETO,
+CANCELADO etc.) já foi lançado depois, não é sinalizado — é prática já
+tolerada no sistema não fechar a Data Fim de Hold nesses casos.
+
 A planilha é a referência: quando um campo tem valor diferente e não
 vazio nos dois lados (conflito), o padrão é atualizar o sistema para
 acompanhar a planilha — o usuário só precisa agir para o caso contrário
@@ -452,6 +461,19 @@ def _planejar(
                     f"Data Análise preenchida ({campos_planilha.get('data_analise')}) mas Status Análise "
                     f"ainda \"{campos_planilha.get('status_analise')}\" na planilha — corrija o status antes "
                     "de importar, ou a contagem de projetos em análise não vai bater"
+                ),
+            ))
+            continue
+
+        hold_aberto_planilha = bool(campos_planilha.get("hold_inicio")) and not bool(campos_planilha.get("hold_fim"))
+        if hold_aberto_planilha and status_planilha == "EM ANÁLISE":
+            plano.itens.append(ItemPlanoImportacao(
+                item_origem=item_origem, identificacao=identificacao, chave=chave, tipo="inconsistente",
+                linha_planilha=linha_planilha,
+                motivo_inconsistencia=(
+                    f"Hold em aberto (Início preenchido, Fim vazio) mas Status Análise "
+                    f"\"{campos_planilha.get('status_analise') or '(vazio)'}\" na planilha — corrija para EM HOLD "
+                    "antes de importar, ou o registro vai aparecer como Em Análise nos filtros mesmo estando em Hold"
                 ),
             ))
             continue

@@ -14,6 +14,15 @@ Regras:
   análise ainda está em andamento (EM ANÁLISE, EM HOLD). OBSOLETO/CANCELADO
   não entram em nenhuma das duas exigências — não representam uma conclusão
   a ser cobrada, mas também não a proíbem.
+* Hold e Status Análise não podem divergir: um Hold em aberto (Início de
+  Hold preenchido e Fim de Hold vazio) não pode conviver com Status Análise
+  = EM ANÁLISE — senão o registro aparece nos dois filtros ao mesmo tempo
+  (Em Análise e Hold). Isso só vale enquanto a análise está em andamento:
+  um Hold aberto que sobrou de quando o projeto ainda estava em análise,
+  mas cujo status final (LIBERADO, NÃO LIBERADO, OBSOLETO, CANCELADO etc.)
+  já foi lançado depois, não é cobrado — é prática já tolerada no sistema
+  não fechar a Data Fim de Hold nesses casos, e status final nunca entra
+  no filtro de "Em Análise".
 """
 
 from __future__ import annotations
@@ -24,7 +33,13 @@ from gat.business_rules import STATUS_ATIVO_ANALISE
 from gat.resumo_conclusao import eh_status_final_resumo
 
 
-def validar_at_data_status(num_at: str | None, data_analise, status_analise: str | None) -> dict[str, str]:
+def validar_at_data_status(
+    num_at: str | None,
+    data_analise,
+    status_analise: str | None,
+    hold_inicio=None,
+    hold_fim=None,
+) -> dict[str, str]:
     """Retorna um dict {campo: mensagem} apenas para os campos que falharem
     — campo vazio no retorno (dict vazio) significa que está tudo certo.
     Chaves possíveis: "at", "status", "data". `STATUS_ATIVO_ANALISE`
@@ -40,6 +55,9 @@ def validar_at_data_status(num_at: str | None, data_analise, status_analise: str
         erros["status"] = "Informe o status da análise antes de salvar."
     if eh_status_final_resumo(status_analise) and not data_analise:
         erros["data"] = "Informe a data correspondente antes de salvar."
+    hold_aberto = bool(hold_inicio) and not bool(hold_fim)
+    if hold_aberto and status_normalizado == "EM ANÁLISE" and "status" not in erros:
+        erros["status"] = "Há um Hold em aberto — defina o Status Análise como EM HOLD ou preencha o Fim de Hold."
     return erros
 
 
