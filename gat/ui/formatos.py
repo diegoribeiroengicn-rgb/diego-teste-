@@ -70,3 +70,26 @@ def formatar_datahoras_df(df: pd.DataFrame, colunas: list[str]) -> pd.DataFrame:
         if coluna in resultado.columns:
             resultado[coluna] = resultado[coluna].apply(formatar_datahora_br)
     return resultado
+
+
+_ICONE_STATUS_ANALISE = {
+    "EM ANÁLISE": "🟡",
+    "EM HOLD": "🔵",
+    "LIBERADO": "🟢",
+    "LIBERADO C/ REST.": "🟢",
+    "NÃO LIBERADO": "🔴",
+    "OBSOLETO": "⚫",
+    "CANCELADO": "⚫",
+}
+
+
+def rotulo_status_analise(status: str | None) -> str:
+    """Selo colorido para o Status Análise (mesmo padrão de ícone já usado
+    para "Situação do Prazo" em `views/prestadores.py`/`views/cessionarios.py`)
+    — função única e compartilhada pelos dois módulos para nunca divergirem
+    sobre a cor de cada status. Um valor fora de `STATUS_ANALISE_OPCOES`
+    (não deveria mais ocorrer após a validação na importação) aparece sem
+    ícone, só o texto como veio."""
+    texto = str(status or "").strip()
+    icone = _ICONE_STATUS_ANALISE.get(texto.upper())
+    return f"{icone} {texto}" if icone else (texto or "—")

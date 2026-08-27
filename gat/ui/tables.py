@@ -27,6 +27,7 @@ def tabela_com_edicao(
     tabela_arquivo: str | None = None,
     usuario: dict | None = None,
     descricao_arquivo: Callable[[dict], str] | None = None,
+    colunas_principais: list[str] | None = None,
 ) -> None:
     """
     Renderiza uma tabela com seleção de linha única. Ao selecionar um
@@ -39,6 +40,14 @@ def tabela_com_edicao(
     - `tabela_arquivo`/`usuario`/`descricao_arquivo`: opcionais — quando
       informados, adiciona o botão "Arquivar selecionado" (módulo Arquivo),
       visível apenas para perfis com permissão de arquivar.
+    - `colunas_principais`: opcional — subconjunto (e ordem) de colunas de
+      `df_exibicao` mostradas na grade principal. Quando informado, as
+      colunas restantes de `df_exibicao` não desaparecem: aparecem num
+      painel "Detalhes do registro selecionado" assim que uma linha é
+      selecionada, com os valores já formatados exatamente como estavam em
+      `df_exibicao` (mesma fonte, só reorganizados). Quando omitido
+      (padrão), o comportamento não muda em nada — todas as colunas
+      continuam na grade, como sempre foi.
 
     O usuário pode ordenar visualmente a tabela clicando no cabeçalho de
     qualquer coluna (recurso nativo do componente) — essa ordenação é
@@ -55,8 +64,9 @@ def tabela_com_edicao(
             st.session_state[chave_versao] = versao + 1
             st.rerun()
 
+    df_grade = df_exibicao[colunas_principais] if colunas_principais else df_exibicao
     evento = st.dataframe(
-        df_exibicao,
+        df_grade,
         use_container_width=True,
         hide_index=True,
         on_select="rerun",
@@ -92,5 +102,18 @@ def tabela_com_edicao(
                 if st.button("Arquivar selecionado", icon=":material/archive:", key=f"btn_arquivar_{chave}", use_container_width=True):
                     descricao = descricao_arquivo(registro_selecionado) if descricao_arquivo else f"{chave} #{registro_id}"
                     dialog_arquivar(tabela_arquivo, registro_id, descricao, usuario["username"])
+
+        if colunas_principais:
+            colunas_detalhe = [c for c in df_exibicao.columns if c not in colunas_principais]
+            if colunas_detalhe:
+                with st.expander("Detalhes do registro selecionado", icon=":material/list_alt:", expanded=True):
+                    linha_completa = df_exibicao.iloc[posicao]
+                    grade_detalhe = st.columns(3)
+                    for indice_campo, campo in enumerate(colunas_detalhe):
+                        valor = linha_completa[campo]
+                        texto = str(valor).strip() if pd.notna(valor) else ""
+                        with grade_detalhe[indice_campo % 3]:
+                            st.caption(campo)
+                            st.markdown(texto or "—")
     else:
         st.caption("Selecione uma linha na tabela para editar o registro.")
