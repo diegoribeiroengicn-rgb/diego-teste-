@@ -17,6 +17,16 @@ from gat.ui.modals_resumo import dialog_resumo_conclusao
 
 _TABELAS_COM_RESUMO_CONCLUSAO = {"prestadores", "cessionarios"}
 
+# Mapeia o ícone colorido já usado em texto (ex.: "🟢 LIBERADO", de
+# gat.ui.formatos.rotulo_status_analise e dos rótulos de Situação do
+# Prazo/Avaliação/Status Entrega) para a cor equivalente de `st.badge` —
+# assim, qualquer valor desse padrão que caia no painel de detalhes vira
+# um selo nativo de verdade, não só texto com emoji na frente.
+_EMOJI_PARA_COR_BADGE = {
+    "🟢": "green", "🟡": "orange", "🟠": "orange", "🔴": "red",
+    "🔵": "blue", "🟣": "violet", "⚫": "gray", "⚪": "gray",
+}
+
 
 def tabela_com_edicao(
     df_exibicao: pd.DataFrame,
@@ -112,8 +122,12 @@ def tabela_com_edicao(
                     for indice_campo, campo in enumerate(colunas_detalhe):
                         valor = linha_completa[campo]
                         texto = str(valor).strip() if pd.notna(valor) else ""
+                        icone, _, resto = texto.partition(" ")
                         with grade_detalhe[indice_campo % 3]:
                             st.caption(campo)
-                            st.markdown(texto or "—")
+                            if icone in _EMOJI_PARA_COR_BADGE and resto:
+                                st.badge(resto, icon=icone, color=_EMOJI_PARA_COR_BADGE[icone])
+                            else:
+                                st.markdown(texto or "—")
     else:
         st.caption("Selecione uma linha na tabela para editar o registro.")

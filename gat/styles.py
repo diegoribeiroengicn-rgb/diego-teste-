@@ -293,10 +293,19 @@ def injetar_css_global(tema: str = TEMA_CLARO) -> None:
         color: var(--gat-navy);
     }}
 
-    /* ---- Tabelas ---- */
+    /* ---- Tabelas ----
+       O grid de dados em si (linhas/colunas) é desenhado em <canvas>
+       pelo componente interno do Streamlit — não é DOM real, então
+       zebra/hover por linha e padding de célula não são alcançáveis por
+       CSS aqui (ficam a cargo do componente). O que dá pra melhorar de
+       fora, no contêiner: cantos arredondados de verdade (precisa de
+       overflow:hidden, já que por padrão o contêiner deixa o conteúdo
+       vazar por cima do arredondamento) e uma sombra sutil de elevação. */
     div[data-testid="stDataFrame"] {{
         border: 1px solid var(--gat-borda);
-        border-radius: 6px;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(15,23,42,{'.35' if escuro else '.06'});
     }}
 
     /* ---- Expanders (filtros) ---- */
