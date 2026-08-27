@@ -28,6 +28,24 @@ _EMOJI_PARA_COR_BADGE = {
 }
 
 
+def _sem_icone(texto: str) -> str:
+    """"🔴 NÃO LIBERADO" -> "NÃO LIBERADO" (texto original se não tiver ícone)."""
+    icone, _, resto = texto.partition(" ")
+    return resto if icone in _EMOJI_PARA_COR_BADGE and resto else texto
+
+
+def _renderizar_valor_ou_badge(texto: str) -> None:
+    """Renderiza `texto`: se seguir o padrão "🟢 TEXTO" (usado por
+    gat.ui.formatos.rotulo_status_analise e pelos rótulos de Situação do
+    Prazo/Avaliação/Status Entrega/Nível de Atraso), vira um st.badge
+    nativo; senão, texto simples."""
+    icone, _, resto = texto.partition(" ")
+    if icone in _EMOJI_PARA_COR_BADGE and resto:
+        st.badge(resto, icon=icone, color=_EMOJI_PARA_COR_BADGE[icone])
+    else:
+        st.markdown(texto or "—")
+
+
 def tabela_com_edicao(
     df_exibicao: pd.DataFrame,
     df_ids: pd.Series,
@@ -122,12 +140,150 @@ def tabela_com_edicao(
                     for indice_campo, campo in enumerate(colunas_detalhe):
                         valor = linha_completa[campo]
                         texto = str(valor).strip() if pd.notna(valor) else ""
-                        icone, _, resto = texto.partition(" ")
                         with grade_detalhe[indice_campo % 3]:
                             st.caption(campo)
-                            if icone in _EMOJI_PARA_COR_BADGE and resto:
-                                st.badge(resto, icon=icone, color=_EMOJI_PARA_COR_BADGE[icone])
-                            else:
-                                st.markdown(texto or "—")
+                            _renderizar_valor_ou_badge(texto)
     else:
         st.caption("Selecione uma linha na tabela para editar o registro.")
+
+
+_CAMPOS_CARD_FIXOS = ("Item", "Código", "Disciplina", "Status Análise", "Situação do Prazo")
+_CARDS_POR_PAGINA = 25
+
+
+def lista_cards_com_edicao(
+    df_exibicao: pd.DataFrame,
+    df_ids: pd.Series,
+    chave: str,
+    campo_nome_entidade: str,
+    abrir_dialog_edicao: Callable[[dict], None],
+    obter_registro: Callable[[int], dict],
+    tabela_arquivo: str | None = None,
+    usuario: dict | None = None,
+    descricao_arquivo: Callable[[dict], str] | None = None,
+) -> None:
+    """
+    Alternativa a `tabela_com_edicao` para listas de projeto (Prestadores/
+    Cessionários): em vez de um grid (`st.dataframe`), renderiza um card
+    por registro — cada um já com o botão "Editar" (e Resumo/Arquivar,
+    quando aplicável), sem precisar selecionar uma linha antes.
+
+    - `df_exibicao`: mesmo DataFrame já formatado que `tabela_com_edicao`
+      recebe, com as colunas fixas "Item", "Código", "Disciplina",
+      "Status Análise", "Situação do Prazo" (mesmos nomes/valores em
+      Prestadores e Cessionários) — as demais colunas viram os campos do
+      "Ver mais" de cada card.
+    - `campo_nome_entidade`: nome da coluna com o nome da entidade
+      ("Prestador de Serviço" ou "Cessionário") — é a única coluna de
+      identificação que difere entre os dois módulos.
+    - `df_ids`/`tabela_arquivo`/`usuario`/`descricao_arquivo`: mesmo
+      significado de `tabela_com_edicao`.
+
+    Paginado (25 cards por página) — os módulos têm várias centenas de
+    registros ativos, e renderizar todos de uma vez pesaria a rolagem.
+    "Restaurar ordem de chegada" aqui não desfaz nenhuma reordenação
+    visual (cards não têm cabeçalho clicável como o grid) — só volta a
+    lista pra página 1, no critério padrão (Item) que `df_exibicao` já
+    chega ordenado.
+    """
+    chave_pagina = f"_pagina_cards_{chave}"
+    chave_total_anterior = f"_pagina_cards_{chave}_total"
+    total_registros = len(df_exibicao)
+    total_paginas = max(1, -(-total_registros // _CARDS_POR_PAGINA))
+
+    # Se o total mudou (filtro aplicado/alterado), volta pra página 1 —
+    # senão o usuário pode ficar "preso" numa página que não existe mais.
+    if st.session_state.get(chave_total_anterior) != total_registros:
+        st.session_state[chave_pagina] = 0
+        st.session_state[chave_total_anterior] = total_registros
+    pagina = st.session_state.get(chave_pagina, 0)
+    pagina = min(pagina, total_paginas - 1)
+
+    col_ordem, _ = st.columns([1, 5])
+    with col_ordem:
+        if st.button("Restaurar ordem de chegada", icon=":material/restart_alt:", key=f"btn_restaurar_ordem_{chave}", use_container_width=True):
+            st.session_state[chave_pagina] = 0
+            st.rerun()
+
+    if total_registros == 0:
+        st.caption("Nenhum registro encontrado.")
+        return
+
+    inicio = pagina * _CARDS_POR_PAGINA
+    fim = min(inicio + _CARDS_POR_PAGINA, total_registros)
+    colunas_detalhe = [c for c in df_exibicao.columns if c not in (*_CAMPOS_CARD_FIXOS, campo_nome_entidade)]
+
+    for posicao in range(inicio, fim):
+        linha = df_exibicao.iloc[posicao]
+        registro_id = int(df_ids.iloc[posicao])
+        with st.container(border=True):
+            st.markdown(f"**{linha['Código']} — {linha[campo_nome_entidade]}**")
+            st.caption(f"{linha['Disciplina']} · Item {linha['Item']}")
+
+            col_badge1, col_badge2, _resto = st.columns([1, 1, 3])
+            with col_badge1:
+                _renderizar_valor_ou_badge(str(linha["Status Análise"]).strip())
+            with col_badge2:
+                _renderizar_valor_ou_badge(str(linha["Situação do Prazo"]).strip())
+
+            chave_expandido = f"_card_expandido_{chave}_{registro_id}"
+            expandido = st.session_state.get(chave_expandido, False)
+
+            registro_selecionado = None
+            mostrar_resumo = False
+            if tabela_arquivo in _TABELAS_COM_RESUMO_CONCLUSAO and usuario is not None:
+                status_bruto = _sem_icone(str(linha["Status Análise"]).strip())
+                mostrar_resumo = eh_status_final_resumo(status_bruto)
+            mostrar_arquivar = tabela_arquivo is not None and usuario is not None and perfil_pode_arquivar_e_restaurar(usuario.get("perfil"))
+
+            n_botoes = 1 + int(mostrar_resumo) + int(mostrar_arquivar)
+            preenchimento = 5 if n_botoes == 1 else 4
+            colunas_acao = st.columns([1] * n_botoes + [preenchimento])
+            indice = 0
+            with colunas_acao[indice]:
+                if st.button("Editar", icon=":material/edit:", type="primary", key=f"card_editar_{chave}_{registro_id}", use_container_width=True):
+                    abrir_dialog_edicao(obter_registro(registro_id))
+            indice += 1
+            if mostrar_resumo:
+                with colunas_acao[indice]:
+                    if st.button("Resumo", icon=":material/description:", key=f"card_resumo_{chave}_{registro_id}", use_container_width=True):
+                        dialog_resumo_conclusao(tabela_arquivo, registro_id, usuario["username"])
+                indice += 1
+            if mostrar_arquivar:
+                with colunas_acao[indice]:
+                    if st.button("Arquivar", icon=":material/archive:", key=f"card_arquivar_{chave}_{registro_id}", use_container_width=True):
+                        if registro_selecionado is None:
+                            registro_selecionado = obter_registro(registro_id)
+                        descricao = descricao_arquivo(registro_selecionado) if descricao_arquivo else f"{chave} #{registro_id}"
+                        dialog_arquivar(tabela_arquivo, registro_id, descricao, usuario["username"])
+                indice += 1
+
+            if colunas_detalhe:
+                rotulo = "Ver menos" if expandido else "Ver mais"
+                icone_ver_mais = ":material/expand_less:" if expandido else ":material/expand_more:"
+                if st.button(rotulo, icon=icone_ver_mais, key=f"card_vermais_{chave}_{registro_id}"):
+                    st.session_state[chave_expandido] = not expandido
+                    st.rerun()
+
+            if expandido and colunas_detalhe:
+                st.divider()
+                grade_detalhe = st.columns(3)
+                for indice_campo, campo in enumerate(colunas_detalhe):
+                    valor = linha[campo]
+                    texto = str(valor).strip() if pd.notna(valor) else ""
+                    with grade_detalhe[indice_campo % 3]:
+                        st.caption(campo)
+                        _renderizar_valor_ou_badge(texto)
+
+    st.markdown("")
+    col_ant, col_meio, col_prox = st.columns([1, 2, 1])
+    with col_ant:
+        if st.button("← Anterior", key=f"card_pag_ant_{chave}", disabled=pagina <= 0, use_container_width=True):
+            st.session_state[chave_pagina] = pagina - 1
+            st.rerun()
+    with col_meio:
+        st.markdown(f"<div style='text-align:center'>Página {pagina + 1} de {total_paginas} ({total_registros} registro(s))</div>", unsafe_allow_html=True)
+    with col_prox:
+        if st.button("Próxima →", key=f"card_pag_prox_{chave}", disabled=pagina >= total_paginas - 1, use_container_width=True):
+            st.session_state[chave_pagina] = pagina + 1
+            st.rerun()

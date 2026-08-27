@@ -26,7 +26,7 @@ from gat.permissions import exigir_area, exigir_modulo, pode_area
 from gat.ui.filtros import rotulo_periodo_filtro, seletor_periodo
 from gat.ui.formatos import formatar_datas_df, rotulo_status_analise
 from gat.ui.modals import dialog_cessionario
-from gat.ui.tables import tabela_com_edicao
+from gat.ui.tables import lista_cards_com_edicao
 
 _COLUNAS_DATA_CESSIONARIOS = [
     "data_solicitacao", "data_limite", "data_analise", "hold_inicio", "hold_fim",
@@ -208,16 +208,16 @@ def render(usuario: dict) -> None:
         exigir_area(usuario, "cessionarios.editar")
         dialog_cessionario(usuario["username"], registro, pode_definir_prioridade=pode_area(usuario, "prioridades.definir"))
 
-    tabela_com_edicao(
+    lista_cards_com_edicao(
         df_exibicao,
         df_filtrado["id"],
         chave="cessionarios",
+        campo_nome_entidade="Cessionário",
         abrir_dialog_edicao=_abrir_edicao,
         obter_registro=obter_cessionario,
         tabela_arquivo="cessionarios",
         usuario=usuario,
         descricao_arquivo=lambda r: f"{r.get('codigo')} — {r.get('cessionario')} (AT {r.get('num_at')})",
-        colunas_principais=["Item", "Código", "Cessionário", "Disciplina", "Status Análise", "Situação do Prazo"],
     )
 
     if pode_area(usuario, "cessionarios.exportar"):
