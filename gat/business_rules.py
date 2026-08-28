@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from gat.calendario import dias_uteis_decorridos, saldo_dias_uteis
+from gat.calendario import dias_corridos_entre, dias_uteis_decorridos, saldo_dias_uteis
+from gat.horario import hoje_br
 from gat.config import (
     FAIXAS_AVALIACAO,
     META_REVISAO_APROVACAO,
@@ -233,6 +234,46 @@ def situacao_prazo(dias_restantes: int | None) -> str:
     if dias_restantes <= _LIMIAR_VENCE_EM_BREVE_DIAS_UTEIS:
         return "VENCE EM BREVE"
     return "DENTRO DO PRAZO"
+
+
+# Regras de suavização visual do "Atrasado" (não afetam `situacao_prazo()`
+# em si nem os alertas/radar de atraso de `gat.alertas_engine` — só a
+# exibição em listas/cards e a contagem do KPI de dashboard, que usam as
+# funções abaixo explicitamente). "Atrasado" indefinidamente em vermelho
+# deixa de ser um sinal útil de urgência depois de muito tempo: é só um
+# item parado, não uma entrega atrasada.
+STATUS_PRESERVA_ATRASO_VISUAL = {"EM HOLD", "LIBERADO", "LIBERADO C/ REST.", "CANCELADO"}
+LIMIAR_DIAS_CORRIDOS_ATRASO_PROLONGADO = 30
+LIMIAR_DIAS_CORRIDOS_ATRASO_KPI_DASHBOARD = 90
+
+
+def atraso_prolongado_para_exibicao(status_analise: str | None, data_limite) -> bool:
+    """
+    Só para decorar a exibição do badge de Situação do Prazo (listas/cards)
+    — não usar em alertas, KPIs internos ou no radar de atraso, que devem
+    continuar tratando "ATRASADO" como atrasado indefinidamente enquanto o
+    prazo estiver estourado.
+
+    True quando a Data Limite está vencida há mais de
+    `LIMIAR_DIAS_CORRIDOS_ATRASO_PROLONGADO` dias corridos e o status não
+    está entre os que preservam o alarme visual (`STATUS_PRESERVA_ATRASO_VISUAL`).
+    """
+    status = texto_seguro(status_analise).strip().upper()
+    if status in STATUS_PRESERVA_ATRASO_VISUAL:
+        return False
+    dias = dias_corridos_entre(data_limite, hoje_br().isoformat())
+    return dias is not None and dias > LIMIAR_DIAS_CORRIDOS_ATRASO_PROLONGADO
+
+
+def atraso_excede_janela_kpi_dashboard(data_limite) -> bool:
+    """
+    Só para excluir da contagem do KPI "Atrasados" dos dashboards — não
+    usar em alertas nem no radar de atraso. True quando a Data Limite está
+    vencida há mais de `LIMIAR_DIAS_CORRIDOS_ATRASO_KPI_DASHBOARD` dias
+    corridos (item deixou de ser um sinal de gestão relevante).
+    """
+    dias = dias_corridos_entre(data_limite, hoje_br().isoformat())
+    return dias is not None and dias > LIMIAR_DIAS_CORRIDOS_ATRASO_KPI_DASHBOARD
 
 
 STATUS_CONCLUIDOS_PRIORIDADE = {"LIBERADO", "LIBERADO C/ REST.", "NÃO LIBERADO", "OBSOLETO", "CANCELADO"}
@@ -528,6 +569,12 @@ def resumo_indicadores_atraso(df: pd.DataFrame, modulo: str) -> dict[str, Any]:
     análise (com quebra por tipo — usada no drill-down do card), concluídos
     no prazo, concluídos com atraso e o total geral de projetos atrasados
     (soma de ativos atrasados + concluídos com atraso).
+
+    "Atrasados em Análise" exclui registros com Data Limite vencida há
+    mais de `LIMIAR_DIAS_CORRIDOS_ATRASO_KPI_DASHBOARD` dias corridos
+    (`atraso_excede_janela_kpi_dashboard`) — só no número exibido deste
+    KPI; "Em Análise" (total de ativos) não é afetado, nem os alertas ou
+    o radar de atraso.
     """
     if df.empty:
         return {
@@ -548,11 +595,17 @@ def resumo_indicadores_atraso(df: pd.DataFrame, modulo: str) -> dict[str, Any]:
         lambda r: calculo_seguro(dias_restantes_prioridade, r, modulo, contexto="dias_restantes_prioridade"), axis=1,
     )
     niveis = dias_restantes.apply(nivel_alerta_atraso)
+    atraso_muito_antigo = df.apply(
+        lambda r: bool(calculo_seguro(
+            atraso_excede_janela_kpi_dashboard, r.get("data_limite"), contexto="atraso_excede_janela_kpi_dashboard",
+        )),
+        axis=1,
+    )
 
     ativos = classificacoes.isin(["ATIVO_ATRASADO", "ATIVO_OK"])
     total_ativos = int(ativos.sum())
     em_analise = total_ativos
-    atrasados_em_analise = int((classificacoes == "ATIVO_ATRASADO").sum())
+    atrasados_em_analise = int(((classificacoes == "ATIVO_ATRASADO") & ~atraso_muito_antigo).sum())
     dentro_prazo = int(((classificacoes == "ATIVO_OK") & (niveis == "DENTRO_DO_PRAZO")).sum())
     proximo_vencimento = int(((classificacoes == "ATIVO_OK") & (niveis == "PROXIMO_VENCIMENTO")).sum())
     concluidos_no_prazo = int((classificacoes == "CONCLUIDO_NO_PRAZO").sum())

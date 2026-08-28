@@ -9,6 +9,7 @@ from gat.business_rules import (
     NIVEL_ALERTA_ATRASO_ICONES,
     NIVEL_ALERTA_ATRASO_LABELS,
     acima_da_meta_revisao,
+    atraso_prolongado_para_exibicao,
     classificacao_atraso,
     dias_restantes_prioridade,
     enriquecer_cessionarios,
@@ -47,9 +48,12 @@ _LABEL_SITUACAO_PRAZO = {
 }
 
 
-def _rotulo_situacao_prazo(dias_restantes, revisao) -> str:
+def _rotulo_situacao_prazo(dias_restantes, revisao, status_analise=None, data_limite=None) -> str:
     chave = situacao_prazo(int(dias_restantes) if pd.notna(dias_restantes) else None)
-    rotulo = f"{_ICONE_SITUACAO_PRAZO[chave]} {_LABEL_SITUACAO_PRAZO[chave]}"
+    if chave == "ATRASADO" and atraso_prolongado_para_exibicao(status_analise, data_limite):
+        rotulo = "⚪ Atraso antigo"
+    else:
+        rotulo = f"{_ICONE_SITUACAO_PRAZO[chave]} {_LABEL_SITUACAO_PRAZO[chave]}"
     if acima_da_meta_revisao(revisao):
         rotulo += " · 🟣 Acima da REV2"
     return rotulo
@@ -193,7 +197,7 @@ def render(usuario: dict) -> None:
         }
     )
     df_filtrado["Situação do Prazo"] = df_filtrado.apply(
-        lambda r: _rotulo_situacao_prazo(r["saldo_dias_uteis"], r.get("revisao")), axis=1
+        lambda r: _rotulo_situacao_prazo(r["saldo_dias_uteis"], r.get("revisao"), r.get("status_analise"), r.get("data_limite")), axis=1
     )
     df_filtrado["Nível de Atraso"] = df_filtrado.apply(
         lambda r: _rotulo_nivel_alerta_atraso(r.get("status_analise"), r.get("status_entrega_calc"), r.get("saldo_dias_uteis"), r.get("em_hold")), axis=1

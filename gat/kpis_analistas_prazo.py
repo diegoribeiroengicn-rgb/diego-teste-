@@ -21,7 +21,7 @@ from datetime import date
 
 import pandas as pd
 
-from gat.business_rules import STATUS_CONCLUIDO_ENTREGA, dias_restantes_prioridade
+from gat.business_rules import STATUS_CONCLUIDO_ENTREGA, atraso_excede_janela_kpi_dashboard, dias_restantes_prioridade
 from gat.normalizacao import calculo_seguro
 
 CLASSIFICACAO_ANTES_PRAZO = "ANTES_DO_PRAZO"
@@ -161,6 +161,18 @@ def calcular_kpis_prazo_analista(df: pd.DataFrame, analista: str | None = None) 
     media_antecipacao = round(-antes["_dias_uteis_diferenca"].mean(), 1) if not antes.empty else 0.0
     media_atraso = round(atraso["_dias_uteis_diferenca"].mean(), 1) if not atraso.empty else 0.0
 
+    # Exclui do KPI (só a contagem exibida — `_ativa_atrasada` em si não
+    # muda, então `relacao_analises_analista` continua rotulando a linha
+    # normalmente) os registros com Data Limite vencida há mais de
+    # `LIMIAR_DIAS_CORRIDOS_ATRASO_KPI_DASHBOARD` dias corridos: mesma
+    # regra do KPI "Atrasados" dos dashboards de Prestadores/Cessionários.
+    atraso_muito_antigo = sub.apply(
+        lambda r: bool(calculo_seguro(
+            atraso_excede_janela_kpi_dashboard, r.get("data_limite"), contexto="atraso_excede_janela_kpi_dashboard",
+        )),
+        axis=1,
+    )
+
     return {
         "total_entregue": total,
         "antes_prazo": len(antes),
@@ -172,7 +184,7 @@ def calcular_kpis_prazo_analista(df: pd.DataFrame, analista: str | None = None) 
         "pct_cumprimento_prazo": round((len(antes) + len(no_dia)) / total * 100, 1) if total else 0.0,
         "media_dias_antecipacao": media_antecipacao,
         "media_dias_atraso": media_atraso,
-        "atrasados_em_analise": int(sub["_ativa_atrasada"].sum()),
+        "atrasados_em_analise": int((sub["_ativa_atrasada"] & ~atraso_muito_antigo).sum()),
         "vencem_2_dias_uteis": int(sub["_vence_2_dias"].sum()),
         "em_hold": int(sub.get("em_hold", pd.Series(dtype=bool)).fillna(False).astype(bool).sum()),
     }

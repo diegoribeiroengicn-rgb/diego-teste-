@@ -65,14 +65,14 @@ def render(usuario: dict, modulo: str) -> None:
     if modulo == "prestadores":
         df_filtrado["_dias_restantes"] = df_filtrado["sla_dias"].fillna(SLA_PRESTADORES_DIAS_UTEIS) - df_filtrado["dias_uteis_decorridos"]
         df_filtrado["Situação do Prazo"] = df_filtrado.apply(
-            lambda r: _rotulo_situacao_prazo_prestadores(r["_dias_restantes"], r.get("revisao")), axis=1
+            lambda r: _rotulo_situacao_prazo_prestadores(r["_dias_restantes"], r.get("revisao"), r.get("status_analise"), r.get("data_limite")), axis=1
         )
         colunas = list(COLUNAS_EXIBICAO_PRESTADORES.keys())
         df_para_exibicao = formatar_datas_df(df_filtrado, _COLUNAS_DATA_PRESTADORES)
         df_exibicao = df_para_exibicao[[*colunas[:3], "Situação do Prazo", *colunas[3:]]].rename(columns=COLUNAS_EXIBICAO_PRESTADORES)
     else:
         df_filtrado["Situação do Prazo"] = df_filtrado.apply(
-            lambda r: _rotulo_situacao_prazo_cessionarios(r["saldo_dias_uteis"], r.get("revisao")), axis=1
+            lambda r: _rotulo_situacao_prazo_cessionarios(r["saldo_dias_uteis"], r.get("revisao"), r.get("status_analise"), r.get("data_limite")), axis=1
         )
         colunas = list(COLUNAS_EXIBICAO_CESSIONARIOS.keys())
         df_para_exibicao = formatar_datas_df(df_filtrado, _COLUNAS_DATA_CESSIONARIOS)
