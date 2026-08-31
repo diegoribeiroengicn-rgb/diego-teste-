@@ -399,6 +399,25 @@ def restaurar_banco_de_bytes(conteudo: bytes, usuario: str | None = None) -> Non
     init_db()
 
 
+def _banco_integro(caminho: Path) -> bool:
+    """True se `caminho` é um arquivo SQLite íntegro (PRAGMA
+    integrity_check == 'ok'). Usado por `sincronizar_para_persistencia`
+    para nunca publicar uma cópia corrompida/truncada como semente —
+    incidente de 2026-08-29: um `shutil.copy2` sem essa checagem publicou
+    um banco corrompido (gravação cortada pela metade) como semente,
+    derrubando a aplicação em toda implantação seguinte até a correção
+    manual (restauração do último backup íntegro anterior)."""
+    try:
+        conn = sqlite3.connect(str(caminho))
+        try:
+            linha = conn.execute("PRAGMA integrity_check").fetchone()
+            return bool(linha) and linha[0] == "ok"
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError:
+        return False
+
+
 def sincronizar_para_persistencia() -> bool:
     """
     Copia o banco de dados atual por cima do banco de sementes versionado
@@ -407,14 +426,18 @@ def sincronizar_para_persistencia() -> bool:
     importação. Sozinho isso não basta: o arquivo de sementes atualizado
     ainda precisa ser publicado (commit/push) no repositório para que a
     persistência realmente aconteça em um reinício futuro do ambiente.
+
+    Verifica a integridade do banco de origem antes de copiar e a do
+    arquivo resultante depois — nunca sobrescreve a semente com um banco
+    já corrompido ou com uma cópia truncada por falha no meio da operação.
     """
-    if not DB_PATH.exists():
+    if not DB_PATH.exists() or not _banco_integro(DB_PATH):
         return False
     try:
         shutil.copy2(DB_PATH, SEED_DB_PATH)
     except OSError:
         return False
-    return SEED_DB_PATH.exists() and SEED_DB_PATH.stat().st_size > 0
+    return SEED_DB_PATH.exists() and SEED_DB_PATH.stat().st_size > 0 and _banco_integro(SEED_DB_PATH)
 
 
 # ---------------------------------------------------------------------------
