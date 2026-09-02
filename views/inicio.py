@@ -7,11 +7,13 @@ import streamlit as st
 import pandas as pd
 
 from gat.alertas_engine import contar_hold_aguardando_acompanhamento
+from gat.alertas_pessoais import carregar_alertas_pessoais
 from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia
 from gat.config import CORES
 from gat.database import listar_cessionarios, listar_prestadores
 from gat.permissions import pode_area, pode_modulo
 from gat.ui.filtros import rotulo_competencia, seletor_competencia
+from gat.ui.modals_alertas_pessoais import dialog_alertas_pessoais
 
 _CARTOES = [
     {
@@ -63,6 +65,17 @@ def render(usuario: dict) -> None:
     # agregados desta página — nenhuma consulta é feita para eles.
     df_prest = enriquecer_prestadores(filtrar_ativos(listar_prestadores())) if pode_prest else pd.DataFrame()
     df_cess = enriquecer_cessionarios(filtrar_ativos(listar_cessionarios())) if pode_cess else pd.DataFrame()
+
+    # Pop-up de "Meus Alertas": aberto por padrão nesta sessão (login) até
+    # o usuário fechar explicitamente — não gate por "já mostrei uma vez",
+    # porque "Marcar como Visto" dispara um rerun completo do app (um
+    # st.dialog não faz rerun só do próprio fragmento depois de um
+    # st.rerun() interno) e o pop-up precisa reabrir com a lista já
+    # atualizada, não sumir depois do primeiro item marcado.
+    chave_popup_fechado = f"_alertas_popup_fechado_{usuario['username']}"
+    if not st.session_state.get(chave_popup_fechado):
+        if carregar_alertas_pessoais(usuario, df_prest, df_cess)["total_pendente"] > 0:
+            dialog_alertas_pessoais(usuario, df_prest, df_cess)
 
     with st.expander("Filtro de competência", icon=":material/calendar_month:", expanded=False):
         mes, ano = seletor_competencia("inicio")

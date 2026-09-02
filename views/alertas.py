@@ -243,6 +243,18 @@ def _secao_alertas_manuais(usuario: dict, modulos_incluidos: list[str], modulo_c
             st.caption("Nenhum alerta manual cadastrado.")
             return
 
+        opcoes_destinatario = sorted({
+            d.strip() for lista in manuais["destinatarios"].dropna() for d in lista.split(",") if d.strip()
+        })
+        if opcoes_destinatario:
+            filtro_destinatario = st.multiselect(
+                "Filtrar por destinatário", opcoes_destinatario, key=f"am_filtro_dest_{modulo_criacao or 'consolidado'}",
+            )
+            if filtro_destinatario:
+                manuais = manuais[manuais["destinatarios"].fillna("").apply(
+                    lambda v: any(d in [x.strip() for x in v.split(",")] for d in filtro_destinatario)
+                )]
+
         abertos = manuais[manuais["status"] == "ABERTO"]
         encerrados = manuais[manuais["status"] == "ENCERRADO"]
 

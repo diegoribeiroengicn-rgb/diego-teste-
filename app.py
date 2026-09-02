@@ -13,8 +13,10 @@ Ponto de entrada da aplicação Streamlit. Responsável por:
 
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
+from gat.alertas_pessoais import carregar_alertas_pessoais
 from gat.auth import (
     logout,
     precisa_trocar_senha,
@@ -23,8 +25,9 @@ from gat.auth import (
     usuario_atual,
     usuario_autenticado,
 )
+from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos
 from gat.config import MODULOS_CONTROLADOS
-from gat.database import definir_tema_usuario, init_db, registrar_atividade
+from gat.database import definir_tema_usuario, init_db, listar_cessionarios, listar_prestadores, registrar_atividade
 from gat.export_excel import gerar_relatorio_excel
 from gat.horario import agora_br
 from gat.permissions import pode_area, pode_modulo
@@ -54,6 +57,7 @@ from views import (
     lista_prioridades,
     manual_sistema,
     meu_perfil,
+    meus_alertas,
     painel_analistas,
     planos_acao,
     pmo_portfolio,
@@ -132,6 +136,7 @@ def _pagina(render_fn, title: str, icon: str, url_path: str, default: bool = Fal
 paginas: dict[str, list[st.Page]] = {
     "": [
         _pagina(lambda: inicio.render(usuario), "Início", ":material/home:", "inicio", default=True),
+        _pagina(lambda: meus_alertas.render(usuario), "Meus Alertas", ":material/notifications:", "meus_alertas"),
         _pagina(lambda: meu_perfil.render(usuario), "Meu Perfil", ":material/account_circle:", "meu_perfil"),
     ],
 }
@@ -247,6 +252,11 @@ if st.session_state.get("_gat_ultima_pagina_logada") != pagina_atual.url_path:
     st.session_state["_gat_ultima_pagina_logada"] = pagina_atual.url_path
 
 with st.sidebar:
+    st.divider()
+    _df_prest_alertas = enriquecer_prestadores(filtrar_ativos(listar_prestadores())) if pode_modulo(usuario, "prestadores") else pd.DataFrame()
+    _df_cess_alertas = enriquecer_cessionarios(filtrar_ativos(listar_cessionarios())) if pode_modulo(usuario, "cessionarios") else pd.DataFrame()
+    _total_alertas_pendentes = carregar_alertas_pessoais(usuario, _df_prest_alertas, _df_cess_alertas)["total_pendente"]
+    st.metric("Meus Alertas", _total_alertas_pendentes)
     st.divider()
     if pode_area(usuario, "relatorios"):
         modulos_permitidos = frozenset(m for m in MODULOS_CONTROLADOS if pode_modulo(usuario, m))

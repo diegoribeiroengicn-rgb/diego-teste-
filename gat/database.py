@@ -1562,6 +1562,37 @@ def _migracao_0037_avaliacao_opcional_revisao(conn: sqlite3.Connection) -> None:
     _garantir_coluna(conn, "cessionarios", "avaliacao_opcional_perguntada_revisao", "INTEGER")
 
 
+def _migracao_0038_alertas_pessoais_vistos(conn: sqlite3.Connection) -> None:
+    """
+    Alertas pessoais (item "Meus Alertas"): tabela de controle de leitura,
+    por usuário, dos alertas de prazo automáticos (vencido/vence hoje/vence
+    em breve, calculados ao vivo a partir de `classificacao_atraso`/
+    `situacao_prazo` — não duplica nem substitui a Central de Alertas) e dos
+    alertas manuais direcionados (`alertas_manuais.destinatarios`).
+
+    `chave` identifica a instância do alerta de um jeito que muda sempre que
+    o alerta "renova" (prazo repactuado, ou alerta manual editado) — assim,
+    marcar como visto só vale para aquele estado específico; se o prazo ou a
+    mensagem mudar depois, o alerta pessoal reaparece automaticamente.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS alertas_pessoais_vistos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario TEXT NOT NULL,
+            tipo TEXT NOT NULL,
+            chave TEXT NOT NULL,
+            visto_em TEXT NOT NULL,
+            UNIQUE(usuario, tipo, chave)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_alertas_pessoais_vistos_usuario "
+        "ON alertas_pessoais_vistos(usuario, tipo)"
+    )
+
+
 def _migracao_0033_atualizar_capitulo_importacao_planilha(conn: sqlite3.Connection) -> None:
     """A funcionalidade de importação por planilha foi movida de
     Administração > Importar Planilha para Configurações > Atualização
@@ -1667,6 +1698,7 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (35, "Configurações > Backup do Sistema: tabela backups_historico (tipo/usuário/situação/observações) e importacoes_planilha_historico.backup_ref", _migracao_0035_historico_backups),
     (36, "Manual do Sistema: atualiza o capítulo 'Backup e preservação dos dados' com Gerar Backup Agora, tipos de backup, histórico por item e vínculo com importações", _migracao_0036_manual_backup_sistema),
     (37, "Avaliação de Prestadores/Cessionários: coluna avaliacao_opcional_perguntada_revisao (pergunta opcional da Rev.02 em diante, uma vez por revisão)", _migracao_0037_avaliacao_opcional_revisao),
+    (38, "Meus Alertas: tabela alertas_pessoais_vistos (controle de leitura por usuário dos alertas de prazo e alertas manuais direcionados)", _migracao_0038_alertas_pessoais_vistos),
 ]
 
 
@@ -3670,6 +3702,34 @@ def listar_alertas_manuais(modulo: str | None = None) -> pd.DataFrame:
     query += " ORDER BY criado_em DESC"
     with _conectar() as conn:
         return pd.read_sql_query(query, conn, params=params)
+
+
+# ---------------------------------------------------------------------------
+# Alertas pessoais ("Meus Alertas") — controle de leitura por usuário
+# ---------------------------------------------------------------------------
+
+
+def marcar_alerta_pessoal_visto(usuario: str, tipo: str, chave: str) -> None:
+    """Marca um alerta pessoal (tipo 'PRAZO' ou 'MANUAL') como visto pelo
+    usuário. `chave` identifica a instância específica do alerta — ver
+    docstring de `_migracao_0038_alertas_pessoais_vistos`."""
+    agora = agora_br().isoformat()
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO alertas_pessoais_vistos (usuario, tipo, chave, visto_em) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT (usuario, tipo, chave) DO UPDATE SET visto_em = excluded.visto_em",
+            (usuario, tipo, chave, agora),
+        )
+
+
+def listar_alertas_pessoais_vistos(usuario: str) -> set[tuple[str, str]]:
+    """Conjunto de (tipo, chave) já vistos pelo usuário — usado para filtrar
+    o que ainda precisa aparecer no pop-up/"Meus Alertas"."""
+    with _conectar() as conn:
+        linhas = conn.execute(
+            "SELECT tipo, chave FROM alertas_pessoais_vistos WHERE usuario = ?", (usuario,)
+        ).fetchall()
+    return {(linha["tipo"], linha["chave"]) for linha in linhas}
 
 
 # ---------------------------------------------------------------------------
