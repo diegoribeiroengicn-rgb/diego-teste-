@@ -179,36 +179,23 @@ CORES_CLASSIFICACAO_AVALIACAO = {
     "CRÍTICO": CORES["vermelho"],
 }
 
-# Checklist de avaliação de Prestadores/Cessionários (15 perguntas Sim/Não/N-A,
-# agrupadas nas 5 categorias do modelo Tecnoplano). A pontuação (soma de
-# respostas "SIM", 0 a 15) usa as mesmas faixas de FAIXAS_AVALIACAO acima.
-CHECKLIST_AVALIACAO = {
-    "Qualidade de Projeto": [
-        ("qp_projeto_completo", "Projeto completo"),
-        ("qp_definicao_solucoes", "Definição clara das soluções"),
-        ("qp_qualidade_representacao", "Boa qualidade de representação"),
-    ],
-    "Manuais e Normas": [
-        ("mn_aderencia_manuais", "Aderência aos manuais internos"),
-        ("mn_atendimento_normas", "Atendimento às normas técnicas"),
-        ("mn_adequacao_levantamento", "Adequação aos materiais de levantamento fornecidos"),
-    ],
-    "Documentação Geral": [
-        ("dg_jogo_completo_mesma_data", "Submissão do jogo completo na mesma data, em PDF e DWG"),
-        ("dg_carimbo_codificacao", "Carimbo e codificação conforme procedimento"),
-        ("dg_prazo_entre_revisoes", "Prazo razoável entre revisões"),
-    ],
-    "Revisões": [
-        ("rv_atendimento_50pct_at", "Atendimento de pelo menos 50% dos itens da AT"),
-        ("rv_compatibilizacao", "Compatibilização entre arquitetura e projetos complementares"),
-        ("rv_consistencia_revisoes", "Consistência entre revisões"),
-    ],
-    "Comunicação": [
-        ("cm_participacao_reunioes", "Participação efetiva em reuniões"),
-        ("cm_alteracoes_evidenciadas", "Alterações evidenciadas conforme solicitado"),
-        ("cm_justificativa_plausivel", "Justificativa plausível para itens não atendidos"),
-    ],
-}
+# Checklist de avaliação de Prestadores/Cessionários — as perguntas em si
+# (categorias, texto, ordem, ativo/inativo) ficam na tabela
+# `avaliacao_checklist_perguntas` (editável em tela, ver
+# `gat.database.listar_perguntas_checklist`), não mais fixas aqui no código.
+# A pontuação é a soma de respostas "SIM" entre as perguntas ativas — hoje
+# 18 perguntas em 6 categorias (formulário oficial "Avaliação de Qualidade —
+# Escritório do Projetista"), faixas de classificação próprias em
+# FAIXAS_AVALIACAO_CHECKLIST (0 a 18 — NÃO reaproveita FAIXAS_AVALIACAO
+# acima, que é uma legenda de escala diferente, 1 a 15, usada só pela
+# planilha "Avaliacao_Prestadores_GAT.xlsx").
+FAIXAS_AVALIACAO_CHECKLIST = [
+    (17, 18, "EXCELENTE", "Projeto com alto nível de maturidade e alta probabilidade de liberação total ou parcial na revisão atual. Não demanda acompanhamento."),
+    (13, 16, "BOM", "Projeto com poucas pendências e bom nível de maturidade. Boa probabilidade de liberação parcial na revisão seguinte. Não demanda acompanhamento."),
+    (9, 12, "REGULAR", "Projeto em desenvolvimento. Pode demandar acompanhamento próximo para que consiga melhor aproveitamento na revisão seguinte. Demanda acompanhamento."),
+    (5, 8, "BAIXO", "Projeto com baixo nível de maturidade, demanda acompanhamento semanal dos projetistas para o adequado desenvolvimento. Demanda atenção e acompanhamento."),
+    (1, 4, "CRÍTICO", "Projeto com baixíssimo nível de maturidade, demanda alerta ao cessionário, além de cobrança e acompanhamento semanal dos projetistas. Pode ser considerada uma revisão perdida e indica ciclo de revisões extenso. Demanda atenção e acompanhamento."),
+]
 RESPOSTA_CHECKLIST_OPCOES = ["SIM", "NÃO", "N/A"]
 ACOMPANHAMENTO_POR_FAIXA = {
     "EXCELENTE": "Não demanda acompanhamento",

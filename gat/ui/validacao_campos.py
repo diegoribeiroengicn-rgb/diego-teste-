@@ -32,6 +32,33 @@ import streamlit as st
 from gat.business_rules import STATUS_ATIVO_ANALISE
 from gat.resumo_conclusao import eh_status_final_resumo
 
+# Status para os quais a AT passa a ser exigida quando a análise SAI de "EM
+# ANÁLISE" diretamente para um deles — é nesse momento que a AT (documento
+# formal de retorno ao prestador/cessionário) passa a existir de fato.
+STATUS_EXIGEM_AT = {"NÃO LIBERADO", "LIBERADO C/ REST.", "LIBERADO"}
+
+
+def at_obrigatorio(status_anterior: str | None, status_analise: str | None) -> bool:
+    """
+    N° AT só é obrigatório numa transição específica: o status ANTERIOR era
+    "EM ANÁLISE" e o NOVO é um dos status finais que geram AT (Não
+    Liberado/Liberado c/ Rest./Liberado). Sem mudança de status, ou
+    permanecendo em "EM ANÁLISE", ou indo para qualquer outro status (EM
+    HOLD, OBSOLETO, CANCELADO), a AT não é cobrada.
+
+    Um cadastro NOVO (sem `status_anterior` real) é tratado como se
+    tivesse partido de "EM ANÁLISE" — mesmo status pré-selecionado por
+    padrão no formulário de novo cadastro — para que criar um registro já
+    direto com um status crítico também exija a AT.
+    """
+    anterior = str(status_anterior or "EM ANÁLISE").strip().upper()
+    novo = str(status_analise or "").strip().upper()
+    if anterior == novo:
+        return False
+    if anterior != "EM ANÁLISE":
+        return False
+    return novo in STATUS_EXIGEM_AT
+
 
 def validar_at_data_status(
     num_at: str | None,
@@ -39,6 +66,7 @@ def validar_at_data_status(
     status_analise: str | None,
     hold_inicio=None,
     hold_fim=None,
+    status_anterior: str | None = None,
 ) -> dict[str, str]:
     """Retorna um dict {campo: mensagem} apenas para os campos que falharem
     — campo vazio no retorno (dict vazio) significa que está tudo certo.
@@ -46,10 +74,13 @@ def validar_at_data_status(
     (EM ANÁLISE, EM HOLD) é o mesmo critério de "análise em andamento" já
     usado no resto do sistema — a mesma combinação data+status também é
     sinalizada como inconsistência na Atualização por Planilha
-    (`gat.planilha_import`), para as duas telas nunca divergirem."""
+    (`gat.planilha_import`), para as duas telas nunca divergirem.
+
+    `status_anterior` (status ANTES desta edição — `None`/omitido para um
+    cadastro novo) decide se a AT é exigida — ver `at_obrigatorio`."""
     erros: dict[str, str] = {}
-    if not str(num_at or "").strip():
-        erros["at"] = "Informe o número da AT antes de salvar."
+    if at_obrigatorio(status_anterior, status_analise) and not str(num_at or "").strip():
+        erros["at"] = "Informe o número da AT antes de salvar (obrigatório ao liberar/não liberar a partir de \"Em Análise\")."
     status_normalizado = str(status_analise or "").strip().upper()
     if data_analise and status_normalizado in STATUS_ATIVO_ANALISE:
         erros["status"] = "Informe o status da análise antes de salvar."

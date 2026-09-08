@@ -18,6 +18,7 @@ from gat.calendario import dias_corridos_entre, dias_uteis_decorridos, saldo_dia
 from gat.horario import hoje_br
 from gat.config import (
     FAIXAS_AVALIACAO,
+    FAIXAS_AVALIACAO_CHECKLIST,
     META_REVISAO_APROVACAO,
     SLA_CESSIONARIOS_NOVO,
     SLA_CESSIONARIOS_REVISAO,
@@ -48,13 +49,28 @@ def classificar_nota(nota: int) -> tuple[str, str]:
 def classificar_checklist(pontuacao: int) -> tuple[str, str]:
     """
     Classifica a pontuação do checklist de avaliação (soma de respostas
-    "SIM" entre as 15 perguntas, 0 a 15) usando as mesmas faixas de
-    `classificar_nota`. Uma pontuação 0 (nenhum "SIM") é tratada como
-    CRÍTICO — a escala oficial começa em 1, mas 0 é ainda mais grave.
+    "SIM" entre as perguntas ativas) usando `FAIXAS_AVALIACAO_CHECKLIST` —
+    faixas PRÓPRIAS do checklist, independentes de `classificar_nota`/
+    `FAIXAS_AVALIACAO` (legenda de uma escala diferente, 1-15, da planilha
+    oficial de avaliação). Uma pontuação 0 (nenhum "SIM") é tratada como
+    CRÍTICO — a escala das faixas começa em 1, mas 0 é ainda mais grave.
+
+    As faixas assumem as 18 perguntas atualmente ativas (0-18 pontos); se a
+    quantidade de perguntas ativas mudar de fato (perguntas cadastradas/
+    desativadas via o painel admin), os limites numéricos das faixas em
+    `FAIXAS_AVALIACAO_CHECKLIST` precisam ser revistos manualmente — não são
+    recalculados proporcionalmente aqui.
     """
-    if pontuacao == 0:
-        return classificar_nota(1)
-    return classificar_nota(pontuacao)
+    try:
+        valor = int(pontuacao)
+    except (TypeError, ValueError):
+        return "SEM NOTA", ""
+    if valor == 0:
+        valor = 1
+    for minimo, maximo, rotulo, interpretacao in FAIXAS_AVALIACAO_CHECKLIST:
+        if minimo <= valor <= maximo:
+            return rotulo, interpretacao
+    return "FORA DA ESCALA", "Pontuação fora da escala do checklist (0 a 18)."
 
 
 def pontuar_checklist(respostas: dict[str, dict[str, str]]) -> int:

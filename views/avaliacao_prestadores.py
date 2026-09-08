@@ -14,6 +14,7 @@ from gat.database import (
     listar_avaliacoes_checklist,
     listar_cessionarios,
     listar_obras_prestador,
+    listar_perguntas_checklist,
     listar_prestadores,
     nome_exibicao_obra,
     obter_avaliacao,
@@ -189,9 +190,10 @@ def _tab_checklist(usuario: dict) -> None:
         return
 
     media = df_filtrado["pontuacao"].mean()
+    total_perguntas_ativas = len(listar_perguntas_checklist(apenas_ativas=True))
     renderizar_kpis([
         ("Avaliações", str(len(df_filtrado)), None),
-        ("Pontuação Média", f"{media:.1f} / 15", None),
+        ("Pontuação Média", f"{media:.1f} / {total_perguntas_ativas}", None),
         ("Demandam Acompanhamento", str((df_filtrado["classificacao"].isin(["CRÍTICO", "BAIXO"])).sum()), CORES_CLASSIFICACAO_AVALIACAO["CRÍTICO"]),
     ])
 

@@ -9,15 +9,19 @@ from gat import backup_externo
 from gat.arquivo_business_rules import perfil_pode_arquivar_e_restaurar
 from gat.config import DISCIPLINAS, MAX_BACKUPS, PERFIS_OPCOES, RESPONSAVEIS
 from gat.database import (
+    atualizar_pergunta_checklist,
     criar_backup,
     criar_usuario,
+    definir_ativa_pergunta_checklist,
     definir_codigo_disciplina,
     definir_configuracao,
     exportar_banco_bytes,
+    inserir_pergunta_checklist,
     ler_backup_bytes,
     listar_backups,
     listar_codigos_disciplina,
     listar_historico,
+    listar_perguntas_checklist,
     listar_usuarios,
     obter_configuracao,
     registrar_atividade,
@@ -47,6 +51,7 @@ def render(usuario: dict) -> None:
     if pode_area(usuario, "configuracoes"):
         abas_disponiveis.append("Configurações")
         abas_disponiveis.append("Central de Codificação")
+        abas_disponiveis.append("Checklist de Avaliação")
 
     abas = st.tabs(abas_disponiveis)
     indice = 0
@@ -73,6 +78,11 @@ def render(usuario: dict) -> None:
     if "Central de Codificação" in abas_disponiveis:
         with abas[indice]:
             _renderizar_central_codificacao(usuario)
+        indice += 1
+
+    if "Checklist de Avaliação" in abas_disponiveis:
+        with abas[indice]:
+            _renderizar_checklist_perguntas(usuario)
         indice += 1
 
 
@@ -287,6 +297,86 @@ def _renderizar_central_codificacao(usuario: dict) -> None:
         registrar_atividade(usuario["username"], usuario.get("perfil"), "CENTRAL_CODIFICACAO_ATUALIZADA")
         st.success("Códigos de disciplina atualizados com sucesso.")
         st.rerun()
+
+
+def _renderizar_checklist_perguntas(usuario: dict) -> None:
+    st.markdown("##### Checklist de Avaliação — perguntas")
+    st.caption(
+        "Perguntas do checklist de Avaliação (Prestadores e Cessionários), usado no formulário de "
+        "Avaliação — Checklist. Editar texto/categoria/ordem ou desativar uma pergunta aqui não altera "
+        "avaliações já registradas — elas continuam mostrando exatamente o que foi respondido/calculado "
+        "no momento em que foram salvas."
+    )
+
+    df_perguntas = listar_perguntas_checklist(apenas_ativas=False)
+    if df_perguntas.empty:
+        st.info("Nenhuma pergunta cadastrada.")
+    else:
+        df_perguntas = df_perguntas.set_index("id")
+        editado = st.data_editor(
+            df_perguntas[["categoria", "texto", "ordem_categoria", "ordem_pergunta", "ativo"]],
+            column_config={
+                "categoria": st.column_config.TextColumn("Categoria"),
+                "texto": st.column_config.TextColumn("Pergunta", width="large"),
+                "ordem_categoria": st.column_config.NumberColumn("Ordem da categoria", min_value=1, step=1),
+                "ordem_pergunta": st.column_config.NumberColumn("Ordem na categoria", min_value=1, step=1),
+                "ativo": st.column_config.CheckboxColumn("Ativa"),
+            },
+            hide_index=True, use_container_width=True, num_rows="fixed", key="admin_checklist_perguntas_editor",
+        )
+        # `st.data_editor` não devolve o índice original nas colunas exibidas,
+        # mas preserva a ordem das linhas (num_rows="fixed" — sem
+        # inclusão/remoção) — por isso o `id` de cada linha vem de volta
+        # pareando pela posição com `df_perguntas.index`.
+        editado_com_id = editado.set_axis(df_perguntas.index)
+
+        if st.button("Salvar perguntas do checklist", icon=":material/save:", type="primary", key="admin_salvar_checklist_perguntas"):
+            for pergunta_id, linha in editado_com_id.iterrows():
+                original = df_perguntas.loc[pergunta_id]
+                if (
+                    linha["categoria"] != original["categoria"] or linha["texto"] != original["texto"]
+                    or int(linha["ordem_categoria"]) != int(original["ordem_categoria"])
+                    or int(linha["ordem_pergunta"]) != int(original["ordem_pergunta"])
+                ):
+                    atualizar_pergunta_checklist(
+                        int(pergunta_id), linha["categoria"], linha["texto"],
+                        int(linha["ordem_categoria"]), int(linha["ordem_pergunta"]), usuario["username"],
+                    )
+                if bool(linha["ativo"]) != bool(original["ativo"]):
+                    definir_ativa_pergunta_checklist(int(pergunta_id), bool(linha["ativo"]), usuario["username"])
+            registrar_atividade(usuario["username"], usuario.get("perfil"), "CHECKLIST_PERGUNTAS_ATUALIZADO")
+            st.success("Perguntas do checklist atualizadas com sucesso.")
+            st.rerun()
+
+    with st.expander("Adicionar nova pergunta", icon=":material/add_circle:"):
+        categorias_existentes = sorted(df_perguntas["categoria"].unique()) if not df_perguntas.empty else []
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            categoria_nova = st.selectbox(
+                "Categoria", categorias_existentes + ["— Nova categoria —"], key="admin_nova_pergunta_categoria_sel",
+            )
+            if categoria_nova == "— Nova categoria —":
+                categoria_nova = st.text_input("Nome da nova categoria", key="admin_nova_pergunta_categoria_texto")
+            texto_novo = st.text_area("Texto da pergunta", key="admin_nova_pergunta_texto")
+        with col2:
+            ordem_categoria_nova = st.number_input(
+                "Ordem da categoria", min_value=1, step=1,
+                value=int(df_perguntas["ordem_categoria"].max()) if not df_perguntas.empty else 1,
+                key="admin_nova_pergunta_ordem_cat",
+            )
+            ordem_pergunta_nova = st.number_input(
+                "Ordem na categoria", min_value=1, step=1, value=1, key="admin_nova_pergunta_ordem_perg",
+            )
+        if st.button("Adicionar pergunta", icon=":material/add:", key="admin_adicionar_pergunta"):
+            if not categoria_nova or not categoria_nova.strip() or not texto_novo.strip():
+                st.error("Preencha a categoria e o texto da pergunta.")
+            else:
+                inserir_pergunta_checklist(
+                    categoria_nova, texto_novo, int(ordem_categoria_nova), int(ordem_pergunta_nova), usuario["username"],
+                )
+                registrar_atividade(usuario["username"], usuario.get("perfil"), "CHECKLIST_PERGUNTA_CRIADA")
+                st.success("Pergunta adicionada com sucesso.")
+                st.rerun()
 
 
 def _renderizar_atualizacao_planilha(usuario: dict) -> None:

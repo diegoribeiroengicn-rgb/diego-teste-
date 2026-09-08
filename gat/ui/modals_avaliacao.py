@@ -1,6 +1,7 @@
-"""Pop-up de avaliação por checklist (Prestadores e Cessionários) — categorias
-Qualidade de Projeto, Manuais e Normas, Documentação Geral, Revisões e
-Comunicação, com 15 perguntas Sim/Não/N-A e classificação automática."""
+"""Pop-up de avaliação por checklist (Prestadores e Cessionários) — perguntas
+e categorias vêm de `avaliacao_checklist_perguntas` (editável em
+Configurações, não mais fixas no código), respondidas Sim/Não/N-A com
+classificação automática."""
 
 from __future__ import annotations
 
@@ -12,7 +13,6 @@ import streamlit as st
 from gat.business_rules import classificar_checklist, pontuar_checklist
 from gat.config import (
     ACOMPANHAMENTO_POR_FAIXA,
-    CHECKLIST_AVALIACAO,
     RESPOSTA_CHECKLIST_OPCOES,
     RESPONSAVEIS,
 )
@@ -23,10 +23,12 @@ from gat.database import (
     nome_exibicao_obra,
     obter_avaliacao_checklist_por_revisao,
     obter_cadastro_prestador_por_codigo,
+    perguntas_checklist_por_categoria,
     registrar_atividade,
 )
 from gat.horario import hoje_br
 from gat.normalizacao import inteiro_seguro
+from gat.ui.modals import _confirmar_descarte, _houve_alteracoes_nao_salvas
 
 
 def _idx(opcoes: list[str], valor: Any) -> int:
@@ -37,10 +39,10 @@ def _idx(opcoes: list[str], valor: Any) -> int:
 
 
 @st.dialog("Avaliação — Checklist", width="large", dismissible=False)
-# dismissible=False: com 15 perguntas em 5 categorias, um clique fora do
-# modal (ou ESC sem querer) fecharia o checklist parcialmente preenchido
-# sem aviso. Só sai daqui pelos botões Salvar/Cancelar (ambos chamam
-# st.rerun() explicitamente), nunca ficando "preso" sem saída.
+# dismissible=False: com várias perguntas em múltiplas categorias, um clique
+# fora do modal (ou ESC sem querer) fecharia o checklist parcialmente
+# preenchido sem aviso. Só sai daqui pelos botões Salvar/Cancelar (o
+# Cancelar, por sua vez, confirma antes de descartar alterações não salvas).
 def dialog_avaliacao_checklist(
     usuario: str, tipo_entidade: str, registro: dict[str, Any] | None = None,
     prefill: dict[str, Any] | None = None,
@@ -50,9 +52,12 @@ def dialog_avaliacao_checklist(
     prefill = prefill or {}
     rotulo_tipo = "Prestador" if tipo_entidade == "PRESTADOR" else "Cessionário"
 
+    perguntas_por_categoria = perguntas_checklist_por_categoria(apenas_ativas=True)
+    total_perguntas = sum(len(v) for v in perguntas_por_categoria.values())
+
     st.caption(
         f"Checklist de avaliação de {rotulo_tipo.lower()}, preferencialmente utilizado a partir da "
-        "1ª revisão. Cada pergunta conta 1 ponto quando respondida \"Sim\" (0 a 15 pontos)."
+        f"1ª revisão. Cada pergunta conta 1 ponto quando respondida \"Sim\" (0 a {total_perguntas} pontos)."
     )
 
     col1, col2 = st.columns(2)
@@ -95,6 +100,15 @@ def dialog_avaliacao_checklist(
         key=f"av_data_{sufixo}",
     )
 
+    nome_projetista = ""
+    if tipo_entidade == "CESSIONARIO":
+        nome_projetista = st.text_input(
+            "Nome do Projetista *",
+            value=registro.get("nome_projetista", "") if editando else prefill.get("nome_projetista", ""),
+            key=f"av_projetista_{sufixo}",
+            help="Obrigatório na avaliação de Cessionário — identifica o profissional/escritório responsável pelo projeto avaliado.",
+        )
+
     obra_id_atual = registro.get("obra_id") if editando else prefill.get("obra_id")
     obra_id = obra_id_atual
     if tipo_entidade == "PRESTADOR" and codigo_entidade.strip():
@@ -128,9 +142,11 @@ def dialog_avaliacao_checklist(
     st.markdown("##### Checklist")
     st.caption("Todas as perguntas devem ser respondidas antes de salvar — nenhuma vem pré-marcada.")
     respostas: dict[str, dict[str, str]] = {}
-    for categoria, perguntas in CHECKLIST_AVALIACAO.items():
+    for categoria, perguntas in perguntas_por_categoria.items():
         with st.expander(categoria, expanded=True):
-            for chave, texto in perguntas:
+            for pergunta in perguntas:
+                chave = str(pergunta["id"])
+                texto = pergunta["texto"]
                 anterior = respostas_atuais.get(chave, {})
                 col_r, col_j = st.columns([1, 2])
                 indice_previo = RESPOSTA_CHECKLIST_OPCOES.index(anterior["resposta"]) if anterior.get("resposta") in RESPOSTA_CHECKLIST_OPCOES else None
@@ -156,24 +172,39 @@ def dialog_avaliacao_checklist(
 
     st.markdown("##### Resultado")
     m1, m2, m3 = st.columns(3)
-    m1.metric("Pontuação", f"{pontuacao} / 15")
+    m1.metric("Pontuação", f"{pontuacao} / {total_perguntas}")
     m2.metric("Classificação", classificacao)
     m3.metric("Acompanhamento", acompanhamento)
     if interpretacao:
         st.caption(interpretacao)
 
+    valores_atuais = {
+        "nome_entidade": nome_entidade, "codigo_entidade": codigo_entidade, "disciplina": disciplina,
+        "at_referencia": at_referencia, "revisao": revisao, "analista_responsavel": analista_responsavel,
+        "data_avaliacao": data_avaliacao, "obra_id": obra_id, "respostas": respostas,
+        "observacoes_gerais": observacoes_gerais, "nome_projetista": nome_projetista,
+    }
+    houve_alteracoes = _houve_alteracoes_nao_salvas(f"av_snapshot_{sufixo}", valores_atuais)
+
     col_salvar, col_cancelar = st.columns(2)
     salvar = col_salvar.button("Salvar", icon=":material/save:", type="primary", use_container_width=True, key=f"av_salvar_{sufixo}")
     cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"av_cancelar_{sufixo}")
 
-    if cancelar:
+    if _confirmar_descarte(f"av_descarte_{sufixo}", houve_alteracoes, cancelar):
+        st.session_state.pop(f"av_snapshot_{sufixo}", None)
         st.rerun()
 
     if salvar:
         if not nome_entidade:
             st.error(f"Preencha ao menos o nome do {rotulo_tipo.lower()}.")
             return
-        nao_respondidas = [texto for cat in CHECKLIST_AVALIACAO.values() for chave, texto in cat if respostas.get(chave, {}).get("resposta") is None]
+        if tipo_entidade == "CESSIONARIO" and not nome_projetista.strip():
+            st.error("Informe o Nome do Projetista antes de salvar.")
+            return
+        nao_respondidas = [
+            pergunta["texto"] for perguntas in perguntas_por_categoria.values() for pergunta in perguntas
+            if respostas.get(str(pergunta["id"]), {}).get("resposta") is None
+        ]
         if nao_respondidas:
             st.error("Responda todas as perguntas do checklist antes de salvar. Pendente(s): " + "; ".join(nao_respondidas))
             return
@@ -194,6 +225,7 @@ def dialog_avaliacao_checklist(
             "acompanhamento": acompanhamento,
             "observacoes_gerais": observacoes_gerais,
             "obra_id": obra_id,
+            "nome_projetista": nome_projetista.strip() if tipo_entidade == "CESSIONARIO" else None,
         }
         if editando:
             atualizar_avaliacao_checklist(registro["id"], dados, usuario)

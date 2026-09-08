@@ -6,7 +6,9 @@ marco oficial das avaliações (01/07/2026 — ver
 `gat.alertas_engine.MARCO_AVALIACOES_OFICIAL`), sem alterar perguntas,
 pesos, critérios, fórmula ou escala das avaliações já existentes — é
 apenas uma nova forma de consultar os resultados que o sistema já
-calcula (`pontuacao`, 0-15). Avaliação pendente nunca é considerada nota
+calcula (`pontuacao`, escala definida pela quantidade de perguntas ativas do
+checklist — ver `gat.database.listar_perguntas_checklist`). Avaliação
+pendente nunca é considerada nota
 zero: só entram no ranking avaliações que de fato foram realizadas.
 
 O sistema ainda não possui um cadastro próprio de Projetista (mesma

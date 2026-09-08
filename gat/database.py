@@ -1593,6 +1593,95 @@ def _migracao_0038_alertas_pessoais_vistos(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migracao_0039_perguntas_checklist_dinamicas(conn: sqlite3.Connection) -> None:
+    """
+    Substitui o checklist de avaliação fixo no código (`CHECKLIST_AVALIACAO`
+    em `gat/config.py`, 15 perguntas em 5 categorias) por uma tabela editável
+    em tela — permite acrescentar, editar, reordenar e desativar perguntas
+    sem precisar de um novo deploy. Semeia aqui, uma única vez, as 18
+    perguntas em 6 categorias do formulário oficial "Avaliação de Qualidade —
+    Escritório do Projetista" (que passa a valer no lugar do checklist
+    anterior), com a pontuação recalculada em `classificar_checklist` para a
+    nova escala de 0 a 18. Avaliações já registradas não são alteradas —
+    `avaliacoes_checklist.respostas_json`, `pontuacao` e `classificacao` já
+    gravados continuam exibindo o que foi de fato respondido/calculado na
+    época, com base no checklist vigente naquele momento.
+
+    Aproveita a mesma migração para acrescentar `nome_projetista` (coluna
+    aditiva) em `avaliacoes_checklist` — campo obrigatório apenas na
+    avaliação de CESSIONÁRIO (o formulário de PRESTADOR não o exibe/exige),
+    fica `NULL` em avaliações de PRESTADOR e nas já existentes.
+    """
+    _garantir_coluna(conn, "avaliacoes_checklist", "nome_projetista", "TEXT")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS avaliacao_checklist_perguntas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            categoria TEXT NOT NULL,
+            texto TEXT NOT NULL,
+            ordem_categoria INTEGER NOT NULL,
+            ordem_pergunta INTEGER NOT NULL,
+            ativo INTEGER NOT NULL DEFAULT 1,
+            criado_em TEXT NOT NULL,
+            criado_por TEXT,
+            atualizado_em TEXT,
+            atualizado_por TEXT
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_avaliacao_checklist_perguntas_ordem "
+        "ON avaliacao_checklist_perguntas(ativo, ordem_categoria, ordem_pergunta)"
+    )
+
+    ja_semeado = conn.execute("SELECT 1 FROM avaliacao_checklist_perguntas LIMIT 1").fetchone()
+    if ja_semeado:
+        return
+
+    agora = agora_br().isoformat()
+    perguntas_iniciais = [
+        ("QUALIDADE DE PROJETO", [
+            "Projeto completo (plantas, cortes, elevações, detalhamentos, memoriais etc)",
+            "Definição clara de soluções, ou seja, projeto consolidado",
+            "Boa qualidade de representação",
+        ]),
+        ("MANUAIS E NORMAS", [
+            "Aderência aos manuais internos de projeto (MA-ENG-OO2 e Guideline Comercial)",
+            "Atendimento às normas técnicas (ABNT, NRs e legislações municipais)",
+            "Adequação do projeto aos materiais de levantamento fornecidos (RCI/RVP)",
+        ]),
+        ("DOCUMENTAÇÃO GERAL", [
+            "Submissão do jogo completo (pranchas e memoriais) na mesma data e em pdf e dwg",
+            "Carimbo e codificação conforme PR-PRO-002",
+            "Prazo razoável entre revisões (até 2 semanas após submissão da AT)",
+        ]),
+        ("REVISÕES", [
+            "Atendimento de pelo menos 50% dos itens da AT",
+            "Compatibilização entre o projeto arquitetônico e os projetos complementares",
+            "Consistência entre revisões (sem alterações, subtrações ou acréscimos injustificados)",
+        ]),
+        ("COMUNICAÇÃO", [
+            "Participação efetiva dos projetistas em reuniões (tira dúvidas, discute soluções etc.)",
+            "Alterações de projeto evidenciadas conforme solicitado em Notas Gerais",
+            "Justificativa plausível para o não atendimento de algum item da AT via carta-resposta",
+        ]),
+        ("VIÉS DE LIBERAÇÃO", [
+            "Liberado ou liberado com restrição sem necessidade de ajuste de item TÉCNICO",
+            "Liberado ou liberado com restrição sem necessidade de ajuste de item de CODIFICAÇÃO",
+            "Retorno do projetista levou 3 dias úteis ou menos",
+        ]),
+    ]
+    for ordem_categoria, (categoria, perguntas) in enumerate(perguntas_iniciais, start=1):
+        for ordem_pergunta, texto in enumerate(perguntas, start=1):
+            conn.execute(
+                "INSERT INTO avaliacao_checklist_perguntas "
+                "(categoria, texto, ordem_categoria, ordem_pergunta, ativo, criado_em, criado_por) "
+                "VALUES (?, ?, ?, ?, 1, ?, ?)",
+                (categoria, texto, ordem_categoria, ordem_pergunta, agora, "sistema"),
+            )
+
+
 def _migracao_0033_atualizar_capitulo_importacao_planilha(conn: sqlite3.Connection) -> None:
     """A funcionalidade de importação por planilha foi movida de
     Administração > Importar Planilha para Configurações > Atualização
@@ -1699,6 +1788,7 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (36, "Manual do Sistema: atualiza o capítulo 'Backup e preservação dos dados' com Gerar Backup Agora, tipos de backup, histórico por item e vínculo com importações", _migracao_0036_manual_backup_sistema),
     (37, "Avaliação de Prestadores/Cessionários: coluna avaliacao_opcional_perguntada_revisao (pergunta opcional da Rev.02 em diante, uma vez por revisão)", _migracao_0037_avaliacao_opcional_revisao),
     (38, "Meus Alertas: tabela alertas_pessoais_vistos (controle de leitura por usuário dos alertas de prazo e alertas manuais direcionados)", _migracao_0038_alertas_pessoais_vistos),
+    (39, "Avaliação — Checklist: tabela avaliacao_checklist_perguntas (perguntas editáveis em tela, semeada com as 18 perguntas em 6 categorias do formulário oficial de Avaliação de Qualidade do Projetista)", _migracao_0039_perguntas_checklist_dinamicas),
 ]
 
 
@@ -3255,7 +3345,7 @@ COLUNAS_AVALIACAO_CHECKLIST = [
     "tipo_entidade", "codigo_entidade", "nome_entidade", "disciplina", "projeto_id",
     "at_referencia", "revisao", "data_avaliacao", "analista_responsavel",
     "respostas_json", "pontuacao", "classificacao", "acompanhamento", "observacoes_gerais",
-    "obra_id",
+    "obra_id", "nome_projetista",
 ]
 
 
@@ -3342,6 +3432,70 @@ def existe_avaliacao_checklist(tipo_entidade: str, codigo_entidade: str | None, 
                 (tipo_entidade, nome_entidade, disciplina),
             ).fetchone()
         return linha is not None
+
+
+# ---------------------------------------------------------------------------
+# Avaliação — Checklist: perguntas editáveis (substitui CHECKLIST_AVALIACAO)
+# ---------------------------------------------------------------------------
+
+
+def listar_perguntas_checklist(apenas_ativas: bool = True) -> pd.DataFrame:
+    """Todas as perguntas cadastradas, na ordem de exibição (categoria, depois
+    pergunta dentro da categoria). `apenas_ativas=False` também traz as
+    desativadas — usado no painel admin, para permitir reativá-las."""
+    with _conectar() as conn:
+        base = "SELECT * FROM avaliacao_checklist_perguntas"
+        if apenas_ativas:
+            base += " WHERE ativo = 1"
+        base += " ORDER BY ordem_categoria, ordem_pergunta"
+        return pd.read_sql_query(base, conn)
+
+
+def perguntas_checklist_por_categoria(apenas_ativas: bool = True) -> dict[str, list[dict[str, Any]]]:
+    """Perguntas agrupadas por categoria (preservando a ordem cadastrada),
+    no formato consumido por `gat.ui.modals_avaliacao.dialog_avaliacao_checklist`
+    — cada pergunta é um dict com pelo menos `id` e `texto`."""
+    perguntas = listar_perguntas_checklist(apenas_ativas=apenas_ativas)
+    agrupado: dict[str, list[dict[str, Any]]] = {}
+    for linha in perguntas.to_dict("records"):
+        agrupado.setdefault(linha["categoria"], []).append(linha)
+    return agrupado
+
+
+def inserir_pergunta_checklist(categoria: str, texto: str, ordem_categoria: int, ordem_pergunta: int, usuario: str) -> int:
+    agora = agora_br().isoformat()
+    with _conectar() as conn:
+        cursor = conn.execute(
+            "INSERT INTO avaliacao_checklist_perguntas "
+            "(categoria, texto, ordem_categoria, ordem_pergunta, ativo, criado_em, criado_por) "
+            "VALUES (?, ?, ?, ?, 1, ?, ?)",
+            (categoria.strip().upper(), texto.strip(), ordem_categoria, ordem_pergunta, agora, usuario),
+        )
+        return cursor.lastrowid
+
+
+def atualizar_pergunta_checklist(
+    pergunta_id: int, categoria: str, texto: str, ordem_categoria: int, ordem_pergunta: int, usuario: str
+) -> None:
+    agora = agora_br().isoformat()
+    with _conectar() as conn:
+        conn.execute(
+            "UPDATE avaliacao_checklist_perguntas SET categoria = ?, texto = ?, ordem_categoria = ?, "
+            "ordem_pergunta = ?, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
+            (categoria.strip().upper(), texto.strip(), ordem_categoria, ordem_pergunta, agora, usuario, pergunta_id),
+        )
+
+
+def definir_ativa_pergunta_checklist(pergunta_id: int, ativo: bool, usuario: str) -> None:
+    """Ativa/desativa uma pergunta — nunca é excluída de fato, para preservar
+    o histórico (avaliações antigas continuam referenciando o `id` original
+    em `respostas_json`, mesmo que a pergunta não seja mais exibida)."""
+    agora = agora_br().isoformat()
+    with _conectar() as conn:
+        conn.execute(
+            "UPDATE avaliacao_checklist_perguntas SET ativo = ?, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
+            (1 if ativo else 0, agora, usuario, pergunta_id),
+        )
 
 
 # ---------------------------------------------------------------------------
