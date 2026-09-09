@@ -385,6 +385,15 @@ def restaurar_banco_de_bytes(conteudo: bytes, usuario: str | None = None) -> Non
     migrações pendentes, para que o schema restaurado fique compatível com
     a versão atual do sistema mesmo que o backup seja de uma versão mais
     antiga.
+
+    Sincroniza e publica o resultado imediatamente (mesmo mecanismo do
+    botão "Testar backup automático agora") — sem isto, o estado restaurado
+    só se torna duradouro na PRÓXIMA gravação feita pela interface (que
+    aciona `sincronizar_para_persistencia`/`agendar_backup_apos_gravacao`
+    normalmente); se o ambiente reiniciar antes dessa próxima gravação
+    acontecer, a restauração se perde e o próximo início volta a partir da
+    semente antiga — exatamente o bug que causava a restauração "não
+    pegar" depois de um reinício.
     """
     if not conteudo.startswith(_SQLITE_MAGIC):
         raise ValueError("O arquivo enviado não é um banco de dados SQLite válido.")
@@ -397,6 +406,8 @@ def restaurar_banco_de_bytes(conteudo: bytes, usuario: str | None = None) -> Non
             )
     DB_PATH.write_bytes(conteudo)
     init_db()
+    sincronizar_para_persistencia()
+    backup_externo.enviar_backup_agora()
 
 
 def _banco_integro(caminho: Path) -> bool:
