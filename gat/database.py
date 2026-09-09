@@ -2672,10 +2672,12 @@ def registrar_importacao_planilha(
 ) -> None:
     """Registra uma execução (bem-sucedida ou não) da importação por
     planilha, para consulta em Configurações > Atualização por Planilha >
-    Histórico (item 13). `backup_ref` é o nome do arquivo de backup
-    PRE_IMPORTACAO criado por `confirmar_importacao` logo antes de aplicar
-    esta importação (item 21) — permite, a partir do histórico de
-    importações, localizar exatamente qual backup restaurar para desfazê-la."""
+    Histórico. `origem` identifica o tipo ("Prestadores" ou "Cessionários")
+    — os dois uploads são independentes, cada um com seu próprio histórico.
+    `backup_ref` é o nome do arquivo de backup PRE_IMPORTACAO criado por
+    `confirmar_importacao_isolada` logo antes de aplicar esta importação —
+    permite, a partir do histórico de importações, localizar exatamente
+    qual backup restaurar para desfazê-la."""
     agora = agora_br().isoformat()
     with _conectar() as conn:
         conn.execute(
@@ -2690,18 +2692,31 @@ def registrar_importacao_planilha(
         )
 
 
-def listar_importacoes_planilha(limite: int = 100) -> pd.DataFrame:
+def listar_importacoes_planilha(limite: int = 100, origem: str | None = None) -> pd.DataFrame:
+    """`origem` filtra pelo tipo de upload ("Prestadores"/"Cessionários") —
+    omitido, traz o histórico combinado dos dois."""
+    query = "SELECT * FROM importacoes_planilha_historico"
+    params: list[Any] = []
+    if origem:
+        query += " WHERE origem = ?"
+        params.append(origem)
+    query += " ORDER BY data_hora DESC LIMIT ?"
+    params.append(limite)
     with _conectar() as conn:
-        return pd.read_sql_query(
-            "SELECT * FROM importacoes_planilha_historico ORDER BY data_hora DESC LIMIT ?", conn, params=(limite,),
-        )
+        return pd.read_sql_query(query, conn, params=params)
 
 
-def obter_ultima_importacao_planilha() -> dict[str, Any] | None:
+def obter_ultima_importacao_planilha(origem: str | None = None) -> dict[str, Any] | None:
+    """`origem` filtra pelo tipo de upload ("Prestadores"/"Cessionários") —
+    omitido, traz a última importação bem-sucedida de qualquer tipo."""
+    query = "SELECT * FROM importacoes_planilha_historico WHERE resultado = 'SUCESSO'"
+    params: list[Any] = []
+    if origem:
+        query += " AND origem = ?"
+        params.append(origem)
+    query += " ORDER BY data_hora DESC LIMIT 1"
     with _conectar() as conn:
-        linha = conn.execute(
-            "SELECT * FROM importacoes_planilha_historico WHERE resultado = 'SUCESSO' ORDER BY data_hora DESC LIMIT 1"
-        ).fetchone()
+        linha = conn.execute(query, params).fetchone()
         return dict(linha) if linha else None
 
 

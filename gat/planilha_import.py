@@ -60,13 +60,13 @@ dois lados), sempre mostrados na prévia para transparência mesmo que a
 resolução padrão já seja aplicar a planilha. Só depois que o usuário
 revisa a prévia e confirma (ajustando os conflitos que quiser resolver
 diferente, se houver), `executar_plano_prestadores`/
-`executar_plano_cessionarios` gravam no banco. `confirmar_importacao`
-orquestra as duas execuções com backup antes e restauração automática em
-caso de erro (item 8) — cópia de
-arquivo (`shutil`), não uma transação SQL única: o resto do sistema já
-grava linha a linha, sem uma transação cobrindo múltiplas tabelas, então
-esta é a forma de garantir "tudo ou nada" sem reestruturar `gat.database`
-só para esta funcionalidade.
+`executar_plano_cessionarios` gravam no banco. `confirmar_importacao_isolada`
+orquestra cada execução (Prestadores e Cessionários são uploads
+independentes, cada um com seu próprio backup e histórico) com restauração
+automática em caso de erro (item 8) — cópia de arquivo (`shutil`), não uma
+transação SQL única: o resto do sistema já grava linha a linha, sem uma
+transação cobrindo múltiplas tabelas, então esta é a forma de garantir
+"tudo ou nada" sem reestruturar `gat.database` só para esta funcionalidade.
 """
 
 from __future__ import annotations
@@ -680,54 +680,54 @@ def executar_plano_cessionarios(plano: PlanoImportacao, resolucoes_conflito: dic
     return executar_plano(plano, resolucoes_conflito, usuario, inserir_cessionario, atualizar_cessionario, COLUNAS_CESSIONARIOS)
 
 
-def confirmar_importacao(
-    nome_arquivo: str,
-    plano_prestadores: PlanoImportacao, resolucoes_prestadores: dict[tuple, dict[str, str]],
-    plano_cessionarios: PlanoImportacao, resolucoes_cessionarios: dict[tuple, dict[str, str]],
-    usuario: str,
-) -> tuple[RelatorioImportacao, RelatorioImportacao]:
+def confirmar_importacao_isolada(
+    nome_arquivo: str, plano: PlanoImportacao, resolucoes: dict[tuple, dict[str, str]],
+    usuario: str, tipo: str,
+) -> RelatorioImportacao:
     """
-    Aplica os dois planos já revisados e confirmados pelo usuário (item 7).
-    Cria backup antes de gravar, marcado como PRE_IMPORTACAO e vinculado ao
-    usuário (item 8); se qualquer erro ocorrer durante a aplicação, restaura
-    o backup imediatamente — "ou a atualização é concluída com sucesso, ou
-    o estado anterior é preservado" — em vez de deixar o banco parcialmente
-    atualizado. Cada execução (sucesso ou falha) fica registrada no
-    histórico (item 13), com o nome do arquivo de backup PRE_IMPORTACAO
-    associado (item 21) para permitir localizar e restaurar exatamente esse
-    ponto caso a importação precise ser desfeita depois."""
+    Aplica UM plano já revisado e confirmado (Prestadores OU Cessionários,
+    nunca os dois juntos) — os dois uploads da tela "Atualização por
+    Planilha" são independentes: cada um lê só a sua aba (PROJ_PREST ou
+    PROJ_CESS) e pode ser confirmado por pessoas diferentes, em momentos
+    diferentes, sem que um dependa do outro estar pronto. `tipo` é
+    "prestadores" ou "cessionarios".
+
+    Mesmas garantias de `executar_plano_prestadores`/
+    `executar_plano_cessionarios`: cria backup antes de gravar, marcado
+    como PRE_IMPORTACAO e vinculado ao usuário; se qualquer erro ocorrer
+    durante a aplicação, restaura o backup imediatamente — "ou a
+    atualização é concluída com sucesso, ou o estado anterior é
+    preservado". A execução (sucesso ou falha) fica registrada no
+    histórico, com o nome do arquivo de backup PRE_IMPORTACAO associado
+    para permitir localizar e restaurar exatamente esse ponto caso a
+    importação precise ser desfeita depois."""
     from gat.config import DB_PATH
     from gat.database import criar_backup, registrar_importacao_planilha
 
-    caminho_backup = criar_backup(tipo="PRE_IMPORTACAO", usuario=usuario, observacoes=f"Antes de importar \"{nome_arquivo}\"")
+    executar = executar_plano_prestadores if tipo == "prestadores" else executar_plano_cessionarios
+    caminho_backup = criar_backup(
+        tipo="PRE_IMPORTACAO", usuario=usuario,
+        observacoes=f"Antes de importar \"{nome_arquivo}\" ({plano.origem})",
+    )
     nome_backup = caminho_backup.name if caminho_backup is not None else None
 
     try:
-        relatorio_prest = executar_plano_prestadores(plano_prestadores, resolucoes_prestadores, usuario)
-        relatorio_cess = executar_plano_cessionarios(plano_cessionarios, resolucoes_cessionarios, usuario)
+        relatorio = executar(plano, resolucoes, usuario)
     except Exception as exc:
         if caminho_backup is not None:
             shutil.copy2(caminho_backup, DB_PATH)
         registrar_importacao_planilha(
-            usuario, nome_arquivo, "Prestadores + Cessionários",
-            lidos=plano_prestadores.lidos + plano_cessionarios.lidos,
-            novos=0, atualizados=0, conflitos_tratados=0, ignorados=0, inconsistencias=0,
+            usuario, nome_arquivo, plano.origem,
+            lidos=plano.lidos, novos=0, atualizados=0, conflitos_tratados=0, ignorados=0, inconsistencias=0,
             resultado="ERRO", erro=str(exc), backup_ref=nome_backup,
         )
         raise
 
     registrar_importacao_planilha(
-        usuario, nome_arquivo, "Prestadores",
-        lidos=relatorio_prest.lidos, novos=relatorio_prest.novos, atualizados=relatorio_prest.atualizados,
-        conflitos_tratados=relatorio_prest.conflitos_tratados,
-        ignorados=relatorio_prest.ignorados_sem_mudanca + relatorio_prest.ignorados_arquivados,
-        inconsistencias=relatorio_prest.inconsistentes, resultado="SUCESSO", backup_ref=nome_backup,
+        usuario, nome_arquivo, plano.origem,
+        lidos=relatorio.lidos, novos=relatorio.novos, atualizados=relatorio.atualizados,
+        conflitos_tratados=relatorio.conflitos_tratados,
+        ignorados=relatorio.ignorados_sem_mudanca + relatorio.ignorados_arquivados,
+        inconsistencias=relatorio.inconsistentes, resultado="SUCESSO", backup_ref=nome_backup,
     )
-    registrar_importacao_planilha(
-        usuario, nome_arquivo, "Cessionários",
-        lidos=relatorio_cess.lidos, novos=relatorio_cess.novos, atualizados=relatorio_cess.atualizados,
-        conflitos_tratados=relatorio_cess.conflitos_tratados,
-        ignorados=relatorio_cess.ignorados_sem_mudanca + relatorio_cess.ignorados_arquivados,
-        inconsistencias=relatorio_cess.inconsistentes, resultado="SUCESSO", backup_ref=nome_backup,
-    )
-    return relatorio_prest, relatorio_cess
+    return relatorio
