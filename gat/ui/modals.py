@@ -49,6 +49,7 @@ from gat.database import (
     listar_cadastro_cessionarios,
     listar_cadastro_prestadores,
     listar_cessionarios,
+    listar_historico,
     listar_obras_prestador,
     listar_prestadores,
     listar_repactuacoes_prazo,
@@ -171,6 +172,31 @@ def _historico_repactuacoes(tabela: str, registro_id: int) -> None:
         st.dataframe(
             exibicao.rename(columns={
                 "data_anterior": "Data anterior", "data_nova": "Nova data", "motivo": "Motivo",
+                "usuario": "Usuário", "data_hora": "Quando",
+            }),
+            use_container_width=True, hide_index=True,
+        )
+
+
+def _historico_status(tabela: str, registro_id: int) -> None:
+    """Linha do tempo de mudanças de Status Análise deste registro
+    específico — mesma tabela `historico_edicoes` já usada por toda
+    auditoria do sistema (edição manual e Atualização por Planilha
+    gravam ali pelo mesmo caminho, `atualizar_prestador`/
+    `atualizar_cessionario`), só filtrada ao campo `status_analise` e a
+    este registro."""
+    historico = listar_historico(tabela, registro_id)
+    if historico.empty:
+        return
+    historico = historico[historico["campo"] == "status_analise"]
+    if historico.empty:
+        return
+    with st.expander(f"Histórico de Status Análise ({len(historico)})", icon=":material/history:"):
+        exibicao = historico[["valor_anterior", "valor_novo", "usuario", "data_hora"]].copy()
+        exibicao["data_hora"] = pd.to_datetime(exibicao["data_hora"], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
+        st.dataframe(
+            exibicao.rename(columns={
+                "valor_anterior": "Status anterior", "valor_novo": "Status novo",
                 "usuario": "Usuário", "data_hora": "Quando",
             }),
             use_container_width=True, hide_index=True,
@@ -734,6 +760,7 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
         motivo_repactuacao = st.text_input("Motivo da repactuação de prazo *", key=f"pr_motivo_repac_{sufixo}")
     if editando:
         _historico_repactuacoes("prestadores", registro["id"])
+        _historico_status("prestadores", registro["id"])
 
     st.markdown("##### Cálculo automático (dias úteis · calendário RJ)")
     m1, m2, m3 = st.columns(3)
@@ -1068,6 +1095,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
         motivo_repactuacao = st.text_input("Motivo da repactuação de prazo *", key=f"ce_motivo_repac_{sufixo}")
     if editando:
         _historico_repactuacoes("cessionarios", registro["id"])
+        _historico_status("cessionarios", registro["id"])
 
     st.markdown("##### Cálculo automático (dias úteis · calendário RJ)")
     m1, m2, m3, m4 = st.columns(4)
