@@ -424,8 +424,10 @@ def _renderizar_atualizacao_planilha(usuario: dict) -> None:
     resultado = st.session_state.get("admin_resultado_importacao")
     if resultado:
         st.success("Importação concluída — veja o relatório abaixo.", icon=":material/check_circle:")
-        for relatorio in resultado:
-            _renderizar_relatorio_importacao(relatorio)
+        col_prest, col_cess = st.columns(2)
+        for relatorio, coluna in zip(resultado, (col_prest, col_cess)):
+            with coluna:
+                _renderizar_relatorio_importacao(relatorio)
 
     with st.expander("Histórico de importações"):
         historico = listar_importacoes_planilha()
@@ -454,28 +456,30 @@ def _renderizar_previa_importacao(plano_estado: dict, usuario: dict) -> None:
     plano_p, plano_c, nome_arquivo = plano_estado["plano_p"], plano_estado["plano_c"], plano_estado["nome_arquivo"]
 
     st.markdown("###### Prévia da atualização")
-    for plano, tabela in ((plano_p, "prestadores"), (plano_c, "cessionarios")):
-        st.markdown(f"**{plano.origem}**")
-        col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("Lidos", plano.lidos)
-        col2.metric("Novos", plano.novos)
-        col3.metric("Atualizados", plano.atualizados)
-        col4.metric("Sem mudança", plano.sem_mudanca)
-        col5.metric("Com conflito", plano.total_conflitos)
-        if plano.arquivados:
-            st.caption(f"{plano.arquivados} já arquivado(s) — ignorado(s), arquivamento é decisão manual separada.")
-        if plano.inconsistentes:
-            with st.expander(f"{plano.inconsistentes} linha(s) com inconsistência — não puderam ser processadas"):
-                for item in plano.itens:
-                    if item.tipo == "inconsistente":
-                        st.caption(
-                            f"• Linha {item.linha_planilha or '?'} da planilha — Item {item.item_origem or '?'} "
-                            f"({item.identificacao}): {item.motivo_inconsistencia}."
-                        )
-        if plano.colunas_nao_mapeadas:
-            st.caption(f"Colunas da planilha não reconhecidas (ignoradas): {', '.join(plano.colunas_nao_mapeadas)}")
-        if plano.registros_nao_encontrados:
-            _renderizar_registros_nao_encontrados(plano, tabela, usuario)
+    col_prest, col_cess = st.columns(2)
+    for plano, tabela, coluna in ((plano_p, "prestadores", col_prest), (plano_c, "cessionarios", col_cess)):
+        with coluna:
+            st.markdown(f"**{plano.origem}**")
+            col1, col2 = st.columns(2)
+            col1.metric("Lidos", plano.lidos)
+            col2.metric("Novos", plano.novos)
+            col1.metric("Atualizados", plano.atualizados)
+            col2.metric("Sem mudança", plano.sem_mudanca)
+            st.metric("Com conflito", plano.total_conflitos)
+            if plano.arquivados:
+                st.caption(f"{plano.arquivados} já arquivado(s) — ignorado(s), arquivamento é decisão manual separada.")
+            if plano.inconsistentes:
+                with st.expander(f"{plano.inconsistentes} linha(s) com inconsistência — não puderam ser processadas"):
+                    for item in plano.itens:
+                        if item.tipo == "inconsistente":
+                            st.caption(
+                                f"• Linha {item.linha_planilha or '?'} da planilha — Item {item.item_origem or '?'} "
+                                f"({item.identificacao}): {item.motivo_inconsistencia}."
+                            )
+            if plano.colunas_nao_mapeadas:
+                st.caption(f"Colunas da planilha não reconhecidas (ignoradas): {', '.join(plano.colunas_nao_mapeadas)}")
+            if plano.registros_nao_encontrados:
+                _renderizar_registros_nao_encontrados(plano, tabela, usuario)
 
     resolucoes_p: dict[tuple, dict[str, str]] = {}
     resolucoes_c: dict[tuple, dict[str, str]] = {}
@@ -568,14 +572,14 @@ def _renderizar_registros_nao_encontrados(plano, tabela: str, usuario: dict) -> 
 
 def _renderizar_relatorio_importacao(relatorio) -> None:
     st.markdown(f"###### {relatorio.origem}")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2 = st.columns(2)
     col1.metric("Lidos", relatorio.lidos)
     col2.metric("Novos", relatorio.novos)
-    col3.metric("Atualizados", relatorio.atualizados)
-    col4.metric("Conflitos tratados", relatorio.conflitos_tratados)
+    col1.metric("Atualizados", relatorio.atualizados)
+    col2.metric("Conflitos tratados", relatorio.conflitos_tratados)
     col1.metric("Sem mudança", relatorio.ignorados_sem_mudanca)
     col2.metric("Já arquivados", relatorio.ignorados_arquivados)
-    col3.metric("Inconsistências", relatorio.inconsistentes)
+    col1.metric("Inconsistências", relatorio.inconsistentes)
     if relatorio.colunas_nao_mapeadas:
         st.caption(f"Colunas da planilha não reconhecidas (ignoradas): {', '.join(relatorio.colunas_nao_mapeadas)}")
     if relatorio.detalhes_inconsistencia:
