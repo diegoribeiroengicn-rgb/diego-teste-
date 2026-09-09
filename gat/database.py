@@ -1693,6 +1693,37 @@ def _migracao_0039_perguntas_checklist_dinamicas(conn: sqlite3.Connection) -> No
             )
 
 
+def _migracao_0040_preferencias_conflito_planilha(conn: sqlite3.Connection) -> None:
+    """
+    Atualização por Planilha: quando o usuário resolve um conflito de
+    campo escolhendo "Manter sistema" e marca "lembrar esta escolha",
+    grava aqui — para que a MESMA divergência (mesmo registro, mesmo
+    campo) não volte a ser perguntada em importações futuras, mesmo que a
+    planilha continue trazendo o valor antigo/diferente naquele campo
+    específico. `chave` é a chave de identificação do registro
+    (`gat.planilha_import.chave_registro`), serializada em JSON — o campo
+    em si pode ter qualquer nome de coluna das tabelas prestadores/
+    cessionarios."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS preferencias_conflito_planilha (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tabela TEXT NOT NULL,
+            chave TEXT NOT NULL,
+            campo TEXT NOT NULL,
+            identificacao TEXT,
+            criado_em TEXT NOT NULL,
+            criado_por TEXT,
+            UNIQUE(tabela, chave, campo)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_preferencias_conflito_planilha_tabela "
+        "ON preferencias_conflito_planilha(tabela)"
+    )
+
+
 def _migracao_0033_atualizar_capitulo_importacao_planilha(conn: sqlite3.Connection) -> None:
     """A funcionalidade de importação por planilha foi movida de
     Administração > Importar Planilha para Configurações > Atualização
@@ -1800,6 +1831,7 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (37, "Avaliação de Prestadores/Cessionários: coluna avaliacao_opcional_perguntada_revisao (pergunta opcional da Rev.02 em diante, uma vez por revisão)", _migracao_0037_avaliacao_opcional_revisao),
     (38, "Meus Alertas: tabela alertas_pessoais_vistos (controle de leitura por usuário dos alertas de prazo e alertas manuais direcionados)", _migracao_0038_alertas_pessoais_vistos),
     (39, "Avaliação — Checklist: tabela avaliacao_checklist_perguntas (perguntas editáveis em tela, semeada com as 18 perguntas em 6 categorias do formulário oficial de Avaliação de Qualidade do Projetista)", _migracao_0039_perguntas_checklist_dinamicas),
+    (40, "Atualização por Planilha: tabela preferencias_conflito_planilha (memoriza escolhas 'Manter sistema' para não perguntar de novo o mesmo conflito)", _migracao_0040_preferencias_conflito_planilha),
 ]
 
 
@@ -2729,6 +2761,45 @@ def obter_ultima_importacao_planilha(origem: str | None = None) -> dict[str, Any
     with _conectar() as conn:
         linha = conn.execute(query, params).fetchone()
         return dict(linha) if linha else None
+
+
+def definir_preferencia_conflito_planilha(tabela: str, chave: str, campo: str, identificacao: str | None, usuario: str) -> None:
+    """Memoriza a escolha "Manter sistema" para este registro + campo —
+    a próxima importação por planilha não volta a perguntar sobre esta
+    mesma divergência (ver `gat.planilha_import._aplicar_preferencias`)."""
+    agora = agora_br().isoformat()
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO preferencias_conflito_planilha (tabela, chave, campo, identificacao, criado_em, criado_por) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(tabela, chave, campo) DO UPDATE SET "
+            "identificacao = excluded.identificacao, criado_em = excluded.criado_em, criado_por = excluded.criado_por",
+            (tabela, chave, campo, identificacao, agora, usuario),
+        )
+
+
+def remover_preferencia_conflito_planilha(preferencia_id: int) -> None:
+    with _conectar() as conn:
+        conn.execute("DELETE FROM preferencias_conflito_planilha WHERE id = ?", (preferencia_id,))
+
+
+def listar_preferencias_conflito_planilha(tabela: str) -> pd.DataFrame:
+    with _conectar() as conn:
+        return pd.read_sql_query(
+            "SELECT * FROM preferencias_conflito_planilha WHERE tabela = ? ORDER BY criado_em DESC",
+            conn, params=(tabela,),
+        )
+
+
+def chaves_preferencias_conflito_planilha(tabela: str) -> set[tuple[str, str]]:
+    """`{(chave, campo)}` já memorizados para `tabela` — usado por
+    `gat.planilha_import._planejar` para remover do plano os conflitos que
+    o usuário já decidiu manter fixos no sistema, sem perguntar de novo."""
+    with _conectar() as conn:
+        linhas = conn.execute(
+            "SELECT chave, campo FROM preferencias_conflito_planilha WHERE tabela = ?", (tabela,),
+        ).fetchall()
+        return {(linha["chave"], linha["campo"]) for linha in linhas}
 
 
 # ---------------------------------------------------------------------------
