@@ -408,12 +408,15 @@ def injetar_css_global(tema: str = TEMA_CLARO) -> None:
 
     /* ---- Moldura padrão do Streamlit ----
        `[client] toolbarMode = "minimal"` (.streamlit/config.toml) já
-       remove a barra de ferramentas (Deploy/Rerun/Clear cache/GitHub) na
-       maioria dos casos; o CSS abaixo é reforço para versões/temas em
-       que algum resquício ainda aparece. `#MainMenu`/`footer` (seletores
-       de versões antigas do Streamlit) ficam mantidos por segurança,
-       mas o seletor que importa na versão atual (1.6x) é o testid abaixo. */
-    [data-testid="stToolbar"] {{visibility: hidden; height: 0;}}
+       remove a barra de ferramentas (Deploy/Rerun/Clear cache/GitHub) —
+       não escondemos `[data-testid="stToolbar"]` por CSS porque, na
+       versão atual do Streamlit (1.6x), o próprio botão de recolher/
+       reabrir a barra lateral ("«"/"»") é renderizado DENTRO desse mesmo
+       contêiner: escondê-lo por completo (como uma versão anterior deste
+       arquivo fazia) também escondia esse botão — depois de recolher a
+       barra lateral, não sobrava nenhum controle visível para reabri-la.
+       `#MainMenu`/`footer` (seletores de versões antigas do Streamlit)
+       ficam mantidos por segurança, sem efeito nesta versão. */
     [data-testid="stDecoration"] {{display: none;}}
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
