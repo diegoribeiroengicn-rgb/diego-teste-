@@ -566,7 +566,7 @@ def _renderizar_confirmacao_resumo(pendencia: dict[str, Any], chave_confirmacao:
 # ---------------------------------------------------------------------------
 
 
-@st.dialog("Análise de Prestadores", width="large")
+@st.dialog("Análise de Prestadores", width="large", dismissible=False)
 def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_definir_prioridade: bool = True) -> None:
     editando = registro is not None
     sufixo = f"edit_{registro['id']}" if editando else "novo"
@@ -920,7 +920,7 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
 # ---------------------------------------------------------------------------
 
 
-@st.dialog("Análise de Cessionários", width="large")
+@st.dialog("Análise de Cessionários", width="large", dismissible=False)
 def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pode_definir_prioridade: bool = True) -> None:
     editando = registro is not None
     sufixo = f"edit_{registro['id']}" if editando else "novo"
@@ -1254,7 +1254,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
 # ---------------------------------------------------------------------------
 
 
-@st.dialog("Avaliação de Prestador", width="large")
+@st.dialog("Avaliação de Prestador", width="large", dismissible=False)
 def dialog_avaliacao(usuario: str, registro: dict[str, Any] | None = None) -> None:
     editando = registro is not None
     sufixo = f"edit_{registro['id']}" if editando else "novo"

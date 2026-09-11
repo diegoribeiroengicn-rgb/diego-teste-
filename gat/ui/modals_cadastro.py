@@ -36,7 +36,7 @@ def _idx(opcoes: list[str], valor: str | None) -> int:
 # ---------------------------------------------------------------------------
 
 
-@st.dialog("Cadastro de Prestador", width="large")
+@st.dialog("Cadastro de Prestador", width="large", dismissible=False)
 def dialog_cadastro_prestador(usuario: str, registro: dict[str, Any] | None = None) -> None:
     editando = registro is not None
     sufixo = f"edit_{registro['id']}" if editando else "novo"
@@ -154,7 +154,7 @@ def dialog_status_cadastro_prestador(usuario: str, registro: dict[str, Any]) -> 
 # ---------------------------------------------------------------------------
 
 
-@st.dialog("Obra / Área Vinculada")
+@st.dialog("Obra / Área Vinculada", dismissible=False)
 def dialog_obra_prestador(usuario: str, prestador_id: int, registro: dict[str, Any] | None = None) -> None:
     editando = registro is not None
     sufixo = f"edit_{registro['id']}" if editando else "novo"
@@ -220,7 +220,7 @@ def dialog_obra_prestador(usuario: str, prestador_id: int, registro: dict[str, A
 # ---------------------------------------------------------------------------
 
 
-@st.dialog("Cadastro de Cessionário", width="large")
+@st.dialog("Cadastro de Cessionário", width="large", dismissible=False)
 def dialog_cadastro_cessionario(usuario: str, registro: dict[str, Any] | None = None) -> None:
     editando = registro is not None
     sufixo = f"edit_{registro['id']}" if editando else "novo"

@@ -38,7 +38,7 @@ def _data(valor: str | None) -> date | None:
         return None
 
 
-@st.dialog("Alerta manual", width="large")
+@st.dialog("Alerta manual", width="large", dismissible=False)
 def dialog_alerta_manual(
     usuario: dict, modulo: str, registro: dict[str, Any] | None = None,
     prefill: dict[str, Any] | None = None,
@@ -156,7 +156,7 @@ def dialog_alerta_manual(
         st.rerun()
 
 
-@st.dialog("Encerrar alerta manual")
+@st.dialog("Encerrar alerta manual", dismissible=False)
 def dialog_encerrar_alerta_manual(usuario: dict, alerta: dict[str, Any]) -> None:
     from gat.database import encerrar_alerta_manual
 

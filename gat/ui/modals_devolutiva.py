@@ -18,7 +18,7 @@ from gat.ui.modals import _confirmar_descarte, _houve_alteracoes_nao_salvas
 from gat.ui.pos_mutacao import atualizar_apos_mutacao
 
 
-@st.dialog("Cobrança de Devolutiva Externa", width="large")
+@st.dialog("Cobrança de Devolutiva Externa", width="large", dismissible=False)
 def dialog_cobranca_devolutiva(usuario: dict, modulo: str, registro: dict[str, Any]) -> None:
     rotulo_modulo = "Prestador" if modulo == "prestadores" else "Cessionário"
     nome = texto_seguro(registro.get("nome")).strip() or "—"

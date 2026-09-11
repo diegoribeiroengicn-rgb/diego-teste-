@@ -49,7 +49,7 @@ def _idx(opcoes: list[str], valor: str | None) -> int:
 # ---------------------------------------------------------------------------
 
 
-@st.dialog("Reunião", width="large")
+@st.dialog("Reunião", width="large", dismissible=False)
 def dialog_reuniao(usuario: str, registro: dict[str, Any] | None = None) -> None:
     editando = registro is not None
     sufixo = f"edit_{registro['id']}" if editando else "novo"
@@ -132,7 +132,7 @@ def dialog_reuniao(usuario: str, registro: dict[str, Any] | None = None) -> None
 # ---------------------------------------------------------------------------
 
 
-@st.dialog("Plano de Ação")
+@st.dialog("Plano de Ação", dismissible=False)
 def dialog_plano_acao(usuario: str, registro: dict[str, Any] | None = None, reuniao_id_padrao: int | None = None) -> None:
     editando = registro is not None
     sufixo = f"edit_{registro['id']}" if editando else "novo"

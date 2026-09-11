@@ -19,7 +19,7 @@ from gat.ui.pos_mutacao import atualizar_apos_mutacao
 _LABEL_DECISAO = {"MANTER": "Permanece em HOLD", "RETIRADO": "Retirar do HOLD"}
 
 
-@st.dialog("Registrar tratativa — HOLD")
+@st.dialog("Registrar tratativa — HOLD", dismissible=False)
 def dialog_tratativa_hold(usuario: dict, modulo: str, registro: dict[str, Any]) -> None:
     rotulo_modulo = "Prestador" if modulo == "prestadores" else "Cessionário"
     coluna_nome = "prestador" if modulo == "prestadores" else "cessionario"
