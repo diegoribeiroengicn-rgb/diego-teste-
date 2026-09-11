@@ -388,6 +388,7 @@ AREAS_PERMISSAO = {
     "pmo": "PMO — Acessar Portfólio de Projetos e páginas de projeto",
     "pmo.cadastrar": "PMO — Cadastrar novo projeto",
     "arquivo": "Arquivo — Acessar o módulo de arquivamento/restauração de registros",
+    "localizacao_ats": "Localização de ATs — Consultar",
 }
 
 # Áreas sensíveis que, para usuários já existentes (sem uma escolha explícita

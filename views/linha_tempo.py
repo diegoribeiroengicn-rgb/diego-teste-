@@ -167,6 +167,14 @@ def _sequencia_completa_projeto(modulo: str, coluna_nome: str, tipo_entidade: st
         st.caption(f"Observações: {observacoes_ultima}")
 
 
+def renderizar_sequencia_projeto(modulo: str, coluna_nome: str, tipo_entidade: str, df_grupo: pd.DataFrame) -> None:
+    """Wrapper público de `_sequencia_completa_projeto` — permite outras
+    telas (ex.: Localização de ATs) reaproveitarem a mesma sequência
+    cronológica de revisões já usada aqui, sem duplicar a lógica de
+    histórico (item 9 da solicitação "Localização de ATs")."""
+    _sequencia_completa_projeto(modulo, coluna_nome, tipo_entidade, df_grupo)
+
+
 def render(usuario: dict) -> None:
     exigir_area(usuario, "linha_tempo")
 

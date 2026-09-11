@@ -55,6 +55,7 @@ from views import (
     lembretes_pep,
     linha_tempo,
     lista_prioridades,
+    localizacao_ats,
     manual_sistema,
     meu_perfil,
     meus_alertas,
@@ -175,6 +176,8 @@ if pode_modulo(usuario, "consolidado"):
     ]
     if pode_area(usuario, "linha_tempo"):
         grupo_consolidado.append(_pagina(lambda: linha_tempo.render(usuario), "Linha do Tempo", ":material/timeline:", "linha_tempo"))
+    if pode_area(usuario, "localizacao_ats"):
+        grupo_consolidado.append(_pagina(lambda: localizacao_ats.render(usuario), "Localização de ATs", ":material/travel_explore:", "localizacao_ats"))
     paginas["Consolidado"] = grupo_consolidado
 
 if pode_area(usuario, "pmo"):
