@@ -1281,11 +1281,20 @@ def dialog_avaliacao(usuario: str, registro: dict[str, Any] | None = None) -> No
 
     observacoes = st.text_area("Observações", value=registro.get("observacoes", "") if registro else "", key=f"av_obs_{sufixo}")
 
+    chave_snapshot = f"av_snapshot_{sufixo}"
+    valores_atuais = {
+        "nome_prestador": nome_prestador, "codigo_prestador": codigo_prestador, "nome_projeto": nome_projeto,
+        "at_referencia": at_referencia, "data_avaliacao": data_avaliacao, "nota": nota,
+        "analista_responsavel": analista_responsavel, "observacoes": observacoes,
+    }
+    houve_alteracoes = _houve_alteracoes_nao_salvas(chave_snapshot, valores_atuais)
+
     col_salvar, col_cancelar = st.columns(2)
     salvar = col_salvar.button("Salvar", icon=":material/save:", type="primary", use_container_width=True, key=f"av_salvar_{sufixo}")
     cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"av_cancelar_{sufixo}")
 
-    if cancelar:
+    if _confirmar_descarte(f"av_descarte_{sufixo}", houve_alteracoes, cancelar):
+        st.session_state.pop(chave_snapshot, None)
         st.rerun()
 
     if salvar:
@@ -1308,6 +1317,7 @@ def dialog_avaliacao(usuario: str, registro: dict[str, Any] | None = None) -> No
         else:
             inserir_avaliacao(dados, usuario)
             st.toast("Nova avaliação registrada com sucesso.", icon=":material/check_circle:")
+        st.session_state.pop(chave_snapshot, None)
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
         atualizar_apos_mutacao()
 

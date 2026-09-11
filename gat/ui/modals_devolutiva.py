@@ -14,6 +14,7 @@ import streamlit as st
 from gat.database import registrar_cobranca_devolutiva
 from gat.devolutiva_externa import gerar_minuta_cobranca
 from gat.normalizacao import texto_seguro
+from gat.ui.modals import _confirmar_descarte, _houve_alteracoes_nao_salvas
 from gat.ui.pos_mutacao import atualizar_apos_mutacao
 
 
@@ -37,7 +38,7 @@ def dialog_cobranca_devolutiva(usuario: dict, modulo: str, registro: dict[str, A
     )
 
     st.text_input("Assunto", value=minuta["assunto"], disabled=True, key=f"dv_assunto_{modulo}_{projeto_id}")
-    st.text_area("Corpo do e-mail (copie e envie pelo seu canal de e-mail habitual)", value=minuta["corpo"], height=260, key=f"dv_corpo_{modulo}_{projeto_id}")
+    corpo = st.text_area("Corpo do e-mail (copie e envie pelo seu canal de e-mail habitual)", value=minuta["corpo"], height=260, key=f"dv_corpo_{modulo}_{projeto_id}")
 
     st.caption(
         "O sistema não envia este e-mail automaticamente. Após enviá-lo pelo seu canal de e-mail, confirme "
@@ -47,10 +48,20 @@ def dialog_cobranca_devolutiva(usuario: dict, modulo: str, registro: dict[str, A
     canal = st.selectbox("Canal utilizado", ["E-mail", "Telefone", "Reunião", "Outro"], key=f"dv_canal_{modulo}_{projeto_id}")
     observacao = st.text_input("Observação (opcional)", key=f"dv_obs_{modulo}_{projeto_id}")
 
+    chave_snapshot = f"dv_snapshot_{modulo}_{projeto_id}"
+    valores_atuais = {"corpo": corpo, "canal": canal, "observacao": observacao}
+    houve_alteracoes = _houve_alteracoes_nao_salvas(chave_snapshot, valores_atuais)
+
     col_confirmar, col_cancelar = st.columns(2)
-    if col_confirmar.button("Confirmar cobrança realizada", icon=":material/check_circle:", type="primary", use_container_width=True, key=f"dv_confirmar_{modulo}_{projeto_id}"):
+    confirmar = col_confirmar.button("Confirmar cobrança realizada", icon=":material/check_circle:", type="primary", use_container_width=True, key=f"dv_confirmar_{modulo}_{projeto_id}")
+    cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"dv_cancelar_{modulo}_{projeto_id}")
+
+    if _confirmar_descarte(f"dv_descarte_{modulo}_{projeto_id}", houve_alteracoes, cancelar):
+        st.session_state.pop(chave_snapshot, None)
+        st.rerun()
+
+    if confirmar:
         registrar_cobranca_devolutiva(modulo, projeto_id, numero_cobranca, usuario["username"], canal, observacao.strip() or None)
+        st.session_state.pop(chave_snapshot, None)
         st.toast(f"{numero_cobranca}ª cobrança de devolutiva registrada.", icon=":material/check_circle:")
         atualizar_apos_mutacao()
-    if col_cancelar.button("Cancelar", use_container_width=True, key=f"dv_cancelar_{modulo}_{projeto_id}"):
-        st.rerun()

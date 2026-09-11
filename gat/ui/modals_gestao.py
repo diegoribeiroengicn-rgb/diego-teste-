@@ -22,6 +22,7 @@ from gat.database import (
     listar_reunioes,
 )
 from gat.horario import hoje_br
+from gat.ui.modals import _confirmar_descarte, _houve_alteracoes_nao_salvas
 
 
 def _parse_data(valor: Any) -> date | None:
@@ -84,11 +85,20 @@ def dialog_reuniao(usuario: str, registro: dict[str, Any] | None = None) -> None
     ata = st.text_area("Ata", value=registro.get("ata", "") if registro else "", key=f"reu_ata_{sufixo}")
     decisoes = st.text_area("Decisões", value=registro.get("decisoes", "") if registro else "", key=f"reu_dec_{sufixo}")
 
+    chave_snapshot = f"reu_snapshot_{sufixo}"
+    valores_atuais = {
+        "titulo": titulo, "pauta": pauta, "data_prevista": data_prevista, "data_realizada": data_realizada,
+        "sel_prest": sel_prest, "sel_cess": sel_cess, "participantes_txt": participantes_txt,
+        "ata": ata, "decisoes": decisoes,
+    }
+    houve_alteracoes = _houve_alteracoes_nao_salvas(chave_snapshot, valores_atuais)
+
     col_salvar, col_cancelar = st.columns(2)
     salvar = col_salvar.button("Salvar", icon=":material/save:", type="primary", use_container_width=True, key=f"reu_salvar_{sufixo}")
     cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"reu_cancelar_{sufixo}")
 
-    if cancelar:
+    if _confirmar_descarte(f"reu_descarte_{sufixo}", houve_alteracoes, cancelar):
+        st.session_state.pop(chave_snapshot, None)
         st.rerun()
 
     if salvar:
@@ -112,6 +122,7 @@ def dialog_reuniao(usuario: str, registro: dict[str, Any] | None = None) -> None
         else:
             inserir_reuniao(dados, projetos, participantes, usuario)
             st.toast("Reunião registrada com sucesso.", icon=":material/check_circle:")
+        st.session_state.pop(chave_snapshot, None)
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
         st.rerun()
 
@@ -144,11 +155,19 @@ def dialog_plano_acao(usuario: str, registro: dict[str, Any] | None = None, reun
     status = st.selectbox("Status", STATUS_PLANO_ACAO_OPCOES, index=_idx(STATUS_PLANO_ACAO_OPCOES, registro.get("status") if registro else "PENDENTE"), key=f"plano_status_{sufixo}")
     reuniao_label = st.selectbox("Reunião vinculada", list(opcoes_reuniao.keys()), index=list(opcoes_reuniao.keys()).index(label_atual), key=f"plano_reuniao_{sufixo}")
 
+    chave_snapshot = f"plano_snapshot_{sufixo}"
+    valores_atuais = {
+        "descricao": descricao, "responsavel": responsavel, "prazo": prazo, "status": status,
+        "reuniao_label": reuniao_label,
+    }
+    houve_alteracoes = _houve_alteracoes_nao_salvas(chave_snapshot, valores_atuais)
+
     col_salvar, col_cancelar = st.columns(2)
     salvar = col_salvar.button("Salvar", icon=":material/save:", type="primary", use_container_width=True, key=f"plano_salvar_{sufixo}")
     cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"plano_cancelar_{sufixo}")
 
-    if cancelar:
+    if _confirmar_descarte(f"plano_descarte_{sufixo}", houve_alteracoes, cancelar):
+        st.session_state.pop(chave_snapshot, None)
         st.rerun()
 
     if salvar:
@@ -168,5 +187,6 @@ def dialog_plano_acao(usuario: str, registro: dict[str, Any] | None = None, reun
         else:
             inserir_plano_acao(dados, usuario)
             st.toast("Plano de ação registrado com sucesso.", icon=":material/check_circle:")
+        st.session_state.pop(chave_snapshot, None)
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
         st.rerun()

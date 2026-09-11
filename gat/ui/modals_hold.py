@@ -13,6 +13,7 @@ import streamlit as st
 from gat.database import DECISAO_HOLD_OPCOES, registrar_tratativa_hold
 from gat.horario import hoje_br
 from gat.normalizacao import texto_seguro
+from gat.ui.modals import _confirmar_descarte, _houve_alteracoes_nao_salvas
 from gat.ui.pos_mutacao import atualizar_apos_mutacao
 
 _LABEL_DECISAO = {"MANTER": "Permanece em HOLD", "RETIRADO": "Retirar do HOLD"}
@@ -39,8 +40,21 @@ def dialog_tratativa_hold(usuario: dict, modulo: str, registro: dict[str, Any]) 
     if decisao == "RETIRADO":
         st.caption("Ao retirar do HOLD, o SLA e o prazo do projeto são recalculados automaticamente a partir de hoje.")
 
+    chave_snapshot = f"hold_snapshot_{modulo}_{registro['id']}"
+    valores_atuais = {
+        "especialista": especialista, "data_contato": data_contato, "resolucao": resolucao, "decisao": decisao,
+    }
+    houve_alteracoes = _houve_alteracoes_nao_salvas(chave_snapshot, valores_atuais)
+
     col_salvar, col_cancelar = st.columns(2)
-    if col_salvar.button("Confirmar tratativa", icon=":material/check_circle:", type="primary", use_container_width=True, key=f"hold_salvar_{modulo}_{registro['id']}"):
+    salvar = col_salvar.button("Confirmar tratativa", icon=":material/check_circle:", type="primary", use_container_width=True, key=f"hold_salvar_{modulo}_{registro['id']}")
+    cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"hold_cancelar_{modulo}_{registro['id']}")
+
+    if _confirmar_descarte(f"hold_descarte_{modulo}_{registro['id']}", houve_alteracoes, cancelar):
+        st.session_state.pop(chave_snapshot, None)
+        st.rerun()
+
+    if salvar:
         if not especialista.strip():
             st.error("Informe o especialista contatado.")
         elif not data_contato:
@@ -52,7 +66,6 @@ def dialog_tratativa_hold(usuario: dict, modulo: str, registro: dict[str, Any]) 
                 modulo, registro["id"], especialista.strip(), data_contato.isoformat() if isinstance(data_contato, date) else str(data_contato),
                 resolucao.strip(), decisao, usuario["username"],
             )
+            st.session_state.pop(chave_snapshot, None)
             st.toast("Tratativa registrada.", icon=":material/check_circle:")
             atualizar_apos_mutacao()
-    if col_cancelar.button("Cancelar", use_container_width=True, key=f"hold_cancelar_{modulo}_{registro['id']}"):
-        st.rerun()

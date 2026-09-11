@@ -19,6 +19,7 @@ from gat.database import (
     registrar_atividade,
 )
 from gat.normalizacao import inteiro_seguro
+from gat.ui.modals import _confirmar_descarte, _houve_alteracoes_nao_salvas
 
 
 def _idx(opcoes: list[str], valor: Any) -> int:
@@ -101,11 +102,20 @@ def dialog_alerta_manual(
     destinatarios_atuais = [d for d in destinatarios_atuais if d in opcoes_destinatarios]
     destinatarios = st.multiselect("Destinatários (notificação/ciência)", opcoes_destinatarios, default=destinatarios_atuais, key=f"am_dest_{sufixo}")
 
+    chave_snapshot = f"am_snapshot_{sufixo}"
+    valores_atuais = {
+        "titulo": titulo, "descricao": descricao, "num_at": num_at, "codigo_projeto": codigo_projeto,
+        "nome_entidade": nome_entidade, "disciplina": disciplina, "revisao": revisao, "especialista": especialista,
+        "prioridade": prioridade, "vencimento": vencimento, "observacoes": observacoes, "destinatarios": destinatarios,
+    }
+    houve_alteracoes = _houve_alteracoes_nao_salvas(chave_snapshot, valores_atuais)
+
     col_salvar, col_cancelar = st.columns(2)
     salvar = col_salvar.button("Salvar", icon=":material/save:", type="primary", use_container_width=True, key=f"am_salvar_{sufixo}")
     cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"am_cancelar_{sufixo}")
 
-    if cancelar:
+    if _confirmar_descarte(f"am_descarte_{sufixo}", houve_alteracoes, cancelar):
+        st.session_state.pop(chave_snapshot, None)
         st.rerun()
 
     if salvar:
@@ -142,6 +152,7 @@ def dialog_alerta_manual(
             alerta_id = criar_alerta_manual(dados, usuario["username"])
             registrar_atividade(usuario["username"], usuario.get("perfil"), "CRIACAO_ALERTA_MANUAL", modulo=modulo, detalhe=f"Alerta manual #{alerta_id} criado: {titulo.strip()}")
             st.toast("Alerta manual criado.", icon=":material/check_circle:")
+        st.session_state.pop(chave_snapshot, None)
         st.rerun()
 
 
@@ -151,14 +162,24 @@ def dialog_encerrar_alerta_manual(usuario: dict, alerta: dict[str, Any]) -> None
 
     st.write(f"**{alerta['titulo']}** — {alerta.get('nome_entidade') or '—'}")
     motivo = st.text_area("Motivo do encerramento (obrigatório)", key=f"am_motivo_enc_{alerta['id']}")
+
+    chave_snapshot = f"am_snapshot_enc_{alerta['id']}"
+    houve_alteracoes = _houve_alteracoes_nao_salvas(chave_snapshot, {"motivo": motivo})
+
     col_c, col_x = st.columns(2)
-    if col_c.button("Confirmar encerramento", type="primary", use_container_width=True, key=f"am_confirma_enc_{alerta['id']}"):
+    confirmar = col_c.button("Confirmar encerramento", type="primary", use_container_width=True, key=f"am_confirma_enc_{alerta['id']}")
+    cancelar = col_x.button("Cancelar", use_container_width=True, key=f"am_cancela_enc_{alerta['id']}")
+
+    if _confirmar_descarte(f"am_descarte_enc_{alerta['id']}", houve_alteracoes, cancelar):
+        st.session_state.pop(chave_snapshot, None)
+        st.rerun()
+
+    if confirmar:
         if not motivo.strip():
             st.error("O motivo do encerramento é obrigatório.")
         else:
             encerrar_alerta_manual(alerta["id"], motivo.strip(), usuario["username"])
             registrar_atividade(usuario["username"], usuario.get("perfil"), "ENCERRAMENTO_ALERTA_MANUAL", modulo=alerta["modulo"], detalhe=f"Alerta manual #{alerta['id']} encerrado.")
+            st.session_state.pop(chave_snapshot, None)
             st.toast("Alerta manual encerrado.", icon=":material/check_circle:")
             st.rerun()
-    if col_x.button("Cancelar", use_container_width=True, key=f"am_cancela_enc_{alerta['id']}"):
-        st.rerun()

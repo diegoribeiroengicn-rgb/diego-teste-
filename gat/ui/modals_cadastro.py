@@ -21,6 +21,7 @@ from gat.database import (
     inserir_obra_prestador,
     registrar_atividade,
 )
+from gat.ui.modals import _confirmar_descarte, _houve_alteracoes_nao_salvas
 
 _STATUS_OPCOES = ["ATIVO", "INATIVO"]
 _STATUS_OBRA_OPCOES = ["ATIVA", "CONCLUÍDA", "SUSPENSA"]
@@ -73,11 +74,20 @@ def dialog_cadastro_prestador(usuario: str, registro: dict[str, Any] | None = No
 
     observacoes = st.text_area("Observações", value=registro.get("observacoes", "") if registro else "", key=f"cp_obs_{sufixo}")
 
+    chave_snapshot = f"cp_snapshot_{sufixo}"
+    valores_atuais = {
+        "codigo": codigo, "nome_empresa": nome_empresa, "responsavel": responsavel, "status": status,
+        "telefone": telefone, "email": email, "contatos": contatos, "possui_pep": possui_pep,
+        "numero_pep": numero_pep, "observacoes": observacoes,
+    }
+    houve_alteracoes = _houve_alteracoes_nao_salvas(chave_snapshot, valores_atuais)
+
     col_salvar, col_cancelar = st.columns(2)
     salvar = col_salvar.button("Salvar", icon=":material/save:", type="primary", use_container_width=True, key=f"cp_salvar_{sufixo}")
     cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"cp_cancelar_{sufixo}")
 
-    if cancelar:
+    if _confirmar_descarte(f"cp_descarte_{sufixo}", houve_alteracoes, cancelar):
+        st.session_state.pop(chave_snapshot, None)
         st.rerun()
 
     if salvar:
@@ -108,6 +118,7 @@ def dialog_cadastro_prestador(usuario: str, registro: dict[str, Any] | None = No
         except ValueError as exc:
             st.error(str(exc))
             return
+        st.session_state.pop(chave_snapshot, None)
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
         st.rerun()
 
@@ -161,11 +172,19 @@ def dialog_obra_prestador(usuario: str, prestador_id: int, registro: dict[str, A
     if e_canteiro and nome_obra.strip():
         st.caption(f"Nome de exibição: **CANTEIRO – {nome_obra.strip()}**")
 
+    chave_snapshot = f"ob_snapshot_{sufixo}"
+    valores_atuais = {
+        "nome_obra": nome_obra, "codigo_referencia": codigo_referencia, "status": status,
+        "e_canteiro": e_canteiro, "observacoes": observacoes,
+    }
+    houve_alteracoes = _houve_alteracoes_nao_salvas(chave_snapshot, valores_atuais)
+
     col_salvar, col_cancelar = st.columns(2)
     salvar = col_salvar.button("Salvar", icon=":material/save:", type="primary", use_container_width=True, key=f"ob_salvar_{sufixo}")
     cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"ob_cancelar_{sufixo}")
 
-    if cancelar:
+    if _confirmar_descarte(f"ob_descarte_{sufixo}", houve_alteracoes, cancelar):
+        st.session_state.pop(chave_snapshot, None)
         st.rerun()
 
     if salvar:
@@ -191,6 +210,7 @@ def dialog_obra_prestador(usuario: str, prestador_id: int, registro: dict[str, A
             st.error(str(exc))
             return
         registrar_atividade(usuario, None, "OBRA_PRESTADOR_SALVA", modulo="prestadores", detalhe=nome_obra)
+        st.session_state.pop(chave_snapshot, None)
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
         st.rerun()
 
@@ -234,11 +254,20 @@ def dialog_cadastro_cessionario(usuario: str, registro: dict[str, Any] | None = 
 
     observacoes = st.text_area("Observações", value=registro.get("observacoes", "") if registro else "", key=f"cc_obs_{sufixo}")
 
+    chave_snapshot = f"cc_snapshot_{sufixo}"
+    valores_atuais = {
+        "codigo": codigo, "nome_empresa": nome_empresa, "responsavel": responsavel, "status": status,
+        "telefone": telefone, "email": email, "contatos": contatos, "rvp": rvp, "rci": rci, "luc": luc,
+        "observacoes": observacoes,
+    }
+    houve_alteracoes = _houve_alteracoes_nao_salvas(chave_snapshot, valores_atuais)
+
     col_salvar, col_cancelar = st.columns(2)
     salvar = col_salvar.button("Salvar", icon=":material/save:", type="primary", use_container_width=True, key=f"cc_salvar_{sufixo}")
     cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"cc_cancelar_{sufixo}")
 
-    if cancelar:
+    if _confirmar_descarte(f"cc_descarte_{sufixo}", houve_alteracoes, cancelar):
+        st.session_state.pop(chave_snapshot, None)
         st.rerun()
 
     if salvar:
@@ -270,6 +299,7 @@ def dialog_cadastro_cessionario(usuario: str, registro: dict[str, Any] | None = 
         except ValueError as exc:
             st.error(str(exc))
             return
+        st.session_state.pop(chave_snapshot, None)
         st.session_state["_gat_refresh"] = st.session_state.get("_gat_refresh", 0) + 1
         st.rerun()
 

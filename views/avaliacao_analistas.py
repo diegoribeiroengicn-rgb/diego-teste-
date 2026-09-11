@@ -32,6 +32,7 @@ from gat.permissions import exigir_area, pode_area
 from gat.relatorios_mensais import avaliacoes_obrigatorias_do_mes, produtividade_analistas
 from gat.ui.formatos import formatar_datahora_br
 from gat.ui.kpi_cards import renderizar_kpis
+from gat.ui.modals import _confirmar_descarte, _houve_alteracoes_nao_salvas
 
 _CHAVES_CRITERIOS = [c for c, _ in CRITERIOS_AVALIACAO_ANALISTA]
 
@@ -257,11 +258,19 @@ def _dialog_avaliacao(usuario: dict, registro: dict | None = None) -> None:
     media = round(sum(valores.values()) / len(valores), 2)
     st.metric("Média geral", media)
 
+    chave_snapshot = f"aa_snapshot_{sufixo}"
+    valores_atuais = {
+        "analista": analista, "mes": mes, "ano": ano, "valores": valores,
+        "justificativa": justificativa, "observacoes": observacoes,
+    }
+    houve_alteracoes = _houve_alteracoes_nao_salvas(chave_snapshot, valores_atuais)
+
     col_salvar, col_cancelar = st.columns(2)
     salvar = col_salvar.button("Salvar", icon=":material/save:", type="primary", use_container_width=True, key=f"aa_salvar_{sufixo}")
     cancelar = col_cancelar.button("Cancelar", use_container_width=True, key=f"aa_cancelar_{sufixo}")
 
-    if cancelar:
+    if _confirmar_descarte(f"aa_descarte_{sufixo}", houve_alteracoes, cancelar):
+        st.session_state.pop(chave_snapshot, None)
         st.rerun()
 
     if salvar:
@@ -276,6 +285,7 @@ def _dialog_avaliacao(usuario: dict, registro: dict | None = None) -> None:
         else:
             inserir_avaliacao_analista(dados, usuario["username"])
             st.toast("Avaliação registrada.", icon=":material/check_circle:")
+        st.session_state.pop(chave_snapshot, None)
         st.rerun()
 
 
