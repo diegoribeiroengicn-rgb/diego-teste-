@@ -470,6 +470,31 @@ def _renderizar_upload_planilha_tipo(usuario: dict, tipo: str) -> None:
                 "Backup do Sistema, é possível baixar ou restaurar exatamente esse ponto para desfazê-la."
             )
 
+    with st.expander(f"Preferências de conflito memorizadas — {rotulo}"):
+        from gat.database import listar_preferencias_conflito_planilha, remover_preferencia_conflito_planilha
+
+        preferencias = listar_preferencias_conflito_planilha(tipo)
+        if preferencias.empty:
+            st.caption(
+                "Nenhuma preferência memorizada — toda escolha \"Manter sistema\" volta a ser perguntada na "
+                "próxima importação, a não ser que você marque \"Lembrar esta escolha\" ao resolver um conflito."
+            )
+        else:
+            st.caption(
+                "Estes campos não voltam a aparecer como conflito nas próximas importações — o valor já "
+                "cadastrado no sistema é mantido silenciosamente. Remova uma preferência para voltar a ser "
+                "perguntado sobre ela."
+            )
+            for _, linha in preferencias.iterrows():
+                col_info, col_remover = st.columns([5, 1])
+                col_info.caption(
+                    f"**{linha['identificacao'] or '?'}** — campo `{linha['campo']}` — memorizado em "
+                    f"{formatar_datahora_br(linha['criado_em'])} por {linha['criado_por'] or '?'}"
+                )
+                if col_remover.button("Remover", icon=":material/delete:", key=f"admin_remover_pref_{tipo}_{linha['id']}"):
+                    remover_preferencia_conflito_planilha(int(linha["id"]))
+                    st.rerun()
+
 
 def _renderizar_previa_importacao_tipo(usuario: dict, tipo: str, plano_estado: dict) -> None:
     from gat.planilha_import import confirmar_importacao_isolada
@@ -501,6 +526,7 @@ def _renderizar_previa_importacao_tipo(usuario: dict, tipo: str, plano_estado: d
         _renderizar_registros_nao_encontrados(plano, tipo, usuario)
 
     resolucoes: dict[tuple, dict[str, str]] = {}
+    lembrar: list[tuple[tuple, str, str]] = []
     if plano.total_conflitos:
         st.markdown(f"###### Conflito de informação — {plano.total_conflitos} registro(s)")
         st.caption(
@@ -519,6 +545,13 @@ def _renderizar_previa_importacao_tipo(usuario: dict, tipo: str, plano_estado: d
                     )
                     if escolha == "Manter sistema":
                         escolhas_item[campo] = "sistema"
+                        lembrar_campo = st.checkbox(
+                            "Lembrar esta escolha nas próximas importações (não perguntar de novo para "
+                            f"{item.identificacao} — {campo})",
+                            key=f"admin_lembrar_{tipo}_{indice}_{campo}",
+                        )
+                        if lembrar_campo:
+                            lembrar.append((item.chave, campo, item.identificacao))
                 if escolhas_item:
                     resolucoes[item.chave] = escolhas_item
 
@@ -530,6 +563,14 @@ def _renderizar_previa_importacao_tipo(usuario: dict, tipo: str, plano_estado: d
         except Exception as exc:
             st.error(f"Falha ao aplicar a importação — nenhuma alteração foi mantida (estado anterior restaurado). Detalhe: {exc}")
             return
+        if lembrar:
+            from gat.database import definir_preferencia_conflito_planilha
+            from gat.planilha_import import serializar_chave
+
+            for chave, campo, identificacao in lembrar:
+                definir_preferencia_conflito_planilha(
+                    tipo, serializar_chave(chave), campo, identificacao, usuario["username"],
+                )
         registrar_atividade(
             usuario["username"], usuario.get("perfil"), "IMPORTACAO_PLANILHA", detalhe=relatorio.resumo_texto(),
         )

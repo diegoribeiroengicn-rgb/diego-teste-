@@ -72,6 +72,7 @@ transação cobrindo múltiplas tabelas, então esta é a forma de garantir
 from __future__ import annotations
 
 import io
+import json
 import math
 import shutil
 from dataclasses import dataclass, field
@@ -268,6 +269,13 @@ def chave_registro(linha: dict[str, Any], campo_nome_entidade: str, campo_extra:
     return (identificador, disciplina, revisao, num_at, *extras)
 
 
+def serializar_chave(chave: tuple) -> str:
+    """Forma textual estável de uma `chave_registro()` para persistir em
+    `preferencias_conflito_planilha` (chave primária SQL é TEXT — uma
+    tupla Python não é serializável diretamente)."""
+    return json.dumps(list(chave))
+
+
 def mesclar_preservando(existente: dict[str, Any], novo: dict[str, Any]) -> dict[str, Any]:
     """Atualiza `existente` com os campos de `novo`, exceto quando o valor
     novo está vazio — nesse caso o valor já cadastrado é preservado
@@ -430,10 +438,19 @@ class RelatorioImportacao:
 def _planejar(
     linhas: list[dict[str, Any]], colunas_nao_mapeadas: list[str], origem: str,
     campo_codigo: str, campo_nome_entidade: str, campo_nome_obra: str | None,
-    listar_ativos, listar_arquivados_fn, colunas_tabela: list[str],
+    listar_ativos, listar_arquivados_fn, colunas_tabela: list[str], tabela: str,
 ) -> PlanoImportacao:
-    """Fase 1 (item 6): classifica cada linha sem gravar nada no banco."""
+    """Fase 1 (item 6): classifica cada linha sem gravar nada no banco.
+
+    `tabela` ("prestadores"/"cessionarios") identifica as preferências de
+    conflito já memorizadas (ver `gat.database.preferencias_conflito_planilha`):
+    quando o usuário escolheu "Manter sistema" numa importação anterior e
+    pediu para lembrar, o campo correspondente nem chega a aparecer de novo
+    como conflito — fica silenciosamente com o valor já cadastrado."""
+    from gat.database import chaves_preferencias_conflito_planilha
+
     plano = PlanoImportacao(origem=origem, colunas_nao_mapeadas=colunas_nao_mapeadas)
+    preferencias = chaves_preferencias_conflito_planilha(tabela)
 
     ativos = listar_ativos()
     arquivados = listar_arquivados_fn()
@@ -505,6 +522,9 @@ def _planejar(
             item_repetido = plano.itens[indice_repetido]
             base = {**item_repetido.existente, **item_repetido.preenchimentos}
             preenchimentos, conflitos = _diff_campos(base, campos_planilha)
+            if preferencias:
+                chave_str = serializar_chave(chave)
+                conflitos = {c: v for c, v in conflitos.items() if (chave_str, c) not in preferencias}
             item_repetido.preenchimentos.update(preenchimentos)
             item_repetido.conflitos.update(conflitos)
             if item_repetido.tipo == "sem_mudanca" and (preenchimentos or conflitos):
@@ -537,6 +557,9 @@ def _planejar(
             continue
 
         preenchimentos, conflitos = _diff_campos(existente, campos_planilha)
+        if preferencias:
+            chave_str = serializar_chave(chave)
+            conflitos = {c: v for c, v in conflitos.items() if (chave_str, c) not in preferencias}
         tipo = "atualizacao" if (preenchimentos or conflitos) else "sem_mudanca"
         plano.itens.append(ItemPlanoImportacao(
             item_origem=item_origem, identificacao=identificacao, chave=chave, tipo=tipo,
@@ -653,7 +676,7 @@ def planejar_importacao_prestadores(conteudo: bytes, nome_aba: str = "PROJ_PREST
     linhas, colunas_nao_mapeadas = ler_planilha_prestadores(conteudo, nome_aba)
     return _planejar(
         linhas, colunas_nao_mapeadas, "Prestadores", "codigo", "prestador", "obra_referencia",
-        listar_prestadores, lambda: listar_arquivados("prestadores"), COLUNAS_PRESTADORES,
+        listar_prestadores, lambda: listar_arquivados("prestadores"), COLUNAS_PRESTADORES, "prestadores",
     )
 
 
@@ -664,7 +687,7 @@ def planejar_importacao_cessionarios(conteudo: bytes, nome_aba: str = "PROJ_CESS
     linhas, colunas_nao_mapeadas = ler_planilha_cessionarios(conteudo, nome_aba)
     return _planejar(
         linhas, colunas_nao_mapeadas, "Cessionários", "codigo", "cessionario", None,
-        listar_cessionarios, lambda: listar_arquivados("cessionarios"), COLUNAS_CESSIONARIOS,
+        listar_cessionarios, lambda: listar_arquivados("cessionarios"), COLUNAS_CESSIONARIOS, "cessionarios",
     )
 
 
