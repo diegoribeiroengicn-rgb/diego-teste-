@@ -326,19 +326,24 @@ def injetar_css_global(tema: str = TEMA_CLARO) -> None:
        botão primário), para ficar claro à primeira vista onde clicar
        e qual está selecionada.
 
-       A versão instalada do Streamlit (ver requirements.txt) usa
-       componentes React Aria para as abas — não BaseWeb —, por isso o
-       seletor é `[data-testid="stTab"]` (confirmado no DOM renderizado),
-       não `[data-baseweb="tab"]` (não existe mais nesta versão). */
+       `requirements.txt` fixa `streamlit==1.61.1` — antes era
+       `>=1.61` (aberto), então um rebuild do ambiente podia instalar
+       uma versão mais nova, com outro componente interno de abas por
+       baixo (BaseWeb vs. React Aria — trocou entre versões) e o
+       seletor específico de uma delas simplesmente não bate na outra.
+       Por isso o seletor abaixo usa `role="tab"`/`role="tablist"` —
+       atributos de acessibilidade (ARIA), não detalhe de implementação
+       — que qualquer versão do componente precisa expor. */
     .stTabs [role="tablist"] {{
         gap: 6px;
         border-bottom: none;
         flex-wrap: wrap;
     }}
-    .stTabs [data-testid="stTab"] .react-aria-SelectionIndicator {{
+    .stTabs [role="tab"] .react-aria-SelectionIndicator,
+    .stTabs [role="tab"] [data-baseweb="tab-highlight"] {{
         display: none;
     }}
-    .stTabs [data-testid="stTab"] {{
+    .stTabs [role="tab"] {{
         font-weight: 600;
         font-size: .92rem;
         color: var(--gat-navy) !important;
@@ -349,16 +354,16 @@ def injetar_css_global(tema: str = TEMA_CLARO) -> None:
         margin-bottom: 0;
         transition: all .12s ease-in-out;
     }}
-    .stTabs [data-testid="stTab"]:hover {{
+    .stTabs [role="tab"]:hover {{
         border-color: var(--gat-navy);
         background: var(--gat-azul-3);
     }}
-    .stTabs [data-testid="stTab"][aria-selected="true"] {{
+    .stTabs [role="tab"][aria-selected="true"] {{
         color: #ffffff !important;
         background: var(--gat-navy) !important;
         border-color: var(--gat-navy) !important;
     }}
-    .stTabs [data-testid="stTab"][aria-selected="true"] p {{
+    .stTabs [role="tab"][aria-selected="true"] p {{
         color: #ffffff !important;
     }}
 
