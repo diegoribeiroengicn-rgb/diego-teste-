@@ -163,6 +163,7 @@ def lista_cards_com_edicao(
     descricao_arquivo: Callable[[dict], str] | None = None,
     campo_destaque_extra: str | None = None,
     agrupar_por: str | None = None,
+    campos_data_destaque: list[str] | None = None,
 ) -> None:
     """
     Alternativa a `tabela_com_edicao` para listas de projeto (Prestadores/
@@ -188,6 +189,10 @@ def lista_cards_com_edicao(
       um cabeçalho de seção sempre que o valor mudar de uma linha para a
       próxima. Pressupõe que `df_exibicao` já chegue ordenado por essa
       coluna — a função não reordena nada.
+    - `campos_data_destaque`: opcional — colunas de data (ex.: "Data de
+      Solicitação", "Data Limite") a mostrar direto no card, junto dos
+      badges de Status/Prazo, em vez de escondidas no "Ver mais" — para
+      o analista planejar sem precisar expandir cada card.
 
     Paginado (25 cards por página) — os módulos têm várias centenas de
     registros ativos, e renderizar todos de uma vez pesaria a rolagem.
@@ -222,7 +227,11 @@ def lista_cards_com_edicao(
     inicio = pagina * _CARDS_POR_PAGINA
     fim = min(inicio + _CARDS_POR_PAGINA, total_registros)
     campos_fixos_extra = (campo_destaque_extra,) if campo_destaque_extra else ()
-    colunas_detalhe = [c for c in df_exibicao.columns if c not in (*_CAMPOS_CARD_FIXOS, campo_nome_entidade, *campos_fixos_extra)]
+    campos_data = tuple(campos_data_destaque) if campos_data_destaque else ()
+    colunas_detalhe = [
+        c for c in df_exibicao.columns
+        if c not in (*_CAMPOS_CARD_FIXOS, campo_nome_entidade, *campos_fixos_extra, *campos_data)
+    ]
 
     grupo_anterior = None
     for posicao in range(inicio, fim):
@@ -247,6 +256,14 @@ def lista_cards_com_edicao(
                 _renderizar_valor_ou_badge(str(linha["Status Análise"]).strip())
             with col_badge2:
                 _renderizar_valor_ou_badge(str(linha["Situação do Prazo"]).strip())
+
+            if campos_data:
+                colunas_data = st.columns(len(campos_data))
+                for coluna_data, campo_data in zip(colunas_data, campos_data):
+                    with coluna_data:
+                        st.caption(campo_data)
+                        valor_data = str(linha[campo_data]).strip() if pd.notna(linha[campo_data]) else ""
+                        st.markdown(valor_data or "—")
 
             chave_expandido = f"_card_expandido_{chave}_{registro_id}"
             expandido = st.session_state.get(chave_expandido, False)

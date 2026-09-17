@@ -225,7 +225,7 @@ def render(usuario: dict) -> None:
         tabela_arquivo="prestadores",
         usuario=usuario,
         descricao_arquivo=lambda r: f"{r.get('codigo')} — {r.get('prestador')} (AT {r.get('num_at')})",
-        colunas_principais=["Item", "Código", "Prestador de Serviço", "Disciplina", "Status Análise", "Situação do Prazo"],
+        colunas_principais=["Item", "Código", "Prestador de Serviço", "Disciplina", "Status Análise", "Situação do Prazo", "Data de Solicitação", "Data Limite"],
     )
 
     if pode_area(usuario, "prestadores.exportar"):

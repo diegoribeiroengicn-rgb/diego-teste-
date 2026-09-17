@@ -99,4 +99,5 @@ def render(usuario: dict, modulo: str) -> None:
         descricao_arquivo=lambda r: f"{r.get('codigo')} — {r.get(coluna_nome)} (AT {r.get('num_at')})",
         campo_destaque_extra="Responsável",
         agrupar_por="Responsável",
+        campos_data_destaque=["Data de Solicitação", "Data Limite"],
     )

@@ -221,7 +221,7 @@ def render(usuario: dict) -> None:
         tabela_arquivo="cessionarios",
         usuario=usuario,
         descricao_arquivo=lambda r: f"{r.get('codigo')} — {r.get('cessionario')} (AT {r.get('num_at')})",
-        colunas_principais=["Item", "Código", "Cessionário", "Disciplina", "Status Análise", "Situação do Prazo"],
+        colunas_principais=["Item", "Código", "Cessionário", "Disciplina", "Status Análise", "Situação do Prazo", "Data de Solicitação", "Data Limite"],
     )
 
     if pode_area(usuario, "cessionarios.exportar"):
