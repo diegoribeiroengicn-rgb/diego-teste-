@@ -318,15 +318,48 @@ def injetar_css_global(tema: str = TEMA_CLARO) -> None:
         font-size: .92rem;
     }}
 
-    /* ---- Tabs ---- */
-    .stTabs [data-baseweb="tab"] {{
+    /* ---- Tabs ---- Antes eram só texto sublinhado — sem contorno,
+       fácil de não perceber que é clicável (ex.: Administração >
+       Configurações, Atualização por Planilha, Histórico e Auditoria).
+       Agora cada aba tem o mesmo contorno visível dos botões
+       secundários abaixo; a aba ativa fica sólida (mesmo estilo do
+       botão primário), para ficar claro à primeira vista onde clicar
+       e qual está selecionada.
+
+       A versão instalada do Streamlit (ver requirements.txt) usa
+       componentes React Aria para as abas — não BaseWeb —, por isso o
+       seletor é `[data-testid="stTab"]` (confirmado no DOM renderizado),
+       não `[data-baseweb="tab"]` (não existe mais nesta versão). */
+    .stTabs [role="tablist"] {{
+        gap: 6px;
+        border-bottom: none;
+        flex-wrap: wrap;
+    }}
+    .stTabs [data-testid="stTab"] .react-aria-SelectionIndicator {{
+        display: none;
+    }}
+    .stTabs [data-testid="stTab"] {{
         font-weight: 600;
         font-size: .92rem;
-        color: var(--gat-texto-fraco);
-    }}
-    .stTabs [aria-selected="true"] {{
         color: var(--gat-navy) !important;
-        border-bottom-color: var(--gat-azul) !important;
+        background: {superficie_1};
+        border: 1px solid var(--gat-borda-forte);
+        border-radius: 6px;
+        padding: .45rem 1.1rem;
+        margin-bottom: 0;
+        transition: all .12s ease-in-out;
+    }}
+    .stTabs [data-testid="stTab"]:hover {{
+        border-color: var(--gat-navy);
+        background: var(--gat-azul-3);
+    }}
+    .stTabs [data-testid="stTab"][aria-selected="true"] {{
+        color: #ffffff !important;
+        background: var(--gat-navy) !important;
+        border-color: var(--gat-navy) !important;
+    }}
+    .stTabs [data-testid="stTab"][aria-selected="true"] p {{
+        color: #ffffff !important;
     }}
 
     /* ---- Métricas nativas (st.metric) ---- */
