@@ -60,6 +60,13 @@ def _conectar() -> Iterator[sqlite3.Connection]:
         yield conn
         conn.commit()
         if not backend_postgres and conn.total_changes > 0:
+            # Com `journal_mode=WAL` (ver gat/db_backend.py), uma gravação
+            # recente pode ficar só no arquivo -wal até ser "despejada" de
+            # volta no .db principal — sem este checkpoint, uma cópia crua
+            # do arquivo (backup, sincronização de semente) logo em seguida
+            # poderia sair incompleta, sem a gravação que acabou de
+            # acontecer. TRUNCATE despeja tudo e zera o -wal na hora.
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             # Ambientes com disco efêmero (ex.: Streamlit Community Cloud)
             # recriam o disco do zero a cada reinício — sem isto, qualquer
             # gravação feita pela interface se perderia no próximo reinício.
@@ -411,17 +418,24 @@ def restaurar_banco_de_bytes(conteudo: bytes, usuario: str | None = None) -> Non
 
 
 def _banco_integro(caminho: Path) -> bool:
-    """True se `caminho` é um arquivo SQLite íntegro (PRAGMA
-    integrity_check == 'ok'). Usado por `sincronizar_para_persistencia`
-    para nunca publicar uma cópia corrompida/truncada como semente —
-    incidente de 2026-08-29: um `shutil.copy2` sem essa checagem publicou
-    um banco corrompido (gravação cortada pela metade) como semente,
-    derrubando a aplicação em toda implantação seguinte até a correção
-    manual (restauração do último backup íntegro anterior)."""
+    """True se `caminho` é um arquivo SQLite íntegro (PRAGMA quick_check
+    == 'ok'). Usado por `sincronizar_para_persistencia`, de forma síncrona
+    a cada gravação, para nunca publicar uma cópia corrompida/truncada
+    como semente — incidente de 2026-08-29: um `shutil.copy2` sem essa
+    checagem publicou um banco corrompido (gravação cortada pela metade)
+    como semente, derrubando a aplicação em toda implantação seguinte até
+    a correção manual (restauração do último backup íntegro anterior).
+
+    `quick_check` em vez de `integrity_check`: verifica a mesma estrutura
+    de páginas (o que importa aqui — pegar um arquivo truncado/corrompido)
+    só que sem o cruzamento completo de cada índice contra cada linha, bem
+    mais caro e que não faz diferença para o que esta função precisa
+    detectar. Fica mais barato conforme o banco cresce, já que isso roda
+    de forma síncrona a cada gravação do sistema."""
     try:
         conn = sqlite3.connect(str(caminho))
         try:
-            linha = conn.execute("PRAGMA integrity_check").fetchone()
+            linha = conn.execute("PRAGMA quick_check").fetchone()
             return bool(linha) and linha[0] == "ok"
         finally:
             conn.close()

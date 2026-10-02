@@ -129,7 +129,13 @@ def conectar_bruto(db_path) -> sqlite3.Connection | _ConexaoPostgres:
     só precisam de uma conexão simples."""
     if backend_ativo() == "postgres":
         return _conectar_postgres()
-    conn = sqlite3.connect(db_path)
+    # `timeout=30` (padrão é 5s): dá mais margem antes de estourar
+    # "database is locked" quando duas gravações coincidem. `journal_mode
+    # = WAL` deixa leituras não serem bloqueadas por uma escrita em
+    # andamento (o modo padrão bloqueia os dois lados) — é a mudança mais
+    # relevante contra travamentos sob uso simultâneo.
+    conn = sqlite3.connect(db_path, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
     return conn

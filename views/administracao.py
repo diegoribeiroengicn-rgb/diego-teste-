@@ -206,10 +206,22 @@ def _renderizar_validacao_dados() -> None:
     st.metric("Total geral importado (Prestadores + Cessionários)", total)
 
 
+_LIMITE_HISTORICO_PADRAO = 500
+
+
 def _renderizar_historico() -> None:
     st.markdown("##### Histórico de edições e auditoria de segurança")
     filtro_tabela = st.selectbox("Tabela", _TIPOS_HISTORICO)
-    df_hist = listar_historico(None if filtro_tabela == "Todas" else filtro_tabela)
+    carregar_tudo = st.checkbox(
+        "Carregar histórico completo",
+        value=False,
+        help=f"Por padrão mostra os {_LIMITE_HISTORICO_PADRAO} registros mais recentes — o histórico "
+        "completo já soma dezenas de milhares de linhas e pode demorar bastante para carregar.",
+    )
+    limite = None if carregar_tudo else _LIMITE_HISTORICO_PADRAO
+    df_hist = listar_historico(None if filtro_tabela == "Todas" else filtro_tabela, limite=limite)
+    if not carregar_tudo:
+        st.caption(f"Mostrando os {len(df_hist)} registros mais recentes.")
     st.dataframe(formatar_datahoras_df(df_hist, ["data_hora"]), use_container_width=True, hide_index=True)
 
 
