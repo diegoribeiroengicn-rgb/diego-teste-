@@ -269,6 +269,31 @@ def chave_registro(linha: dict[str, Any], campo_nome_entidade: str, campo_extra:
     return (identificador, disciplina, revisao, num_at, *extras)
 
 
+def _chave_sem_at(linha: dict[str, Any], campo_nome_entidade: str, campo_extra: str | None = None) -> tuple:
+    """A chave que `chave_registro` devolveria para `linha` se ela NÃO
+    tivesse nº AT — usada só como critério de correspondência de reserva
+    em `_planejar` (bug relatado: "não identifica modificações de status,
+    projetos em análise sempre vem errado").
+
+    Enquanto uma análise ainda não tem AT, ela é identificada por código +
+    disciplina + revisão + Data de Solicitação. Quando o AT é atribuído
+    depois — tipicamente junto com a mudança de status de EM ANÁLISE para
+    LIBERADO — `chave_registro` passa a incluir o AT, e a chave muda de
+    forma. Sem este critério de reserva, essa mudança de chave faz
+    `_planejar` não reconhecer a linha da planilha como a mesma análise já
+    cadastrada: o registro antigo (sem AT) fica para trás como "não
+    encontrado" e a linha atualizada (com AT) entra como um registro novo,
+    duplicando em vez de atualizar."""
+    codigo = _texto(linha.get("codigo"), maiusculo=True)
+    identificador = codigo or _texto(linha.get(campo_nome_entidade), maiusculo=True)
+    disciplina = _texto(linha.get("disciplina"), maiusculo=True)
+    revisao = linha.get("revisao")
+    extras: tuple = (_texto(linha.get("data_solicitacao")),)
+    if campo_extra:
+        extras = (*extras, _texto(linha.get(campo_extra), maiusculo=True))
+    return (identificador, disciplina, revisao, None, *extras)
+
+
 def serializar_chave(chave: tuple) -> str:
     """Forma textual estável de uma `chave_registro()` para persistir em
     `preferencias_conflito_planilha` (chave primária SQL é TEXT — uma
@@ -532,9 +557,26 @@ def _planejar(
             continue
 
         existente = indice_ativos.get(chave)
-        if existente is None and chave in chaves_arquivadas:
+        chave_efetiva = chave
+        if existente is None:
+            # Linha já tem AT, mas nenhum registro ativo bate com a chave
+            # (AT+código+disciplina+revisão). Antes de tratar como novo,
+            # tenta o critério usado enquanto a análise ainda não tinha AT
+            # (código+disciplina+revisão+Data de Solicitação) — se bater
+            # com um registro que também ainda não tem AT cadastrado, é a
+            # mesma análise recebendo o AT agora, não uma análise nova (ver
+            # `_chave_sem_at`).
+            num_at_planilha = _num_at_normalizado(campos_planilha.get("num_at"))
+            if num_at_planilha is not None:
+                chave_fallback = _chave_sem_at(linha, campo_nome_entidade, campo_nome_obra)
+                candidato = indice_ativos.get(chave_fallback)
+                if candidato is not None and _num_at_normalizado(candidato.get("num_at")) is None:
+                    existente = candidato
+                    chave_efetiva = chave_fallback
+
+        if existente is None and chave_efetiva in chaves_arquivadas:
             plano.itens.append(ItemPlanoImportacao(
-                item_origem=item_origem, identificacao=identificacao, chave=chave, tipo="arquivado",
+                item_origem=item_origem, identificacao=identificacao, chave=chave_efetiva, tipo="arquivado",
                 linha_planilha=linha_planilha,
             ))
             continue
@@ -543,30 +585,30 @@ def _planejar(
             faltando = [c for c in _CAMPOS_OBRIGATORIOS_PARA_NOVO if _vazio(campos_planilha.get(c))]
             if faltando:
                 plano.itens.append(ItemPlanoImportacao(
-                    item_origem=item_origem, identificacao=identificacao, chave=chave, tipo="inconsistente",
+                    item_origem=item_origem, identificacao=identificacao, chave=chave_efetiva, tipo="inconsistente",
                     linha_planilha=linha_planilha,
                     motivo_inconsistencia=f"registro novo sem {', '.join(faltando)}",
                 ))
                 continue
             item_plano = ItemPlanoImportacao(
-                item_origem=item_origem, identificacao=identificacao, chave=chave,
+                item_origem=item_origem, identificacao=identificacao, chave=chave_efetiva,
                 tipo="novo", dados_novos=campos_planilha, linha_planilha=linha_planilha,
             )
             plano.itens.append(item_plano)
-            indice_planejados[chave] = len(plano.itens) - 1
+            indice_planejados[chave_efetiva] = len(plano.itens) - 1
             continue
 
         preenchimentos, conflitos = _diff_campos(existente, campos_planilha)
         if preferencias:
-            chave_str = serializar_chave(chave)
+            chave_str = serializar_chave(chave_efetiva)
             conflitos = {c: v for c, v in conflitos.items() if (chave_str, c) not in preferencias}
         tipo = "atualizacao" if (preenchimentos or conflitos) else "sem_mudanca"
         plano.itens.append(ItemPlanoImportacao(
-            item_origem=item_origem, identificacao=identificacao, chave=chave, tipo=tipo,
+            item_origem=item_origem, identificacao=identificacao, chave=chave_efetiva, tipo=tipo,
             existente_id=existente.get("id"), existente=existente, dados_novos=campos_planilha,
             preenchimentos=preenchimentos, conflitos=conflitos, linha_planilha=linha_planilha,
         ))
-        indice_planejados[chave] = len(plano.itens) - 1
+        indice_planejados[chave_efetiva] = len(plano.itens) - 1
 
     chaves_encontradas = {item.chave for item in plano.itens if item.tipo in ("atualizacao", "sem_mudanca")}
     for chave_ativo, registro_ativo in indice_ativos.items():
