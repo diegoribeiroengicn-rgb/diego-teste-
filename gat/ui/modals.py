@@ -776,6 +776,19 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
     with col10:
         etg = st.selectbox("ETG", ETG_OPCOES, index=_idx(ETG_OPCOES, registro.get("etg") if registro else "NÃO"), key=f"pr_etg_{sufixo}")
 
+    teve_substituicao = st.checkbox(
+        "Esse projeto teve substituição?",
+        value=bool(registro.get("teve_substituicao")) if registro else False,
+        key=f"pr_tevesub_{sufixo}",
+    )
+    qtd_arquivos_substituidos = None
+    if teve_substituicao:
+        qtd_arquivos_substituidos = st.number_input(
+            "Quantos arquivos foram substituídos", min_value=0, step=1,
+            value=int(registro.get("qtd_arquivos_substituidos") or 0) if registro else 0,
+            key=f"pr_qtdsub_{sufixo}",
+        )
+
     observacoes = st.text_area("Observações", value=registro.get("observacoes", "") if registro else "", key=f"pr_obs_{sufixo}")
 
     valores_atuais = {
@@ -785,6 +798,7 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
         "responsavel": responsavel, "status_analise": status_analise, "data_solicitacao": data_solicitacao,
         "data_limite": data_limite, "data_analise": data_analise, "hold_inicio": hold_inicio, "hold_fim": hold_fim,
         "natureza_revisao": natureza_revisao, "num_erros": num_erros, "etg": etg, "observacoes": observacoes,
+        "teve_substituicao": teve_substituicao, "qtd_arquivos_substituidos": qtd_arquivos_substituidos,
         "motivo_repactuacao": motivo_repactuacao,
         "prestador_cadastro_id": cadastro_selecionado["id"] if cadastro_selecionado else None,
     }
@@ -865,6 +879,8 @@ def dialog_prestador(usuario: str, registro: dict[str, Any] | None = None, pode_
             "natureza_revisao": natureza_revisao,
             "num_erros": int(num_erros),
             "etg": etg,
+            "teve_substituicao": 1 if teve_substituicao else 0,
+            "qtd_arquivos_substituidos": int(qtd_arquivos_substituidos) if teve_substituicao else None,
             "prestador_cadastro_id": cadastro_selecionado["id"] if cadastro_selecionado else None,
             "obra_id": obra_id,
             "data_limite_ajustada_manualmente": 1 if st.session_state.get(f"{chave_dlim}_manual", False) else 0,
@@ -1000,7 +1016,12 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
         num_documentos = st.number_input("N° de Doc.", min_value=0, step=1, value=int(registro.get("num_documentos", 0)) if registro else 0, key=f"ce_ndoc_{sufixo}")
         responsavel = st.selectbox("Responsável (Analista)", RESPONSAVEIS, index=_idx(RESPONSAVEIS, registro.get("responsavel") if registro else None), key=f"ce_resp_{sufixo}")
         with st.container(key=f"ce_erro_status_{sufixo}"):
-            status_analise = st.selectbox("Status Análise", STATUS_ANALISE_OPCOES, index=_idx(STATUS_ANALISE_OPCOES, registro.get("status_analise") if registro else "EM ANÁLISE"), key=f"ce_status_{sufixo}")
+            status_analise = st.selectbox(
+                "Status Análise", STATUS_ANALISE_OPCOES,
+                index=_idx(STATUS_ANALISE_OPCOES, registro.get("status_analise") if registro else "EM ANÁLISE"),
+                help="EM HOLD: pendência depende de retorno do projetista. RIOGALEÃO: pendência depende do RIOgaleão.",
+                key=f"ce_status_{sufixo}",
+            )
 
     st.markdown("##### RCI e RVP")
     st.caption("Informe apenas o RCI, apenas o RVP, ou ambos — nenhum dos dois é obrigatório.")
@@ -1112,6 +1133,19 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
     with col10:
         etg = st.selectbox("ETG", ETG_OPCOES, index=_idx(ETG_OPCOES, registro.get("etg") if registro else "NÃO"), key=f"ce_etg_{sufixo}")
 
+    teve_substituicao = st.checkbox(
+        "Esse projeto teve substituição?",
+        value=bool(registro.get("teve_substituicao")) if registro else False,
+        key=f"ce_tevesub_{sufixo}",
+    )
+    qtd_arquivos_substituidos = None
+    if teve_substituicao:
+        qtd_arquivos_substituidos = st.number_input(
+            "Quantos arquivos foram substituídos", min_value=0, step=1,
+            value=int(registro.get("qtd_arquivos_substituidos") or 0) if registro else 0,
+            key=f"ce_qtdsub_{sufixo}",
+        )
+
     observacoes = st.text_area("Observações", value=registro.get("observacoes", "") if registro else "", key=f"ce_obs_{sufixo}")
 
     valores_atuais = {
@@ -1123,6 +1157,7 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
         "data_solicitacao": data_solicitacao, "data_limite": data_limite, "data_analise": data_analise,
         "hold_inicio": hold_inicio, "hold_fim": hold_fim, "natureza_revisao": natureza_revisao,
         "num_erros": num_erros, "etg": etg, "observacoes": observacoes, "motivo_repactuacao": motivo_repactuacao,
+        "teve_substituicao": teve_substituicao, "qtd_arquivos_substituidos": qtd_arquivos_substituidos,
         "cessionario_cadastro_id": cadastro_cess_selecionado["id"] if cadastro_cess_selecionado else None,
         "sla_reduzido": sla_reduzido, "dias_reduzidos": dias_reduzidos, "justificativa_sla": justificativa_sla,
     }
@@ -1200,6 +1235,8 @@ def dialog_cessionario(usuario: str, registro: dict[str, Any] | None = None, pod
             "natureza_revisao": natureza_revisao,
             "num_erros": int(num_erros),
             "etg": etg,
+            "teve_substituicao": 1 if teve_substituicao else 0,
+            "qtd_arquivos_substituidos": int(qtd_arquivos_substituidos) if teve_substituicao else None,
             "cessionario_cadastro_id": cadastro_cess_selecionado["id"] if cadastro_cess_selecionado else None,
             "data_limite_ajustada_manualmente": 1 if st.session_state.get(f"{chave_dlim}_manual", False) else 0,
             **campos_sla,

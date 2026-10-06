@@ -13,7 +13,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia, resumo_indicadores_atraso
+from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, excluir_arts, filtrar_ativos, filtrar_por_competencia, resumo_indicadores_atraso
 from gat.config import CORES
 from gat.database import listar_cessionarios, listar_prestadores, registrar_atividade
 from gat.export_projetos import gerar_csv_bytes, gerar_excel_bytes, montar_exportacao_consolidada, nome_arquivo_exportacao
@@ -98,24 +98,30 @@ def render(usuario: dict) -> None:
         df_prest = df_prest_completo
         df_cess = df_cess_completo
 
-    total_prest = len(df_prest)
-    total_cess = len(df_cess)
+    # ART não é AT: os indicadores/gráficos abaixo usam a versão sem ART
+    # (`df_prest`/`df_cess` continuam com ART para a exportação, mais
+    # abaixo — exportar deve mostrar tudo, só não contar ART como projeto).
+    df_prest_kpi = excluir_arts(df_prest)
+    df_cess_kpi = excluir_arts(df_cess)
+
+    total_prest = len(df_prest_kpi)
+    total_cess = len(df_cess_kpi)
     total_geral = total_prest + total_cess
 
-    atrasados_prest = int((df_prest["status_entrega_calc"] == "ATRASADO").sum()) if not df_prest.empty else 0
-    atrasados_cess = int((df_cess["status_entrega_calc"] == "ATRASADO").sum()) if not df_cess.empty else 0
+    atrasados_prest = int((df_prest_kpi["status_entrega_calc"] == "ATRASADO").sum()) if not df_prest_kpi.empty else 0
+    atrasados_cess = int((df_cess_kpi["status_entrega_calc"] == "ATRASADO").sum()) if not df_cess_kpi.empty else 0
     total_atrasados = atrasados_prest + atrasados_cess
 
     pendentes_reuniao = (
-        int(df_prest["pendente_reuniao"].sum()) if not df_prest.empty else 0
-    ) + (int(df_cess["pendente_reuniao"].sum()) if not df_cess.empty else 0)
+        int(df_prest_kpi["pendente_reuniao"].sum()) if not df_prest_kpi.empty else 0
+    ) + (int(df_cess_kpi["pendente_reuniao"].sum()) if not df_cess_kpi.empty else 0)
 
     pct_no_prazo = 0.0
     if total_geral > 0:
         no_prazo = total_geral - total_atrasados
         pct_no_prazo = round((no_prazo / total_geral) * 100, 1)
 
-    sem_pep_prest = int((~df_prest["tem_pep"]).sum()) if not df_prest.empty else 0
+    sem_pep_prest = int((~df_prest_kpi["tem_pep"]).sum()) if not df_prest_kpi.empty else 0
 
     # --- Panorama operacional (primeira informação da página) ---------------
     st.markdown("##### Panorama Operacional")
@@ -134,26 +140,26 @@ def render(usuario: dict) -> None:
     col_g1, col_g2 = st.columns(2)
     with col_g1:
         df_consolidado_status = pd.concat(
-            [df_prest[["status_analise"]] if not df_prest.empty else pd.DataFrame(columns=["status_analise"]),
-             df_cess[["status_analise"]] if not df_cess.empty else pd.DataFrame(columns=["status_analise"])],
+            [df_prest_kpi[["status_analise"]] if not df_prest_kpi.empty else pd.DataFrame(columns=["status_analise"]),
+             df_cess_kpi[["status_analise"]] if not df_cess_kpi.empty else pd.DataFrame(columns=["status_analise"])],
             ignore_index=True,
         )
         st.plotly_chart(grafico_status_donut(df_consolidado_status, "status_analise", "Distribuição por Status de Análise"), use_container_width=True)
     with col_g2:
         df_consolidado_resp = pd.concat(
-            [df_prest[["responsavel"]] if not df_prest.empty else pd.DataFrame(columns=["responsavel"]),
-             df_cess[["responsavel"]] if not df_cess.empty else pd.DataFrame(columns=["responsavel"])],
+            [df_prest_kpi[["responsavel"]] if not df_prest_kpi.empty else pd.DataFrame(columns=["responsavel"]),
+             df_cess_kpi[["responsavel"]] if not df_cess_kpi.empty else pd.DataFrame(columns=["responsavel"])],
             ignore_index=True,
         )
         st.plotly_chart(grafico_top_responsaveis(df_consolidado_resp), use_container_width=True)
 
     col_g3, col_g4 = st.columns([2, 1])
     with col_g3:
-        st.plotly_chart(grafico_evolucao_mensal(df_prest, df_cess), use_container_width=True)
+        st.plotly_chart(grafico_evolucao_mensal(df_prest_kpi, df_cess_kpi), use_container_width=True)
     with col_g4:
         df_consolidado_disc = pd.concat(
-            [df_prest[["disciplina"]] if not df_prest.empty else pd.DataFrame(columns=["disciplina"]),
-             df_cess[["disciplina"]] if not df_cess.empty else pd.DataFrame(columns=["disciplina"])],
+            [df_prest_kpi[["disciplina"]] if not df_prest_kpi.empty else pd.DataFrame(columns=["disciplina"]),
+             df_cess_kpi[["disciplina"]] if not df_cess_kpi.empty else pd.DataFrame(columns=["disciplina"])],
             ignore_index=True,
         )
         st.plotly_chart(grafico_disciplina(df_consolidado_disc), use_container_width=True)
@@ -161,20 +167,20 @@ def render(usuario: dict) -> None:
     st.markdown("#### Resumo Sintético")
     tab1, tab2 = st.tabs(["Prestadores", "Cessionários"])
     with tab1:
-        if df_prest.empty:
+        if df_prest_kpi.empty:
             st.info("Sem registros ativos de prestadores.")
         else:
-            resumo = df_prest.groupby("responsavel").agg(
+            resumo = df_prest_kpi.groupby("responsavel").agg(
                 projetos=("id", "count"),
                 atrasados=("status_entrega_calc", lambda s: (s == "ATRASADO").sum()),
                 pendentes_reuniao=("pendente_reuniao", "sum"),
             ).reset_index()
             st.dataframe(resumo, use_container_width=True, hide_index=True)
     with tab2:
-        if df_cess.empty:
+        if df_cess_kpi.empty:
             st.info("Sem registros ativos de cessionários.")
         else:
-            resumo = df_cess.groupby("responsavel").agg(
+            resumo = df_cess_kpi.groupby("responsavel").agg(
                 projetos=("id", "count"),
                 atrasados=("status_entrega_calc", lambda s: (s == "ATRASADO").sum()),
                 pendentes_reuniao=("pendente_reuniao", "sum"),
@@ -182,9 +188,9 @@ def render(usuario: dict) -> None:
             st.dataframe(resumo, use_container_width=True, hide_index=True)
 
     # --- Prazos e atrasos (última seção, tom gerencial) ---------------------
-    base_aging = df_prest if not df_prest.empty else df_cess
+    base_aging = df_prest_kpi if not df_prest_kpi.empty else df_cess_kpi
     coluna_disp = "dias_uteis_decorridos" if "dias_uteis_decorridos" in base_aging.columns else "saldo_dias_uteis"
-    _renderizar_acompanhamento_prazos(df_prest, df_cess, total_atrasados, pendentes_reuniao, pct_no_prazo, base_aging, coluna_disp)
+    _renderizar_acompanhamento_prazos(df_prest_kpi, df_cess_kpi, total_atrasados, pendentes_reuniao, pct_no_prazo, base_aging, coluna_disp)
 
     if pode_area(usuario, "consolidado.exportar"):
         st.markdown("---")

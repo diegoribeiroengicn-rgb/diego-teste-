@@ -101,7 +101,7 @@ COLUNAS_PRESTADORES = [
     "natureza_revisao", "num_erros", "etg", "prestador_cadastro_id", "obra_id",
     "sla_dias", "sla_original", "sla_reduzido", "nivel_prioridade",
     "justificativa_sla", "data_limite_original", "sla_alterado_por", "sla_alterado_em",
-    "data_limite_ajustada_manualmente",
+    "data_limite_ajustada_manualmente", "teve_substituicao", "qtd_arquivos_substituidos",
 ]
 
 COLUNAS_CESSIONARIOS = [
@@ -113,6 +113,7 @@ COLUNAS_CESSIONARIOS = [
     "data_atualizacao_rci", "data_atualizacao_rvp", "cessionario_cadastro_id",
     "sla_original", "sla_reduzido", "justificativa_sla", "data_limite_original",
     "sla_alterado_por", "sla_alterado_em", "data_limite_ajustada_manualmente",
+    "teve_substituicao", "qtd_arquivos_substituidos",
 ]
 
 COLUNAS_CADASTRO_PRESTADORES = [
@@ -1738,6 +1739,39 @@ def _migracao_0040_preferencias_conflito_planilha(conn: sqlite3.Connection) -> N
     )
 
 
+def _migracao_0041_substituicao_arquivos(conn: sqlite3.Connection) -> None:
+    """Modificação pontual — campo "Esse projeto teve substituição?" (Sim/Não)
+    + "Quantos arquivos foram substituídos" em Prestadores e Cessionários —
+    alimenta a barra "C/ Substituição" do One Page Report. Colunas aditivas,
+    registros existentes ficam com `teve_substituicao = 0`."""
+    for tabela in ("prestadores", "cessionarios"):
+        _garantir_coluna(conn, tabela, "teve_substituicao", "INTEGER NOT NULL DEFAULT 0")
+        _garantir_coluna(conn, tabela, "qtd_arquivos_substituidos", "INTEGER")
+
+
+def _migracao_0042_cessionarios_ativos(conn: sqlite3.Connection) -> None:
+    """Novo sub-módulo "Cessionários Ativos" (Cessionários > Cessionários
+    Ativos): lista mantida manualmente pelo administrador (categoria +
+    quantidade, ex.: "Locadora Ext." = 2) — não é derivada dos projetos de
+    análise, é informação operacional própria (quais espaços/operações
+    estão ativos no momento), exibida no One Page Report. `ordem` preserva
+    a ordem de cadastro na exibição."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cessionarios_ativos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            categoria TEXT NOT NULL,
+            quantidade INTEGER NOT NULL DEFAULT 0,
+            ordem INTEGER NOT NULL DEFAULT 0,
+            criado_em TEXT NOT NULL,
+            criado_por TEXT,
+            atualizado_em TEXT,
+            atualizado_por TEXT
+        )
+        """
+    )
+
+
 def _migracao_0033_atualizar_capitulo_importacao_planilha(conn: sqlite3.Connection) -> None:
     """A funcionalidade de importação por planilha foi movida de
     Administração > Importar Planilha para Configurações > Atualização
@@ -1846,6 +1880,8 @@ _MIGRACOES: list[tuple[int, str, Callable[[sqlite3.Connection], None]]] = [
     (38, "Meus Alertas: tabela alertas_pessoais_vistos (controle de leitura por usuário dos alertas de prazo e alertas manuais direcionados)", _migracao_0038_alertas_pessoais_vistos),
     (39, "Avaliação — Checklist: tabela avaliacao_checklist_perguntas (perguntas editáveis em tela, semeada com as 18 perguntas em 6 categorias do formulário oficial de Avaliação de Qualidade do Projetista)", _migracao_0039_perguntas_checklist_dinamicas),
     (40, "Atualização por Planilha: tabela preferencias_conflito_planilha (memoriza escolhas 'Manter sistema' para não perguntar de novo o mesmo conflito)", _migracao_0040_preferencias_conflito_planilha),
+    (41, "Campo 'Teve substituição?' (Sim/Não) + quantidade de arquivos substituídos em Prestadores e Cessionários", _migracao_0041_substituicao_arquivos),
+    (42, "Novo sub-módulo Cessionários Ativos: tabela cessionarios_ativos (categoria/quantidade mantida pelo admin)", _migracao_0042_cessionarios_ativos),
 ]
 
 
@@ -4224,3 +4260,47 @@ def listar_reunioes_do_projeto(modulo: str, projeto_id: int) -> pd.DataFrame:
             "ORDER BY COALESCE(r.data_realizada, r.data_prevista)",
             conn, params=(modulo, projeto_id),
         )
+
+
+# ---------------------------------------------------------------------------
+# Cessionários Ativos (sub-módulo de Cessionários) — lista mantida
+# manualmente pelo administrador (categoria/quantidade), exibida no One
+# Page Report. Não é derivada dos projetos de análise.
+# ---------------------------------------------------------------------------
+
+
+def listar_cessionarios_ativos() -> pd.DataFrame:
+    with _conectar() as conn:
+        return pd.read_sql_query("SELECT * FROM cessionarios_ativos ORDER BY ordem, id", conn)
+
+
+def inserir_cessionario_ativo(categoria: str, quantidade: int, usuario: str) -> int:
+    agora = agora_br().isoformat()
+    with _conectar() as conn:
+        maior_ordem = conn.execute("SELECT COALESCE(MAX(ordem), 0) AS m FROM cessionarios_ativos").fetchone()["m"]
+        cursor = conn.execute(
+            "INSERT INTO cessionarios_ativos (categoria, quantidade, ordem, criado_em, criado_por) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (categoria.strip(), int(quantidade), int(maior_ordem) + 1, agora, usuario),
+        )
+        return cursor.lastrowid
+
+
+def atualizar_cessionario_ativo(registro_id: int, categoria: str, quantidade: int, usuario: str) -> None:
+    agora = agora_br().isoformat()
+    with _conectar() as conn:
+        conn.execute(
+            "UPDATE cessionarios_ativos SET categoria = ?, quantidade = ?, atualizado_em = ?, atualizado_por = ? WHERE id = ?",
+            (categoria.strip(), int(quantidade), agora, usuario, registro_id),
+        )
+
+
+def excluir_cessionario_ativo(registro_id: int) -> None:
+    with _conectar() as conn:
+        conn.execute("DELETE FROM cessionarios_ativos WHERE id = ?", (registro_id,))
+
+
+def reordenar_cessionarios_ativos(ordem_ids: list[int]) -> None:
+    with _conectar() as conn:
+        for nova_ordem, registro_id in enumerate(ordem_ids, start=1):
+            conn.execute("UPDATE cessionarios_ativos SET ordem = ? WHERE id = ?", (nova_ordem, registro_id))

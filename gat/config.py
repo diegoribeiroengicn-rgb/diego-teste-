@@ -87,6 +87,7 @@ CORES_STATUS_ANALISE = {
     "LIBERADO C/ REST.": CORES["lima"],
     "NÃO LIBERADO": CORES["laranja"],
     "EM HOLD": CORES["dourado"],
+    "RIOGALEÃO": CORES["roxo"],
     "OBSOLETO": CORES["texto_dim"],
     "CANCELADO": CORES["texto_fraco"],
 }
@@ -141,8 +142,14 @@ DISCIPLINAS_SLA = [
 
 STATUS_ANALISE_OPCOES = [
     "EM ANÁLISE", "LIBERADO", "LIBERADO C/ REST.", "NÃO LIBERADO",
-    "EM HOLD", "OBSOLETO", "CANCELADO",
+    "EM HOLD", "RIOGALEÃO", "OBSOLETO", "CANCELADO",
 ]
+
+# EM HOLD e RIOGALEÃO são os dois status de pendência "aguardando terceiro"
+# de Cessionários — não invertê-los: EM HOLD = a análise depende de um
+# retorno do projetista (escritório/responsável técnico do cessionário);
+# RIOGALEÃO = a análise depende de uma resposta/ação do próprio RIOgaleão
+# (ex.: aprovação interna, documentação do concedente) antes de prosseguir.
 
 STATUS_ENTREGA_OPCOES = ["ANTES DO PRAZO", "NO PRAZO", "ATRASADO"]
 

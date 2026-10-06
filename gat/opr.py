@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from gat.business_rules import indicadores_meta_rev2
+from gat.business_rules import excluir_arts, indicadores_meta_rev2
 from gat.config import STATUS_CANCELADO
 from gat.relatorios_mensais import STATUS_CONCLUIDOS, STATUS_EM_ANALISE
 from gat.revisoes import calcular_intervalos_revisao
@@ -44,6 +44,14 @@ def indicadores_executivos(df: pd.DataFrame, coluna_nome: str, meta_rev2_percent
     df_ativos = df[df["status_analise"] != STATUS_CANCELADO]
     if df_ativos.empty:
         return vazio
+
+    # ART não é AT: conta para documentos (logo abaixo, com a base ainda
+    # completa), nunca para a contagem de projetos/ATs/revisões — por isso
+    # as linhas de ART são excluídas daqui em diante.
+    documentos = int(pd.to_numeric(df_ativos.get("num_documentos"), errors="coerce").fillna(0).sum())
+    df_ativos = excluir_arts(df_ativos)
+    if df_ativos.empty:
+        return {**vazio, "documentos": documentos}
 
     concluidos = df_ativos[df_ativos["status_analise"].isin(STATUS_CONCLUIDOS)]
     em_analise = df_ativos[df_ativos["status_analise"] == STATUS_EM_ANALISE]
@@ -79,7 +87,7 @@ def indicadores_executivos(df: pd.DataFrame, coluna_nome: str, meta_rev2_percent
         "qtd_intervalos": len(intervalos),
         "qtd_fora_sla_externo": int((intervalos["situacao_sla"] == "FORA DO SLA").sum()) if not intervalos.empty else 0,
         "qtd_inconsistentes": int((intervalos["situacao_sla"] == "DATA INCONSISTENTE").sum()) if not intervalos.empty else 0,
-        "documentos": int(pd.to_numeric(df_ativos.get("num_documentos"), errors="coerce").fillna(0).sum()),
+        "documentos": documentos,
     }
 
 

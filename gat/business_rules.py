@@ -12,6 +12,8 @@ Centraliza as regras corporativas definidas pela Tecnoplano:
 
 from __future__ import annotations
 
+from typing import Any
+
 import pandas as pd
 
 from gat.calendario import dias_corridos_entre, dias_uteis_decorridos, saldo_dias_uteis
@@ -509,7 +511,7 @@ def montar_lista_prioridades(df_prestadores: pd.DataFrame, df_cessionarios: pd.D
     return resultado
 
 
-STATUS_ATIVO_ANALISE = {"EM ANÁLISE", "EM HOLD"}
+STATUS_ATIVO_ANALISE = {"EM ANÁLISE", "EM HOLD", "RIOGALEÃO"}
 STATUS_CONCLUIDO_ENTREGA = {"LIBERADO", "LIBERADO C/ REST.", "NÃO LIBERADO"}
 
 NIVEL_ALERTA_ATRASO_LABELS = {
@@ -766,6 +768,31 @@ def filtrar_ativos(df: pd.DataFrame, coluna_status: str = "status_analise") -> p
     return df.loc[~mascara_cancelado].copy()
 
 
+# Marcador real de uma linha de ART (Anotação/Registro de Responsabilidade
+# Técnica) nos dados históricos: `disciplina == "ART/RRT"` — confirmado nos
+# registros importados até ~agosto/2026, onde a ART ainda entrava como uma
+# linha própria (sem N° AT real, campo preenchido com "***"). Correção de
+# regra de negócio: ART NÃO é AT — não deve contar como +1 análise/projeto
+# recebido, só como documento/prancha (via `num_documentos`, que continua
+# somado normalmente nessas linhas).
+DISCIPLINA_ART = "ART/RRT"
+
+
+def eh_art(disciplina: Any) -> bool:
+    """True quando a linha representa uma ART, não uma AT — ver `DISCIPLINA_ART`."""
+    return str(disciplina or "").strip().upper() == DISCIPLINA_ART
+
+
+def excluir_arts(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove as linhas de ART de `df` — usar sempre que for contar
+    projetos/ATs/análises (recebidos, concluídos, em análise, backlog,
+    atrasados etc.). NUNCA aplicar antes de somar `num_documentos`: uma ART
+    continua contando normalmente para o total de documentos/pranchas."""
+    if df.empty or "disciplina" not in df.columns:
+        return df
+    return df.loc[~df["disciplina"].apply(eh_art)].copy()
+
+
 def adicionar_flags_governanca(df: pd.DataFrame, coluna_status: str = "status_analise", coluna_revisao: str = "revisao") -> pd.DataFrame:
     """Adiciona ao DataFrame as colunas `pendente_reuniao` e `categoria_governanca`."""
     if df.empty:
@@ -791,7 +818,7 @@ def enriquecer_prestadores(df: pd.DataFrame) -> pd.DataFrame:
     from gat.calendario import calcular_hold_dias, em_hold  # import local evita ciclo
 
     if df.empty:
-        for col in ("hold_dias", "em_hold", "dias_uteis_decorridos", "status_entrega_calc", "situacao_pep"):
+        for col in ("hold_dias", "em_hold", "dias_uteis_decorridos", "status_entrega_calc", "situacao_pep", "eh_art"):
             df[col] = pd.Series(dtype=object)
         return adicionar_flags_governanca(df)
 
@@ -813,6 +840,7 @@ def enriquecer_prestadores(df: pd.DataFrame) -> pd.DataFrame:
     df["peps_efetivo"] = _pep_efetivo_prestadores(df)
     df = enriquecer_situacao_pep(df, "peps_efetivo")
     df["situacao_pep"] = df["tem_pep"].map({True: "OK", False: "SEM PEP"})
+    df["eh_art"] = df["disciplina"].apply(eh_art)
     return adicionar_flags_governanca(df)
 
 
@@ -926,7 +954,7 @@ def enriquecer_cessionarios(df: pd.DataFrame) -> pd.DataFrame:
     from gat.calendario import calcular_hold_dias, em_hold  # import local evita ciclo
 
     if df.empty:
-        for col in ("hold_dias", "em_hold", "saldo_dias_uteis", "status_entrega_calc"):
+        for col in ("hold_dias", "em_hold", "saldo_dias_uteis", "status_entrega_calc", "eh_art"):
             df[col] = pd.Series(dtype=object)
         return adicionar_flags_governanca(df)
 
@@ -945,6 +973,7 @@ def enriquecer_cessionarios(df: pd.DataFrame) -> pd.DataFrame:
 
     calculados = df.apply(_linha, axis=1)
     df = pd.concat([df, calculados], axis=1)
+    df["eh_art"] = df["disciplina"].apply(eh_art)
     return adicionar_flags_governanca(df)
 
 

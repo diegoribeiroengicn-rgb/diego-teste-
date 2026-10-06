@@ -17,7 +17,7 @@ from typing import Any
 
 import pandas as pd
 
-from gat.business_rules import filtrar_por_competencia
+from gat.business_rules import excluir_arts, filtrar_por_competencia
 from gat.config import STATUS_CANCELADO
 
 STATUS_CONCLUIDOS = ["LIBERADO", "LIBERADO C/ REST."]
@@ -40,16 +40,24 @@ def indicadores_mensais_modulo(df: pd.DataFrame, mes: int, ano: int) -> dict[str
         }
 
     df_ativos = df[df["status_analise"] != STATUS_CANCELADO]
+    # ART não é AT (regra de negócio): conta para documentos/pranchas, nunca
+    # para a contagem de análises/projetos — por isso `documentos` é somado
+    # ANTES de excluir as linhas de ART, e todas as demais métricas abaixo
+    # (que contam projetos/ATs) usam a versão sem ART.
+    df_ativos_sem_art = excluir_arts(df_ativos)
 
-    recebidos_df = filtrar_por_competencia(df_ativos, "data_solicitacao", mes, ano)
-    concluidos_df = filtrar_por_competencia(df_ativos, "data_analise", mes, ano)
+    recebidos_df_completo = filtrar_por_competencia(df_ativos, "data_solicitacao", mes, ano)
+    documentos = int(recebidos_df_completo["num_documentos"].fillna(0).sum())
+
+    recebidos_df = excluir_arts(recebidos_df_completo)
+    concluidos_df = filtrar_por_competencia(df_ativos_sem_art, "data_analise", mes, ano)
     concluidos_df = concluidos_df[concluidos_df["status_analise"].isin(STATUS_CONCLUIDOS)]
     em_analise_df = recebidos_df[recebidos_df["status_analise"] == STATUS_EM_ANALISE]
 
     fim_mes = _fim_do_mes(mes, ano)
-    datas_solicitacao = pd.to_datetime(df_ativos["data_solicitacao"], errors="coerce")
-    backlog_df = df_ativos[
-        (df_ativos["status_analise"] == STATUS_EM_ANALISE) & (datas_solicitacao <= fim_mes)
+    datas_solicitacao = pd.to_datetime(df_ativos_sem_art["data_solicitacao"], errors="coerce")
+    backlog_df = df_ativos_sem_art[
+        (df_ativos_sem_art["status_analise"] == STATUS_EM_ANALISE) & (datas_solicitacao <= fim_mes)
     ]
 
     sla_cumprido = int((concluidos_df["status_entrega_calc"] != "ATRASADO").sum()) if not concluidos_df.empty else 0
@@ -59,7 +67,7 @@ def indicadores_mensais_modulo(df: pd.DataFrame, mes: int, ano: int) -> dict[str
         "recebidos": len(recebidos_df),
         "concluidos": len(concluidos_df),
         "em_analise": len(em_analise_df),
-        "documentos": int(recebidos_df["num_documentos"].fillna(0).sum()),
+        "documentos": documentos,
         "sla_percentual": sla_percentual,
         "backlog": len(backlog_df),
     }
@@ -87,15 +95,19 @@ def produtividade_analistas(
     if analista:
         df_ativos = df_ativos[df_ativos["responsavel"] == analista]
 
-    concluidos_df = filtrar_por_competencia(df_ativos, "data_analise", mes, ano)
-    concluidos_df = concluidos_df[concluidos_df["status_analise"].isin(STATUS_CONCLUIDOS)]
+    concluidos_df_completo = filtrar_por_competencia(df_ativos, "data_analise", mes, ano)
+    concluidos_df_completo = concluidos_df_completo[concluidos_df_completo["status_analise"].isin(STATUS_CONCLUIDOS)]
+    # ART não é AT: documentos soma a versão completa (abaixo); projetos
+    # analisados/concluídos/backlog usam a versão sem ART.
+    concluidos_df = excluir_arts(concluidos_df_completo)
 
-    em_andamento_df = df_ativos[df_ativos["status_analise"] == STATUS_EM_ANALISE]
+    df_ativos_sem_art = excluir_arts(df_ativos)
+    em_andamento_df = df_ativos_sem_art[df_ativos_sem_art["status_analise"] == STATUS_EM_ANALISE]
 
     if mes is not None and ano is not None:
         fim_mes = _fim_do_mes(mes, ano)
-        datas_solicitacao = pd.to_datetime(df_ativos["data_solicitacao"], errors="coerce")
-        backlog_df = df_ativos[(df_ativos["status_analise"] == STATUS_EM_ANALISE) & (datas_solicitacao <= fim_mes)]
+        datas_solicitacao = pd.to_datetime(df_ativos_sem_art["data_solicitacao"], errors="coerce")
+        backlog_df = df_ativos_sem_art[(df_ativos_sem_art["status_analise"] == STATUS_EM_ANALISE) & (datas_solicitacao <= fim_mes)]
     else:
         backlog_df = em_andamento_df
 
@@ -117,6 +129,7 @@ def produtividade_analistas(
     responsaveis = sorted(set(df_ativos["responsavel"].dropna().unique().tolist()))
     for resp in responsaveis:
         grupo_concluidos = concluidos_df[concluidos_df["responsavel"] == resp]
+        grupo_concluidos_completo = concluidos_df_completo[concluidos_df_completo["responsavel"] == resp]
         grupo_backlog = backlog_df[backlog_df["responsavel"] == resp]
         grupo_andamento = em_andamento_df[em_andamento_df["responsavel"] == resp]
 
@@ -128,7 +141,7 @@ def produtividade_analistas(
         linhas.append({
             "responsavel": resp,
             "projetos_analisados": len(grupo_concluidos),
-            "documentos": int(grupo_concluidos["num_documentos"].fillna(0).sum()) if not grupo_concluidos.empty else 0,
+            "documentos": int(grupo_concluidos_completo["num_documentos"].fillna(0).sum()) if not grupo_concluidos_completo.empty else 0,
             "ats_emitidas": ats_emitidas,
             "tempo_medio_analise": tempo_medio if not pd.isna(tempo_medio) else 0.0,
             "sla_atendido_pct": sla_pct,
@@ -160,13 +173,15 @@ def acumulado_ano(df: pd.DataFrame, ano: int) -> dict[str, Any]:
     if df.empty:
         return {"recebidos": 0, "concluidos": 0, "documentos": 0}
     df_ativos = df[df["status_analise"] != STATUS_CANCELADO]
-    recebidos_df = filtrar_por_competencia(df_ativos, "data_solicitacao", None, ano)
-    concluidos_df = filtrar_por_competencia(df_ativos, "data_analise", None, ano)
+    recebidos_df_completo = filtrar_por_competencia(df_ativos, "data_solicitacao", None, ano)
+    documentos = int(recebidos_df_completo["num_documentos"].fillna(0).sum())
+    recebidos_df = excluir_arts(recebidos_df_completo)
+    concluidos_df = excluir_arts(filtrar_por_competencia(df_ativos, "data_analise", None, ano))
     concluidos_df = concluidos_df[concluidos_df["status_analise"].isin(STATUS_CONCLUIDOS)]
     return {
         "recebidos": len(recebidos_df),
         "concluidos": len(concluidos_df),
-        "documentos": int(recebidos_df["num_documentos"].fillna(0).sum()),
+        "documentos": documentos,
     }
 
 

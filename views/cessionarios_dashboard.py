@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from gat.business_rules import enriquecer_cessionarios, filtrar_ativos, filtrar_por_competencia, indicadores_meta_rev2
+from gat.business_rules import enriquecer_cessionarios, excluir_arts, filtrar_ativos, filtrar_por_competencia, indicadores_meta_rev2
 from gat.config import CORES, META_REVISAO_APROVACAO
 from gat.database import listar_cessionarios, obter_configuracao
 from gat.relatorios_mensais import comparativo_mensal, indicadores_mensais_modulo, mes_anterior
@@ -54,9 +54,14 @@ def render(usuario: dict) -> None:
         st.info("Nenhum registro ativo de cessionário para exibir indicadores nesta competência.")
         return
 
+    # ART não é AT: conta para documentos (linha abaixo, com a base ainda
+    # completa), nunca para os demais indicadores — por isso vem antes de
+    # excluir as linhas de ART de `df` para o resto da tela.
+    total_documentos = int(df["num_documentos"].fillna(0).sum())
+    df = excluir_arts(df)
+
     total_projetos = len(df)
     total_ats = df["num_at"].replace("", None).dropna().nunique()
-    total_documentos = int(df["num_documentos"].fillna(0).sum())
 
     em_analise = int((df["status_analise"] == "EM ANÁLISE").sum())
     liberados = int(df["status_analise"].isin(["LIBERADO", "LIBERADO C/ REST."]).sum())

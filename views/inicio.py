@@ -8,7 +8,7 @@ import pandas as pd
 
 from gat.alertas_engine import contar_hold_aguardando_acompanhamento
 from gat.alertas_pessoais import carregar_alertas_pessoais
-from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, filtrar_ativos, filtrar_por_competencia
+from gat.business_rules import enriquecer_cessionarios, enriquecer_prestadores, excluir_arts, filtrar_ativos, filtrar_por_competencia
 from gat.config import CORES
 from gat.database import listar_cessionarios, listar_prestadores
 from gat.permissions import pode_area, pode_modulo
@@ -83,6 +83,11 @@ def render(usuario: dict) -> None:
         st.caption(f"Competência: **{rotulo_competencia(mes, ano)}** (baseado na Data de Solicitação)")
         df_prest = filtrar_por_competencia(df_prest, "data_solicitacao", mes, ano)
         df_cess = filtrar_por_competencia(df_cess, "data_solicitacao", mes, ano)
+
+    # ART não é AT: não entra em "Projetos Ativos" nem nos demais
+    # indicadores agregados desta página (mesma regra do resto do sistema).
+    df_prest = excluir_arts(df_prest)
+    df_cess = excluir_arts(df_cess)
 
     total_ativos_prest = len(df_prest)
     total_ativos_cess = len(df_cess)

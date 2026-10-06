@@ -44,6 +44,7 @@ from views import (
     cadastro_prestadores,
     canteiros,
     cessionarios,
+    cessionarios_ativos,
     cessionarios_dashboard,
     consolidado,
     em_analise,
@@ -59,6 +60,7 @@ from views import (
     manual_sistema,
     meu_perfil,
     meus_alertas,
+    opr_cessionarios,
     painel_analistas,
     planos_acao,
     pmo_portfolio,
@@ -163,6 +165,10 @@ if pode_modulo(usuario, "cessionarios"):
     grupo_cessionarios.append(_pagina(lambda: em_analise.render(usuario, "cessionarios"), "Em Análise", ":material/search:", "cessionarios_em_analise"))
     grupo_cessionarios.append(_pagina(lambda: hold.render(usuario, "cessionarios"), "Em HOLD", ":material/pause_circle:", "cessionarios_hold"))
     grupo_cessionarios.append(_pagina(lambda: cadastro_cessionarios.render(usuario), "Cadastro", ":material/badge:", "cessionarios_cadastro"))
+    if pode_area(usuario, "cessionarios.cadastro_mestre"):
+        grupo_cessionarios.append(_pagina(lambda: cessionarios_ativos.render(usuario), "Cessionários Ativos", ":material/storefront:", "cessionarios_ativos"))
+    if pode_area(usuario, "opr.cessionarios"):
+        grupo_cessionarios.append(_pagina(lambda: opr_cessionarios.render(usuario), "One Page Report", ":material/picture_as_pdf:", "cessionarios_opr"))
     # A tela de Avaliação cobre Prestadores e Cessionários numa única view —
     # já aparece no grupo Prestadores quando esse módulo está liberado; aqui
     # só é adicionada para não deixar um usuário só-Cessionários sem acesso.

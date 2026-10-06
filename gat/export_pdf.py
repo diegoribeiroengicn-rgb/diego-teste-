@@ -194,3 +194,69 @@ def gerar_one_page_report_pdf(
 
     doc.build(elementos)
     return buffer.getvalue()
+
+
+def gerar_opr_infografico_cessionarios_pdf(
+    titulo_mes_ano: str,
+    imagens: dict[str, bytes],
+    cessionarios_ativos: list[tuple[str, int]],
+    resumo: dict,
+) -> bytes:
+    """One Page Report — Cessionários (infográfico mensal), reproduzindo a
+    estrutura do modelo de referência: Contribuição das Disciplinas,
+    Projetos Liberados no Mês + Liberado/Não Liberado, Cessionários
+    Ativos, Resumo e Acumulado do Ano (atual × anterior). `imagens` traz os
+    gráficos já rasterizados (ver `gat.opr_cessionarios_infografico` +
+    `gat.export_word.figura_para_imagem`): "disciplinas", "revisao",
+    "liberado_donut", "acumulado_atual", "acumulado_anterior"."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=landscape(A4),
+        topMargin=1.0 * cm, bottomMargin=1.0 * cm, leftMargin=1.2 * cm, rightMargin=1.2 * cm,
+    )
+
+    elementos = _cabecalho("GAT Cessionários", f"{titulo_mes_ano} · GAT 2026 · Controle de Análises Técnicas · Tecnoplano")
+
+    def _img(chave: str, largura: float, altura: float):
+        conteudo = imagens.get(chave)
+        if not conteudo:
+            return Paragraph("", _ESTILO_CORPO)
+        return Image(io.BytesIO(conteudo), width=largura, height=altura)
+
+    linhas_ativos = [Paragraph(f"• {qtd} {categoria}", _ESTILO_CORPO) for categoria, qtd in cessionarios_ativos] or [
+        Paragraph("Nenhum cessionário ativo cadastrado.", _ESTILO_CORPO)
+    ]
+    bloco_resumo = Table(
+        [[Paragraph("<b>CESSIONÁRIOS ATIVOS</b>", _ESTILO_CORPO)]] + [[linha] for linha in linhas_ativos]
+        + [[Spacer(1, 6)]]
+        + [[Paragraph("<b>RESUMO</b>", _ESTILO_CORPO)]]
+        + [[Paragraph(texto, _ESTILO_CORPO)] for texto in (
+            f"{resumo.get('analises_emitidas', 0)} análises emitidas",
+            f"{resumo.get('documentos', 0)} docs analisados",
+            f"{resumo.get('adiantados', 0)} adiantados ({resumo.get('adiantados_pct', 0)}%)",
+            f"{resumo.get('no_prazo', 0)} no prazo ({resumo.get('no_prazo_pct', 0)}%)",
+            f"{resumo.get('atrasados', 0)} atrasados ({resumo.get('atrasados_pct', 0)}%)",
+        )],
+        colWidths=[5.2 * cm],
+    )
+    bloco_resumo.setStyle(TableStyle([
+        ("LEFTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+
+    linha_topo = Table(
+        [[_img("disciplinas", 9 * cm, 6.5 * cm), _img("revisao", 9 * cm, 6.5 * cm), _img("liberado_donut", 5.5 * cm, 6.5 * cm), bloco_resumo]],
+        colWidths=[9 * cm, 9 * cm, 5.5 * cm, 5.2 * cm],
+    )
+    linha_topo.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    elementos.append(linha_topo)
+    elementos.append(Spacer(1, 6))
+
+    linha_baixo = Table(
+        [[_img("acumulado_atual", 13.5 * cm, 6 * cm), _img("acumulado_anterior", 13.5 * cm, 6 * cm)]],
+        colWidths=[13.5 * cm, 13.5 * cm],
+    )
+    linha_baixo.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    elementos.append(linha_baixo)
+
+    doc.build(elementos)
+    return buffer.getvalue()
