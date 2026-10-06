@@ -176,7 +176,9 @@ _LAYOUT_BASE = dict(
     font=dict(family="Inter, sans-serif", color=CORES["texto"]),
     plot_bgcolor="rgba(0,0,0,0)",
     paper_bgcolor="rgba(0,0,0,0)",
-    margin=dict(l=10, r=10, t=36, b=10),
+    margin=dict(l=36, r=10, t=36, b=10),
+    yaxis=dict(automargin=True),
+    xaxis=dict(automargin=True),
 )
 
 
