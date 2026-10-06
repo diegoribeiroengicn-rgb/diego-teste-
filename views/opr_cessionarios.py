@@ -14,6 +14,7 @@ from gat.export_pdf import gerar_opr_infografico_cessionarios_pdf
 from gat.export_word import figura_para_imagem
 from gat.opr_cessionarios_infografico import (
     acumulado_documentos_por_mes,
+    gerar_opr_infografico_cessionarios_pptx,
     gerar_opr_infografico_cessionarios_word,
     grafico_acumulado_ano,
     grafico_disciplinas,
@@ -90,9 +91,18 @@ def render(usuario: dict) -> None:
     with col5:
         st.plotly_chart(grafico_acumulado_ano(acumulado_anterior, ano - 1), use_container_width=True)
 
-    col_pdf, col_word = st.columns(2)
+    col_pptx, col_pdf, col_word = st.columns(3)
+    with col_pptx:
+        if st.button("Gerar Apresentação (PowerPoint)", icon=":material/slideshow:", type="primary", use_container_width=True, key="opr_cess_gerar_pptx"):
+            with st.spinner("Gerando PowerPoint..."):
+                pptx_bytes = gerar_opr_infografico_cessionarios_pptx(
+                    mes, ano, disciplinas, por_revisao, resumo, cessionarios_ativos,
+                    acumulado_atual, acumulado_anterior,
+                    usuario.get("nome_completo") or usuario["username"],
+                )
+            st.session_state["opr_cess_pptx"] = pptx_bytes
     with col_pdf:
-        if st.button("Gerar PDF", icon=":material/picture_as_pdf:", type="primary", use_container_width=True, key="opr_cess_gerar_pdf"):
+        if st.button("Gerar PDF", icon=":material/picture_as_pdf:", use_container_width=True, key="opr_cess_gerar_pdf"):
             with st.spinner("Gerando PDF..."):
                 imagens = {
                     "disciplinas": figura_para_imagem(grafico_disciplinas(disciplinas), largura_px=1100, altura_px=800),
@@ -112,6 +122,15 @@ def render(usuario: dict) -> None:
                     usuario.get("nome_completo") or usuario["username"],
                 )
             st.session_state["opr_cess_word"] = word_bytes
+
+    pptx_pronto = st.session_state.get("opr_cess_pptx")
+    if pptx_pronto:
+        if st.download_button(
+            "Baixar Apresentação (.pptx)", data=pptx_pronto, file_name=f"GAT_Cessionarios_OPR_{ano}_{mes:02d}.pptx",
+            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            icon=":material/download:", use_container_width=True, key="opr_cess_baixar_pptx",
+        ):
+            registrar_atividade(usuario["username"], usuario.get("perfil"), "OPR_PPTX_GERADO", modulo="cessionarios", detalhe=titulo_mes_ano)
 
     pdf_pronto = st.session_state.get("opr_cess_pdf")
     if pdf_pronto:

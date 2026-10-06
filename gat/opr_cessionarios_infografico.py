@@ -19,6 +19,18 @@ import plotly.graph_objects as go
 
 from gat.business_rules import excluir_arts, filtrar_por_competencia
 from gat.config import CORES, MESES_PT
+from gat.export_pptx import (
+    adicionar_grafico,
+    apresentacao_para_bytes,
+    mensagem_slide,
+    nova_apresentacao,
+    novo_slide,
+    rodape_slide as rodape_slide_pptx,
+    slide_capa,
+    tabela_dados_slide,
+    tabela_indicadores_slide,
+    titulo_slide,
+)
 from gat.export_word import (
     cabecalho_institucional,
     documento_para_bytes,
@@ -172,19 +184,33 @@ def acumulado_documentos_por_mes(df_completo: pd.DataFrame, ano: int) -> pd.Data
 # Gráficos (Plotly) — mesmo estilo institucional de `gat.ui.charts`
 # ---------------------------------------------------------------------------
 
+# Tamanhos pensados para apresentação projetada/tela (não só relatório
+# impresso em A4) — por isso bem maiores que o padrão de um gráfico de
+# dashboard comum: título, eixos e legenda precisam ser lidos à distância.
+_TAM_TITULO = 20
+_TAM_ROTULO = 15
+_TAM_LEGENDA = 13
+
 _LAYOUT_BASE = dict(
-    font=dict(family="Inter, sans-serif", color=CORES["texto"]),
+    font=dict(family="Inter, sans-serif", color=CORES["texto"], size=14),
     plot_bgcolor="rgba(0,0,0,0)",
     paper_bgcolor="rgba(0,0,0,0)",
-    margin=dict(l=36, r=10, t=36, b=10),
-    yaxis=dict(automargin=True),
-    xaxis=dict(automargin=True),
+    margin=dict(l=44, r=10, t=46, b=10),
+    yaxis=dict(automargin=True, tickfont=dict(size=13)),
+    xaxis=dict(automargin=True, tickfont=dict(size=13)),
 )
+
+
+def _legenda(**kwargs) -> dict:
+    """Legenda padrão do infográfico, sempre com a fonte em tamanho de
+    apresentação — chame com os mesmos kwargs de posicionamento usados
+    antes (orientation/yanchor/y/xanchor/x)."""
+    return dict(font=dict(size=_TAM_LEGENDA), **kwargs)
 
 
 def grafico_disciplinas(dados: list[tuple[str, int, float]]) -> go.Figure:
     if not dados:
-        return go.Figure(layout=dict(**_LAYOUT_BASE, title=dict(text="Contribuição das Disciplinas", font=dict(size=14, color=CORES["navy"]))))
+        return go.Figure(layout=dict(**_LAYOUT_BASE, title=dict(text="Contribuição das Disciplinas", font=dict(size=_TAM_TITULO, color=CORES["navy"]))))
     labels = [d for d, _, _ in dados]
     valores = [q for _, q, _ in dados]
     cores = [_CORES_DISCIPLINA.get(l, CORES["ceu"]) for l in labels]
@@ -193,26 +219,26 @@ def grafico_disciplinas(dados: list[tuple[str, int, float]]) -> go.Figure:
     # trazer o valor junto, não só a fatia percentual.
     fig = go.Figure(data=[go.Pie(
         labels=labels, values=valores, hole=0.45, marker=dict(colors=cores),
-        textinfo="value+percent", textfont=dict(color="#ffffff", size=12),
+        textinfo="value+percent", textfont=dict(color="#ffffff", size=_TAM_ROTULO),
     )])
-    fig.update_layout(**_LAYOUT_BASE, title=dict(text="Contribuição das Disciplinas", font=dict(size=14, color=CORES["navy"])),
-                       legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.02))
+    fig.update_layout(**_LAYOUT_BASE, title=dict(text="Contribuição das Disciplinas", font=dict(size=_TAM_TITULO, color=CORES["navy"])),
+                       legend=_legenda(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.02))
     return fig
 
 
 def grafico_liberados_por_revisao(df_revisao: pd.DataFrame) -> go.Figure:
-    titulo = dict(text="Projetos Liberados no Mês", font=dict(size=14, color=CORES["navy"]))
+    titulo = dict(text="Projetos Liberados no Mês", font=dict(size=_TAM_TITULO, color=CORES["navy"]))
     if df_revisao.empty:
         return go.Figure(layout=dict(**_LAYOUT_BASE, title=titulo))
     rotulos = [f"R{int(r):02d}" for r in df_revisao["revisao"]]
     fig = go.Figure(data=[
         go.Bar(name="Total", x=rotulos, y=df_revisao["total"], marker_color=_COR_TOTAL,
-               text=df_revisao["total"], textposition="outside", textfont=dict(color=CORES["texto"], size=12)),
+               text=df_revisao["total"], textposition="outside", textfont=dict(color=CORES["texto"], size=_TAM_ROTULO)),
         go.Bar(name="C/ Substituição", x=rotulos, y=df_revisao["com_substituicao"], marker_color=_COR_SUBSTITUICAO,
-               text=df_revisao["com_substituicao"], textposition="outside", textfont=dict(color=CORES["texto"], size=12)),
+               text=df_revisao["com_substituicao"], textposition="outside", textfont=dict(color=CORES["texto"], size=_TAM_ROTULO)),
     ])
     fig.update_layout(**_LAYOUT_BASE, title=titulo, barmode="group",
-                       legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0))
+                       legend=_legenda(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0))
     return fig
 
 
@@ -220,14 +246,14 @@ def grafico_liberado_nao_liberado(liberados: int, nao_liberados: int) -> go.Figu
     fig = go.Figure(data=[go.Pie(
         labels=["LIBERADO", "NÃO LIBERADO"], values=[liberados, nao_liberados], hole=0.45,
         marker=dict(colors=[_COR_LIBERADO, _COR_NAO_LIBERADO]),
-        textinfo="value+percent", textfont=dict(color="#ffffff", size=13),
+        textinfo="value+percent", textfont=dict(color="#ffffff", size=_TAM_ROTULO + 1),
     )])
-    fig.update_layout(**_LAYOUT_BASE, legend=dict(orientation="h", yanchor="bottom", y=-0.15, xanchor="center", x=0.5))
+    fig.update_layout(**_LAYOUT_BASE, legend=_legenda(orientation="h", yanchor="bottom", y=-0.15, xanchor="center", x=0.5))
     return fig
 
 
 def grafico_acumulado_ano(df_acumulado: pd.DataFrame, ano: int) -> go.Figure:
-    titulo = dict(text=f"Acumulado do Ano de {ano}", font=dict(size=14, color=CORES["navy"]))
+    titulo = dict(text=f"Acumulado do Ano de {ano}", font=dict(size=_TAM_TITULO, color=CORES["navy"]))
     rotulos = [MESES_PT[m - 1][:3].upper() for m in df_acumulado["mes"]]
 
     def _texto_segmento(valores: pd.Series) -> list[str]:
@@ -237,20 +263,20 @@ def grafico_acumulado_ano(df_acumulado: pd.DataFrame, ano: int) -> go.Figure:
 
     fig = go.Figure(data=[
         go.Bar(name="Atrasado", x=rotulos, y=df_acumulado["atrasado"], marker_color=_COR_ATRASADO,
-               text=_texto_segmento(df_acumulado["atrasado"]), textposition="inside", textfont=dict(color="#ffffff", size=11)),
+               text=_texto_segmento(df_acumulado["atrasado"]), textposition="inside", textfont=dict(color="#ffffff", size=_TAM_ROTULO)),
         go.Bar(name="No Prazo", x=rotulos, y=df_acumulado["no_prazo"], marker_color=_COR_NO_PRAZO,
-               text=_texto_segmento(df_acumulado["no_prazo"]), textposition="inside", textfont=dict(color="#ffffff", size=11)),
+               text=_texto_segmento(df_acumulado["no_prazo"]), textposition="inside", textfont=dict(color="#ffffff", size=_TAM_ROTULO)),
         go.Bar(name="Adiantado", x=rotulos, y=df_acumulado["adiantado"], marker_color=_COR_ADIANTADO,
-               text=_texto_segmento(df_acumulado["adiantado"]), textposition="inside", textfont=dict(color="#ffffff", size=11)),
+               text=_texto_segmento(df_acumulado["adiantado"]), textposition="inside", textfont=dict(color="#ffffff", size=_TAM_ROTULO)),
     ])
     # Total acima de cada barra — não dá pra somar os 3 segmentos de cabeça
-    # olhando o papel impresso.
+    # olhando o papel impresso/projetado.
     anotacoes = [
-        dict(x=rotulo, y=total, text=f"<b>{int(total)}</b>", showarrow=False, yshift=10, font=dict(size=12, color=CORES["navy"]))
+        dict(x=rotulo, y=total, text=f"<b>{int(total)}</b>", showarrow=False, yshift=14, font=dict(size=_TAM_TITULO - 3, color=CORES["navy"]))
         for rotulo, total in zip(rotulos, df_acumulado["total"]) if total
     ]
     fig.update_layout(**_LAYOUT_BASE, title=titulo, barmode="stack", annotations=anotacoes,
-                       legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0))
+                       legend=_legenda(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0))
     return fig
 
 
@@ -322,3 +348,78 @@ def gerar_opr_infografico_cessionarios_word(
     rodape_institucional(doc)
 
     return documento_para_bytes(doc)
+
+
+# ---------------------------------------------------------------------------
+# Versão PowerPoint (.pptx) — apresentação executiva widescreen (16:9), com
+# fontes em tamanho de projeção/tela (bem maiores que o relatório A4) e um
+# gráfico por slide para garantir legibilidade — o Acumulado do Ano (ano
+# atual e anterior) ganha um slide dedicado cada, que era o maior problema
+# de leitura apontado no formato anterior.
+# ---------------------------------------------------------------------------
+
+
+def gerar_opr_infografico_cessionarios_pptx(
+    mes: int, ano: int,
+    disciplinas: list[tuple[str, int, float]],
+    por_revisao: pd.DataFrame,
+    resumo: dict,
+    cessionarios_ativos: list[tuple[str, int]],
+    acumulado_atual: pd.DataFrame,
+    acumulado_anterior: pd.DataFrame,
+    usuario_responsavel: str,
+) -> bytes:
+    titulo_mes_ano = _rotulo_mes_ano(mes, ano)
+
+    prs = nova_apresentacao()
+
+    slide_capa(
+        prs, "GAT Cessionários — One Page Report",
+        "GAT 2026 · Controle de Análises Técnicas · Tecnoplano",
+        titulo_mes_ano, usuario_responsavel,
+    )
+
+    slide_resumo = novo_slide(prs)
+    titulo_slide(slide_resumo, "Resumo")
+    tabela_indicadores_slide(slide_resumo, [
+        ("Análises Emitidas", resumo["analises_emitidas"]),
+        ("Docs Analisados", resumo["documentos"]),
+        ("Adiantados", f"{resumo['adiantados']} ({resumo['adiantados_pct']}%)"),
+        ("No Prazo", f"{resumo['no_prazo']} ({resumo['no_prazo_pct']}%)"),
+        ("Atrasados", f"{resumo['atrasados']} ({resumo['atrasados_pct']}%)"),
+    ], left_in=0.6, top_in=1.4, width_in=12.0)
+    rodape_slide_pptx(slide_resumo, usuario_responsavel)
+
+    slide_disciplinas = novo_slide(prs)
+    titulo_slide(slide_disciplinas, "Contribuição das Disciplinas")
+    adicionar_grafico(slide_disciplinas, grafico_disciplinas(disciplinas), left_in=1.2, top_in=1.3, width_in=10.9)
+    rodape_slide_pptx(slide_disciplinas, usuario_responsavel)
+
+    slide_revisao = novo_slide(prs)
+    titulo_slide(slide_revisao, "Projetos Liberados no Mês")
+    adicionar_grafico(slide_revisao, grafico_liberados_por_revisao(por_revisao), left_in=0.6, top_in=1.3, width_in=6.2)
+    adicionar_grafico(slide_revisao, grafico_liberado_nao_liberado(resumo["liberados"], resumo["nao_liberados"]), left_in=7.0, top_in=1.3, width_in=5.7)
+    rodape_slide_pptx(slide_revisao, usuario_responsavel)
+
+    slide_ativos = novo_slide(prs)
+    titulo_slide(slide_ativos, "Cessionários Ativos")
+    if cessionarios_ativos:
+        tabela_dados_slide(
+            slide_ativos, ["Categoria", "Quantidade"], cessionarios_ativos,
+            left_in=1.5, top_in=1.4, width_in=10.0,
+        )
+    else:
+        mensagem_slide(slide_ativos, "Nenhum cessionário ativo cadastrado — gerencie em Cessionários > Cessionários Ativos.")
+    rodape_slide_pptx(slide_ativos, usuario_responsavel)
+
+    slide_acum_atual = novo_slide(prs)
+    titulo_slide(slide_acum_atual, f"Acumulado do Ano de {ano}")
+    adicionar_grafico(slide_acum_atual, grafico_acumulado_ano(acumulado_atual, ano), left_in=0.6, top_in=1.2, width_in=12.1)
+    rodape_slide_pptx(slide_acum_atual, usuario_responsavel)
+
+    slide_acum_anterior = novo_slide(prs)
+    titulo_slide(slide_acum_anterior, f"Acumulado do Ano de {ano - 1}")
+    adicionar_grafico(slide_acum_anterior, grafico_acumulado_ano(acumulado_anterior, ano - 1), left_in=0.6, top_in=1.2, width_in=12.1)
+    rodape_slide_pptx(slide_acum_anterior, usuario_responsavel)
+
+    return apresentacao_para_bytes(prs)
