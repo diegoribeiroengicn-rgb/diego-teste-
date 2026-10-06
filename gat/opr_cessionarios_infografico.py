@@ -19,6 +19,18 @@ import plotly.graph_objects as go
 
 from gat.business_rules import excluir_arts, filtrar_por_competencia
 from gat.config import CORES, MESES_PT
+from gat.export_word import (
+    cabecalho_institucional,
+    documento_para_bytes,
+    graficos_em_grade,
+    nome_arquivo,
+    novo_documento,
+    observacoes,
+    paragrafo,
+    rodape_institucional,
+    secao,
+    tabela_indicadores_compacta,
+)
 
 _COR_ADIANTADO = CORES["verde"]
 _COR_NO_PRAZO = CORES["dourado"]
@@ -174,7 +186,13 @@ def grafico_disciplinas(dados: list[tuple[str, int, float]]) -> go.Figure:
     labels = [d for d, _, _ in dados]
     valores = [q for _, q, _ in dados]
     cores = [_CORES_DISCIPLINA.get(l, CORES["ceu"]) for l in labels]
-    fig = go.Figure(data=[go.Pie(labels=labels, values=valores, hole=0.45, marker=dict(colors=cores), textinfo="percent")])
+    # `value+percent` (não só `percent`): no papel/PDF impresso não dá pra
+    # passar o mouse por cima pra ver o número exato — o rótulo precisa
+    # trazer o valor junto, não só a fatia percentual.
+    fig = go.Figure(data=[go.Pie(
+        labels=labels, values=valores, hole=0.45, marker=dict(colors=cores),
+        textinfo="value+percent", textfont=dict(color="#ffffff", size=12),
+    )])
     fig.update_layout(**_LAYOUT_BASE, title=dict(text="Contribuição das Disciplinas", font=dict(size=14, color=CORES["navy"])),
                        legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.02))
     return fig
@@ -186,8 +204,10 @@ def grafico_liberados_por_revisao(df_revisao: pd.DataFrame) -> go.Figure:
         return go.Figure(layout=dict(**_LAYOUT_BASE, title=titulo))
     rotulos = [f"R{int(r):02d}" for r in df_revisao["revisao"]]
     fig = go.Figure(data=[
-        go.Bar(name="Total", x=rotulos, y=df_revisao["total"], marker_color=_COR_TOTAL, text=df_revisao["total"], textposition="inside"),
-        go.Bar(name="C/ Substituição", x=rotulos, y=df_revisao["com_substituicao"], marker_color=_COR_SUBSTITUICAO, text=df_revisao["com_substituicao"], textposition="inside"),
+        go.Bar(name="Total", x=rotulos, y=df_revisao["total"], marker_color=_COR_TOTAL,
+               text=df_revisao["total"], textposition="outside", textfont=dict(color=CORES["texto"], size=12)),
+        go.Bar(name="C/ Substituição", x=rotulos, y=df_revisao["com_substituicao"], marker_color=_COR_SUBSTITUICAO,
+               text=df_revisao["com_substituicao"], textposition="outside", textfont=dict(color=CORES["texto"], size=12)),
     ])
     fig.update_layout(**_LAYOUT_BASE, title=titulo, barmode="group",
                        legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0))
@@ -197,7 +217,8 @@ def grafico_liberados_por_revisao(df_revisao: pd.DataFrame) -> go.Figure:
 def grafico_liberado_nao_liberado(liberados: int, nao_liberados: int) -> go.Figure:
     fig = go.Figure(data=[go.Pie(
         labels=["LIBERADO", "NÃO LIBERADO"], values=[liberados, nao_liberados], hole=0.45,
-        marker=dict(colors=[_COR_LIBERADO, _COR_NAO_LIBERADO]), textinfo="value",
+        marker=dict(colors=[_COR_LIBERADO, _COR_NAO_LIBERADO]),
+        textinfo="value+percent", textfont=dict(color="#ffffff", size=13),
     )])
     fig.update_layout(**_LAYOUT_BASE, legend=dict(orientation="h", yanchor="bottom", y=-0.15, xanchor="center", x=0.5))
     return fig
@@ -206,11 +227,96 @@ def grafico_liberado_nao_liberado(liberados: int, nao_liberados: int) -> go.Figu
 def grafico_acumulado_ano(df_acumulado: pd.DataFrame, ano: int) -> go.Figure:
     titulo = dict(text=f"Acumulado do Ano de {ano}", font=dict(size=14, color=CORES["navy"]))
     rotulos = [MESES_PT[m - 1][:3].upper() for m in df_acumulado["mes"]]
+
+    def _texto_segmento(valores: pd.Series) -> list[str]:
+        # Oculta o rótulo quando o segmento é 0 (não impresso) — "0" dentro
+        # de uma fatia inexistente só polui o gráfico sem informar nada.
+        return [str(int(v)) if v else "" for v in valores]
+
     fig = go.Figure(data=[
-        go.Bar(name="Atrasado", x=rotulos, y=df_acumulado["atrasado"], marker_color=_COR_ATRASADO),
-        go.Bar(name="No Prazo", x=rotulos, y=df_acumulado["no_prazo"], marker_color=_COR_NO_PRAZO),
-        go.Bar(name="Adiantado", x=rotulos, y=df_acumulado["adiantado"], marker_color=_COR_ADIANTADO),
+        go.Bar(name="Atrasado", x=rotulos, y=df_acumulado["atrasado"], marker_color=_COR_ATRASADO,
+               text=_texto_segmento(df_acumulado["atrasado"]), textposition="inside", textfont=dict(color="#ffffff", size=11)),
+        go.Bar(name="No Prazo", x=rotulos, y=df_acumulado["no_prazo"], marker_color=_COR_NO_PRAZO,
+               text=_texto_segmento(df_acumulado["no_prazo"]), textposition="inside", textfont=dict(color="#ffffff", size=11)),
+        go.Bar(name="Adiantado", x=rotulos, y=df_acumulado["adiantado"], marker_color=_COR_ADIANTADO,
+               text=_texto_segmento(df_acumulado["adiantado"]), textposition="inside", textfont=dict(color="#ffffff", size=11)),
     ])
-    fig.update_layout(**_LAYOUT_BASE, title=titulo, barmode="stack",
+    # Total acima de cada barra — não dá pra somar os 3 segmentos de cabeça
+    # olhando o papel impresso.
+    anotacoes = [
+        dict(x=rotulo, y=total, text=f"<b>{int(total)}</b>", showarrow=False, yshift=10, font=dict(size=12, color=CORES["navy"]))
+        for rotulo, total in zip(rotulos, df_acumulado["total"]) if total
+    ]
+    fig.update_layout(**_LAYOUT_BASE, title=titulo, barmode="stack", annotations=anotacoes,
                        legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0))
     return fig
+
+
+# ---------------------------------------------------------------------------
+# Versão Word (.docx) — totalmente editável, para anotar ou corrigir dados
+# diretamente no documento (mesmo mecanismo já usado no OPR institucional
+# de `views/relatorios_mensais.py`): Resumo e Cessionários Ativos entram
+# como tabelas nativas do Word (texto real, editável célula a célula); só
+# os gráficos são imagens individuais (Kaleido), cada um podendo ser
+# removido/movido sem afetar o resto do documento.
+# ---------------------------------------------------------------------------
+
+
+def gerar_opr_infografico_cessionarios_word(
+    mes: int, ano: int,
+    disciplinas: list[tuple[str, int, float]],
+    por_revisao: pd.DataFrame,
+    resumo: dict,
+    cessionarios_ativos: list[tuple[str, int]],
+    acumulado_atual: pd.DataFrame,
+    acumulado_anterior: pd.DataFrame,
+    usuario_responsavel: str,
+) -> bytes:
+    titulo_mes_ano = _rotulo_mes_ano(mes, ano)
+
+    doc = novo_documento()
+    cabecalho_institucional(
+        doc, "GAT Cessionários — One Page Report",
+        "GAT 2026 · Controle de Análises Técnicas · Tecnoplano",
+        titulo_mes_ano, None, usuario_responsavel, compacto=True,
+    )
+
+    tabela_indicadores_compacta(doc, [
+        ("Análises Emitidas", resumo["analises_emitidas"]),
+        ("Docs Analisados", resumo["documentos"]),
+        ("Adiantados", f"{resumo['adiantados']} ({resumo['adiantados_pct']}%)"),
+        ("No Prazo", f"{resumo['no_prazo']} ({resumo['no_prazo_pct']}%)"),
+        ("Atrasados", f"{resumo['atrasados']} ({resumo['atrasados_pct']}%)"),
+    ], titulo="Resumo", colunas=3)
+
+    secao(doc, "Cessionários Ativos", nivel=2)
+    if cessionarios_ativos:
+        tabela = doc.add_table(rows=1, cols=2)
+        tabela.style = "Light Grid Accent 1"
+        tabela.rows[0].cells[0].text = "Categoria"
+        tabela.rows[0].cells[0].paragraphs[0].runs[0].font.bold = True
+        tabela.rows[0].cells[1].text = "Quantidade"
+        tabela.rows[0].cells[1].paragraphs[0].runs[0].font.bold = True
+        for categoria, quantidade in cessionarios_ativos:
+            linha = tabela.add_row()
+            linha.cells[0].text = str(categoria)
+            linha.cells[1].text = str(quantidade)
+        doc.add_paragraph()
+    else:
+        paragrafo(doc, "Nenhum cessionário ativo cadastrado — gerencie em Cessionários > Cessionários Ativos.", italico=True)
+
+    secao(doc, "Gráficos", nivel=2)
+    graficos_em_grade(doc, [
+        {"fig": grafico_disciplinas(disciplinas), "titulo": "Contribuição das Disciplinas"},
+        {"fig": grafico_liberados_por_revisao(por_revisao), "titulo": "Projetos Liberados no Mês"},
+        {"fig": grafico_liberado_nao_liberado(resumo["liberados"], resumo["nao_liberados"]), "titulo": "Liberado × Não Liberado"},
+    ], colunas=3, largura_cm=6.0)
+    graficos_em_grade(doc, [
+        {"fig": grafico_acumulado_ano(acumulado_atual, ano), "titulo": f"Acumulado do Ano de {ano}"},
+        {"fig": grafico_acumulado_ano(acumulado_anterior, ano - 1), "titulo": f"Acumulado do Ano de {ano - 1}"},
+    ], colunas=2, largura_cm=9.0)
+
+    observacoes(doc, "Observações", None, marcador_padrao="Espaço livre para anotações — edite este parágrafo diretamente no Word.")
+    rodape_institucional(doc)
+
+    return documento_para_bytes(doc)

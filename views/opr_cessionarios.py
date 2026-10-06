@@ -14,6 +14,7 @@ from gat.export_pdf import gerar_opr_infografico_cessionarios_pdf
 from gat.export_word import figura_para_imagem
 from gat.opr_cessionarios_infografico import (
     acumulado_documentos_por_mes,
+    gerar_opr_infografico_cessionarios_word,
     grafico_acumulado_ano,
     grafico_disciplinas,
     grafico_liberado_nao_liberado,
@@ -89,17 +90,28 @@ def render(usuario: dict) -> None:
     with col5:
         st.plotly_chart(grafico_acumulado_ano(acumulado_anterior, ano - 1), use_container_width=True)
 
-    if st.button("Gerar PDF", icon=":material/picture_as_pdf:", type="primary", key="opr_cess_gerar_pdf"):
-        with st.spinner("Gerando PDF..."):
-            imagens = {
-                "disciplinas": figura_para_imagem(grafico_disciplinas(disciplinas), largura_px=1100, altura_px=800),
-                "revisao": figura_para_imagem(grafico_liberados_por_revisao(por_revisao), largura_px=1100, altura_px=800),
-                "liberado_donut": figura_para_imagem(grafico_liberado_nao_liberado(resumo["liberados"], resumo["nao_liberados"]), largura_px=700, altura_px=800),
-                "acumulado_atual": figura_para_imagem(grafico_acumulado_ano(acumulado_atual, ano), largura_px=1700, altura_px=750),
-                "acumulado_anterior": figura_para_imagem(grafico_acumulado_ano(acumulado_anterior, ano - 1), largura_px=1700, altura_px=750),
-            }
-            pdf_bytes = gerar_opr_infografico_cessionarios_pdf(titulo_mes_ano, imagens, cessionarios_ativos, resumo)
-        st.session_state["opr_cess_pdf"] = pdf_bytes
+    col_pdf, col_word = st.columns(2)
+    with col_pdf:
+        if st.button("Gerar PDF", icon=":material/picture_as_pdf:", type="primary", use_container_width=True, key="opr_cess_gerar_pdf"):
+            with st.spinner("Gerando PDF..."):
+                imagens = {
+                    "disciplinas": figura_para_imagem(grafico_disciplinas(disciplinas), largura_px=1100, altura_px=800),
+                    "revisao": figura_para_imagem(grafico_liberados_por_revisao(por_revisao), largura_px=1100, altura_px=800),
+                    "liberado_donut": figura_para_imagem(grafico_liberado_nao_liberado(resumo["liberados"], resumo["nao_liberados"]), largura_px=700, altura_px=800),
+                    "acumulado_atual": figura_para_imagem(grafico_acumulado_ano(acumulado_atual, ano), largura_px=1700, altura_px=750),
+                    "acumulado_anterior": figura_para_imagem(grafico_acumulado_ano(acumulado_anterior, ano - 1), largura_px=1700, altura_px=750),
+                }
+                pdf_bytes = gerar_opr_infografico_cessionarios_pdf(titulo_mes_ano, imagens, cessionarios_ativos, resumo)
+            st.session_state["opr_cess_pdf"] = pdf_bytes
+    with col_word:
+        if st.button("Gerar OPR (Word)", icon=":material/description:", use_container_width=True, key="opr_cess_gerar_word"):
+            with st.spinner("Gerando Word..."):
+                word_bytes = gerar_opr_infografico_cessionarios_word(
+                    mes, ano, disciplinas, por_revisao, resumo, cessionarios_ativos,
+                    acumulado_atual, acumulado_anterior,
+                    usuario.get("nome_completo") or usuario["username"],
+                )
+            st.session_state["opr_cess_word"] = word_bytes
 
     pdf_pronto = st.session_state.get("opr_cess_pdf")
     if pdf_pronto:
@@ -108,3 +120,12 @@ def render(usuario: dict) -> None:
             mime="application/pdf", icon=":material/download:", use_container_width=True, key="opr_cess_baixar",
         ):
             registrar_atividade(usuario["username"], usuario.get("perfil"), "OPR_GERADO", modulo="cessionarios", detalhe=titulo_mes_ano)
+
+    word_pronto = st.session_state.get("opr_cess_word")
+    if word_pronto:
+        if st.download_button(
+            "Baixar OPR (Word)", data=word_pronto, file_name=f"GAT_Cessionarios_OPR_{ano}_{mes:02d}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            icon=":material/download:", use_container_width=True, key="opr_cess_baixar_word",
+        ):
+            registrar_atividade(usuario["username"], usuario.get("perfil"), "OPR_WORD_GERADO", modulo="cessionarios", detalhe=titulo_mes_ano)
