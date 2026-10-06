@@ -214,6 +214,33 @@ def tabela_indicadores_compacta(doc: Document, pares: list[tuple[str, object]], 
     doc.add_paragraph()
 
 
+def grafico_em_celula(celula, fig: go.Figure, titulo: str, largura_cm: float = 7.8, legenda: str | None = None,
+                       tamanho_titulo: float = 8.5) -> None:
+    """Insere um gráfico (título centralizado acima + imagem) dentro de uma
+    célula de tabela já existente — usado para montar grades "mistas"
+    (algumas células com gráfico, outras com texto), onde `graficos_em_grade`
+    não serve por assumir que toda célula é um gráfico."""
+    p_titulo = celula.paragraphs[0]
+    run_titulo = p_titulo.add_run(titulo)
+    run_titulo.font.bold = True
+    run_titulo.font.size = Pt(tamanho_titulo)
+    run_titulo.font.color.rgb = _NAVY
+    p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    imagem_bytes = figura_para_imagem(fig)
+    p_imagem = celula.add_paragraph()
+    p_imagem.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_imagem.add_run().add_picture(io.BytesIO(imagem_bytes), width=Cm(largura_cm))
+
+    if legenda:
+        p_legenda = celula.add_paragraph()
+        p_legenda.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run_legenda = p_legenda.add_run(legenda)
+        run_legenda.italic = True
+        run_legenda.font.size = Pt(7)
+        run_legenda.font.color.rgb = _TEXTO_FRACO
+
+
 def graficos_em_grade(doc: Document, itens: list[dict], colunas: int = 2, largura_cm: float = 7.8) -> None:
     """Insere vários gráficos lado a lado em uma grade compacta (tabela do
     Word), em vez de um embaixo do outro — necessário para que o OPR
@@ -228,25 +255,7 @@ def graficos_em_grade(doc: Document, itens: list[dict], colunas: int = 2, largur
     for idx, item in enumerate(itens):
         linha_idx, coluna_idx = divmod(idx, colunas)
         celula = tabela.rows[linha_idx].cells[coluna_idx]
-        p_titulo = celula.paragraphs[0]
-        run_titulo = p_titulo.add_run(item["titulo"])
-        run_titulo.font.bold = True
-        run_titulo.font.size = Pt(8.5)
-        run_titulo.font.color.rgb = _NAVY
-        p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        imagem_bytes = figura_para_imagem(item["fig"])
-        p_imagem = celula.add_paragraph()
-        p_imagem.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_imagem.add_run().add_picture(io.BytesIO(imagem_bytes), width=Cm(largura_cm))
-
-        if item.get("legenda"):
-            p_legenda = celula.add_paragraph()
-            p_legenda.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run_legenda = p_legenda.add_run(item["legenda"])
-            run_legenda.italic = True
-            run_legenda.font.size = Pt(7)
-            run_legenda.font.color.rgb = _TEXTO_FRACO
+        grafico_em_celula(celula, item["fig"], item["titulo"], largura_cm=largura_cm, legenda=item.get("legenda"))
     doc.add_paragraph()
 
 

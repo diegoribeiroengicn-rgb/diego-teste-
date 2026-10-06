@@ -16,32 +16,26 @@ from __future__ import annotations
 
 import pandas as pd
 import plotly.graph_objects as go
+from docx.shared import Pt, RGBColor
 
 from gat.business_rules import excluir_arts, filtrar_por_competencia
 from gat.config import CORES, MESES_PT
 from gat.export_pptx import (
-    adicionar_grafico,
+    adicionar_grafico as adicionar_grafico_pptx,
     apresentacao_para_bytes,
-    mensagem_slide,
+    bloco_lateral as bloco_lateral_pptx,
+    cabecalho_slide as cabecalho_slide_pptx,
     nova_apresentacao,
     novo_slide,
     rodape_slide as rodape_slide_pptx,
-    slide_capa,
-    tabela_dados_slide,
-    tabela_indicadores_slide,
-    titulo_slide,
 )
 from gat.export_word import (
     cabecalho_institucional,
     documento_para_bytes,
-    graficos_em_grade,
-    nome_arquivo,
+    grafico_em_celula,
     novo_documento,
     observacoes,
-    paragrafo,
     rodape_institucional,
-    secao,
-    tabela_indicadores_compacta,
 )
 
 _COR_ADIANTADO = CORES["verde"]
@@ -281,13 +275,48 @@ def grafico_acumulado_ano(df_acumulado: pd.DataFrame, ano: int) -> go.Figure:
 
 
 # ---------------------------------------------------------------------------
-# Versão Word (.docx) — totalmente editável, para anotar ou corrigir dados
-# diretamente no documento (mesmo mecanismo já usado no OPR institucional
-# de `views/relatorios_mensais.py`): Resumo e Cessionários Ativos entram
-# como tabelas nativas do Word (texto real, editável célula a célula); só
-# os gráficos são imagens individuais (Kaleido), cada um podendo ser
-# removido/movido sem afetar o resto do documento.
+# Versão Word (.docx) e PowerPoint (.pptx) — a MESMA estrutura de página
+# única do PDF (`gat.export_pdf.gerar_opr_infografico_cessionarios_pdf`):
+# cabeçalho, uma linha com 3 gráficos + bloco "Cessionários Ativos/Resumo",
+# e uma segunda linha com os 2 gráficos de Acumulado do Ano — não é um
+# layout diferente por formato, é o mesmo relatório, só que editável
+# (texto real, não imagem) e com fontes maiores que o A4 impresso.
 # ---------------------------------------------------------------------------
+
+
+def _linhas_resumo_texto(resumo: dict) -> list[str]:
+    return [
+        f"{resumo['analises_emitidas']} análises emitidas",
+        f"{resumo['documentos']} docs analisados",
+        f"{resumo['adiantados']} adiantados ({resumo['adiantados_pct']}%)",
+        f"{resumo['no_prazo']} no prazo ({resumo['no_prazo_pct']}%)",
+        f"{resumo['atrasados']} atrasados ({resumo['atrasados_pct']}%)",
+    ]
+
+
+def _linhas_ativos_texto(cessionarios_ativos: list[tuple[str, int]]) -> list[str]:
+    return [f"{qtd} {categoria}" for categoria, qtd in cessionarios_ativos] or ["Nenhum cessionário ativo cadastrado."]
+
+
+def _bloco_lateral_word(celula, cessionarios_ativos: list[tuple[str, int]], resumo: dict) -> None:
+    p_titulo_ativos = celula.paragraphs[0]
+    run = p_titulo_ativos.add_run("CESSIONÁRIOS ATIVOS")
+    run.font.bold = True
+    run.font.size = Pt(9)
+    run.font.color.rgb = RGBColor(0x1B, 0x3A, 0x8A)
+    for linha in _linhas_ativos_texto(cessionarios_ativos):
+        p = celula.add_paragraph()
+        p.add_run(linha).font.size = Pt(8.5)
+
+    p_titulo_resumo = celula.add_paragraph()
+    p_titulo_resumo.paragraph_format.space_before = Pt(8)
+    run_resumo = p_titulo_resumo.add_run("RESUMO")
+    run_resumo.font.bold = True
+    run_resumo.font.size = Pt(9)
+    run_resumo.font.color.rgb = RGBColor(0x1B, 0x3A, 0x8A)
+    for linha in _linhas_resumo_texto(resumo):
+        p = celula.add_paragraph()
+        p.add_run(linha).font.size = Pt(8.5)
 
 
 def gerar_opr_infografico_cessionarios_word(
@@ -309,40 +338,24 @@ def gerar_opr_infografico_cessionarios_word(
         titulo_mes_ano, None, usuario_responsavel, compacto=True,
     )
 
-    tabela_indicadores_compacta(doc, [
-        ("Análises Emitidas", resumo["analises_emitidas"]),
-        ("Docs Analisados", resumo["documentos"]),
-        ("Adiantados", f"{resumo['adiantados']} ({resumo['adiantados_pct']}%)"),
-        ("No Prazo", f"{resumo['no_prazo']} ({resumo['no_prazo_pct']}%)"),
-        ("Atrasados", f"{resumo['atrasados']} ({resumo['atrasados_pct']}%)"),
-    ], titulo="Resumo", colunas=3)
+    # Linha de cima: 3 gráficos + bloco lateral (Cessionários Ativos + Resumo) —
+    # mesma disposição do PDF, numa única tabela de 4 colunas.
+    tabela_topo = doc.add_table(rows=1, cols=4)
+    tabela_topo.autofit = True
+    celula_disciplinas, celula_revisao, celula_donut, celula_lateral = tabela_topo.rows[0].cells
+    grafico_em_celula(celula_disciplinas, grafico_disciplinas(disciplinas), "Contribuição das Disciplinas", largura_cm=5.4)
+    grafico_em_celula(celula_revisao, grafico_liberados_por_revisao(por_revisao), "Projetos Liberados no Mês", largura_cm=5.4)
+    grafico_em_celula(celula_donut, grafico_liberado_nao_liberado(resumo["liberados"], resumo["nao_liberados"]), "Liberado × Não Liberado", largura_cm=3.6)
+    _bloco_lateral_word(celula_lateral, cessionarios_ativos, resumo)
+    doc.add_paragraph()
 
-    secao(doc, "Cessionários Ativos", nivel=2)
-    if cessionarios_ativos:
-        tabela = doc.add_table(rows=1, cols=2)
-        tabela.style = "Light Grid Accent 1"
-        tabela.rows[0].cells[0].text = "Categoria"
-        tabela.rows[0].cells[0].paragraphs[0].runs[0].font.bold = True
-        tabela.rows[0].cells[1].text = "Quantidade"
-        tabela.rows[0].cells[1].paragraphs[0].runs[0].font.bold = True
-        for categoria, quantidade in cessionarios_ativos:
-            linha = tabela.add_row()
-            linha.cells[0].text = str(categoria)
-            linha.cells[1].text = str(quantidade)
-        doc.add_paragraph()
-    else:
-        paragrafo(doc, "Nenhum cessionário ativo cadastrado — gerencie em Cessionários > Cessionários Ativos.", italico=True)
-
-    secao(doc, "Gráficos", nivel=2)
-    graficos_em_grade(doc, [
-        {"fig": grafico_disciplinas(disciplinas), "titulo": "Contribuição das Disciplinas"},
-        {"fig": grafico_liberados_por_revisao(por_revisao), "titulo": "Projetos Liberados no Mês"},
-        {"fig": grafico_liberado_nao_liberado(resumo["liberados"], resumo["nao_liberados"]), "titulo": "Liberado × Não Liberado"},
-    ], colunas=3, largura_cm=6.0)
-    graficos_em_grade(doc, [
-        {"fig": grafico_acumulado_ano(acumulado_atual, ano), "titulo": f"Acumulado do Ano de {ano}"},
-        {"fig": grafico_acumulado_ano(acumulado_anterior, ano - 1), "titulo": f"Acumulado do Ano de {ano - 1}"},
-    ], colunas=2, largura_cm=9.0)
+    # Linha de baixo: Acumulado do Ano (ano selecionado × anterior).
+    tabela_baixo = doc.add_table(rows=1, cols=2)
+    tabela_baixo.autofit = True
+    celula_atual, celula_anterior = tabela_baixo.rows[0].cells
+    grafico_em_celula(celula_atual, grafico_acumulado_ano(acumulado_atual, ano), f"Acumulado do Ano de {ano}", largura_cm=9.0)
+    grafico_em_celula(celula_anterior, grafico_acumulado_ano(acumulado_anterior, ano - 1), f"Acumulado do Ano de {ano - 1}", largura_cm=9.0)
+    doc.add_paragraph()
 
     observacoes(doc, "Observações", None, marcador_padrao="Espaço livre para anotações — edite este parágrafo diretamente no Word.")
     rodape_institucional(doc)
@@ -351,11 +364,11 @@ def gerar_opr_infografico_cessionarios_word(
 
 
 # ---------------------------------------------------------------------------
-# Versão PowerPoint (.pptx) — apresentação executiva widescreen (16:9), com
-# fontes em tamanho de projeção/tela (bem maiores que o relatório A4) e um
-# gráfico por slide para garantir legibilidade — o Acumulado do Ano (ano
-# atual e anterior) ganha um slide dedicado cada, que era o maior problema
-# de leitura apontado no formato anterior.
+# Versão PowerPoint (.pptx) — a MESMA estrutura de página única do PDF e do
+# Word (ver comentário acima da versão Word): um slide só, cabeçalho + 3
+# gráficos/bloco lateral + 2 gráficos de Acumulado do Ano — não é uma
+# apresentação de vários slides, é o relatório de sempre, editável, com
+# fontes de tamanho de tela/projeção.
 # ---------------------------------------------------------------------------
 
 
@@ -372,54 +385,27 @@ def gerar_opr_infografico_cessionarios_pptx(
     titulo_mes_ano = _rotulo_mes_ano(mes, ano)
 
     prs = nova_apresentacao()
+    slide = novo_slide(prs)
 
-    slide_capa(
-        prs, "GAT Cessionários — One Page Report",
-        "GAT 2026 · Controle de Análises Técnicas · Tecnoplano",
-        titulo_mes_ano, usuario_responsavel,
+    cabecalho_slide_pptx(
+        slide, "GAT Cessionários — One Page Report",
+        "GAT 2026 · Controle de Análises Técnicas · Tecnoplano", titulo_mes_ano,
     )
 
-    slide_resumo = novo_slide(prs)
-    titulo_slide(slide_resumo, "Resumo")
-    tabela_indicadores_slide(slide_resumo, [
-        ("Análises Emitidas", resumo["analises_emitidas"]),
-        ("Docs Analisados", resumo["documentos"]),
-        ("Adiantados", f"{resumo['adiantados']} ({resumo['adiantados_pct']}%)"),
-        ("No Prazo", f"{resumo['no_prazo']} ({resumo['no_prazo_pct']}%)"),
-        ("Atrasados", f"{resumo['atrasados']} ({resumo['atrasados_pct']}%)"),
-    ], left_in=0.6, top_in=1.4, width_in=12.0)
-    rodape_slide_pptx(slide_resumo, usuario_responsavel)
+    # Linha de cima: 3 gráficos + bloco lateral — mesma disposição do PDF.
+    adicionar_grafico_pptx(slide, grafico_disciplinas(disciplinas), left_in=0.25, top_in=1.25, width_in=4.1, largura_px=1100, altura_px=800)
+    adicionar_grafico_pptx(slide, grafico_liberados_por_revisao(por_revisao), left_in=4.45, top_in=1.25, width_in=4.1, largura_px=1100, altura_px=800)
+    adicionar_grafico_pptx(slide, grafico_liberado_nao_liberado(resumo["liberados"], resumo["nao_liberados"]), left_in=8.65, top_in=1.25, width_in=2.55, largura_px=700, altura_px=800)
+    bloco_lateral_pptx(
+        slide, "CESSIONÁRIOS ATIVOS", _linhas_ativos_texto(cessionarios_ativos),
+        "RESUMO", _linhas_resumo_texto(resumo),
+        left_in=11.3, top_in=1.25, width_in=1.9,
+    )
 
-    slide_disciplinas = novo_slide(prs)
-    titulo_slide(slide_disciplinas, "Contribuição das Disciplinas")
-    adicionar_grafico(slide_disciplinas, grafico_disciplinas(disciplinas), left_in=1.2, top_in=1.3, width_in=10.9)
-    rodape_slide_pptx(slide_disciplinas, usuario_responsavel)
+    # Linha de baixo: Acumulado do Ano (ano selecionado × anterior).
+    adicionar_grafico_pptx(slide, grafico_acumulado_ano(acumulado_atual, ano), left_in=0.25, top_in=4.35, width_in=6.3, largura_px=1700, altura_px=750)
+    adicionar_grafico_pptx(slide, grafico_acumulado_ano(acumulado_anterior, ano - 1), left_in=6.65, top_in=4.35, width_in=6.3, largura_px=1700, altura_px=750)
 
-    slide_revisao = novo_slide(prs)
-    titulo_slide(slide_revisao, "Projetos Liberados no Mês")
-    adicionar_grafico(slide_revisao, grafico_liberados_por_revisao(por_revisao), left_in=0.6, top_in=1.3, width_in=6.2)
-    adicionar_grafico(slide_revisao, grafico_liberado_nao_liberado(resumo["liberados"], resumo["nao_liberados"]), left_in=7.0, top_in=1.3, width_in=5.7)
-    rodape_slide_pptx(slide_revisao, usuario_responsavel)
-
-    slide_ativos = novo_slide(prs)
-    titulo_slide(slide_ativos, "Cessionários Ativos")
-    if cessionarios_ativos:
-        tabela_dados_slide(
-            slide_ativos, ["Categoria", "Quantidade"], cessionarios_ativos,
-            left_in=1.5, top_in=1.4, width_in=10.0,
-        )
-    else:
-        mensagem_slide(slide_ativos, "Nenhum cessionário ativo cadastrado — gerencie em Cessionários > Cessionários Ativos.")
-    rodape_slide_pptx(slide_ativos, usuario_responsavel)
-
-    slide_acum_atual = novo_slide(prs)
-    titulo_slide(slide_acum_atual, f"Acumulado do Ano de {ano}")
-    adicionar_grafico(slide_acum_atual, grafico_acumulado_ano(acumulado_atual, ano), left_in=0.6, top_in=1.2, width_in=12.1)
-    rodape_slide_pptx(slide_acum_atual, usuario_responsavel)
-
-    slide_acum_anterior = novo_slide(prs)
-    titulo_slide(slide_acum_anterior, f"Acumulado do Ano de {ano - 1}")
-    adicionar_grafico(slide_acum_anterior, grafico_acumulado_ano(acumulado_anterior, ano - 1), left_in=0.6, top_in=1.2, width_in=12.1)
-    rodape_slide_pptx(slide_acum_anterior, usuario_responsavel)
+    rodape_slide_pptx(slide, usuario_responsavel)
 
     return apresentacao_para_bytes(prs)
