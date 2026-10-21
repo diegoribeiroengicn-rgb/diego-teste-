@@ -75,6 +75,7 @@ import io
 import json
 import math
 import shutil
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -178,21 +179,47 @@ def _normalizar_linha(bruta: dict[str, Any]) -> dict[str, Any]:
     return linha
 
 
+def _normalizar_nome_coluna(nome: str) -> str:
+    """Normaliza o nome de uma coluna da planilha para comparação tolerante
+    a variações comuns de digitação — a planilha oficial é editada por mais
+    de uma pessoa ao longo do tempo, e maiúscula/minúscula, acentuação,
+    aspas retas × curvas (o Excel troca sozinho em "PEP'S") ou "N°" × "Nº"
+    não podem fazer uma coluna inteira sumir silenciosamente da importação
+    só porque o cabeçalho foi redigitado de um jeito ligeiramente diferente."""
+    nome = " ".join(str(nome).split())
+    nome = nome.replace("’", "'").replace("‘", "'").replace("º", "°")
+    nome = unicodedata.normalize("NFKD", nome)
+    nome = "".join(c for c in nome if not unicodedata.combining(c))
+    return nome.strip().lower()
+
+
 def _ler_aba(conteudo: bytes, nome_aba: str, mapa_colunas: dict[str, str]) -> tuple[list[dict[str, Any]], list[str]]:
     """Lê a aba a partir da linha de cabeçalho real (linha 5) e devolve as
     linhas já normalizadas com os nomes de campo internos do sistema, mais
     a lista de colunas da planilha que não têm correspondência conhecida
-    (reportadas, nunca descartadas em silêncio — item 5)."""
+    (reportadas, nunca descartadas em silêncio — item 5). O casamento entre
+    o cabeçalho real da planilha e `mapa_colunas` é tolerante a variações
+    de digitação (ver `_normalizar_nome_coluna`), não exige o texto idêntico
+    caractere a caractere."""
     bruto = pd.read_excel(io.BytesIO(conteudo), sheet_name=nome_aba, header=_LINHA_CABECALHO - 1, dtype=object)
     bruto.columns = [" ".join(str(c).split()) if c is not None else "" for c in bruto.columns]
 
-    colunas_nao_mapeadas = sorted(
-        {c for c in bruto.columns if c and c not in mapa_colunas and not str(c).startswith("Unnamed")}
-    )
+    mapa_normalizado = {_normalizar_nome_coluna(coluna): campo for coluna, campo in mapa_colunas.items()}
+    coluna_real_por_campo: dict[str, str] = {}
+    colunas_nao_mapeadas = []
+    for c in bruto.columns:
+        if not c or str(c).startswith("Unnamed"):
+            continue
+        campo = mapa_normalizado.get(_normalizar_nome_coluna(c))
+        if campo:
+            coluna_real_por_campo[campo] = c
+        else:
+            colunas_nao_mapeadas.append(c)
+    colunas_nao_mapeadas = sorted(set(colunas_nao_mapeadas))
 
     linhas: list[dict[str, Any]] = []
     for posicao, (_, linha_bruta) in enumerate(bruto.iterrows()):
-        candidata = {campo: linha_bruta.get(coluna) for coluna, campo in mapa_colunas.items()}
+        candidata = {campo: linha_bruta.get(coluna) for campo, coluna in coluna_real_por_campo.items()}
         # "item" costuma vir preenchido por fórmula em linhas de template
         # vazias, bem além do fim dos dados reais — não conta como conteúdo.
         if all(_vazio(v) for campo, v in candidata.items() if campo != "item"):
