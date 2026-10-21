@@ -115,7 +115,7 @@ CAMPOS_TEXTO_MAIUSCULO = {"status_analise", "etg"}
 # tem valor); os mesmos padrões já usados pelo resto do sistema.
 _PADROES_SO_PARA_INSERCAO = {
     "etg": "NÃO", "revisao": 0, "num_documentos": 0, "status_analise": "EM ANÁLISE",
-    "sla_reduzido": 0, "data_limite_ajustada_manualmente": 0,
+    "sla_reduzido": 0, "data_limite_ajustada_manualmente": 0, "teve_substituicao": 0,
 }
 
 # Colunas sem default no banco (NOT NULL "seco") — sem elas, o registro
