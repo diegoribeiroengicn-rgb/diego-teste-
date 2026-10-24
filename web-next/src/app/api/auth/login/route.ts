@@ -13,16 +13,28 @@ export async function POST(req: NextRequest) {
   }
 
   const pool = obterPool();
+  const usuarioLimpo = String(usuario).trim();
   const { rows } = await pool.query(
     `SELECT id, username, senha_hash, nome_completo, perfil, analista_vinculado,
-            tema_preferido, deve_trocar_senha
+            tema_preferido, deve_trocar_senha, ativo
      FROM usuarios
-     WHERE username = $1 AND ativo = 1`,
-    [String(usuario).trim()],
+     WHERE username = $1`,
+    [usuarioLimpo],
   );
 
-  const linha = rows[0];
-  if (!linha || !(await bcrypt.compare(senha, linha.senha_hash))) {
+  // Log temporário de diagnóstico (sem senha/hash completos) — remover
+  // depois de confirmar o login real funcionando.
+  console.log("[login] usuario buscado:", JSON.stringify(usuarioLimpo));
+  console.log("[login] linhas encontradas (sem filtro de ativo):", rows.length);
+  if (rows[0]) {
+    console.log("[login] username no banco:", JSON.stringify(rows[0].username), "| ativo:", rows[0].ativo, "| hash prefixo:", rows[0].senha_hash?.slice(0, 7));
+  }
+
+  const linha = rows.find((r) => Number(r.ativo) === 1);
+  const senhaConfere = linha ? await bcrypt.compare(senha, linha.senha_hash) : false;
+  console.log("[login] senha confere:", senhaConfere);
+
+  if (!linha || !senhaConfere) {
     return NextResponse.json({ erro: "Usuário ou senha incorretos." }, { status: 401 });
   }
 
