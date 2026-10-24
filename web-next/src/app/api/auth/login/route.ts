@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { obterPool } from "@/lib/db";
+import { criarSessao } from "@/lib/session";
 
 // Autenticação contra a MESMA tabela `usuarios` do GAT (Streamlit) — senha
 // com hash bcrypt já existente, sem recriar nenhuma conta. Mantém a
@@ -33,17 +34,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // TODO (próxima etapa): emitir sessão (cookie assinado/JWT) em vez de só
-  // confirmar a credencial — por ora isto valida a autenticação contra o
-  // Supabase já migrado, sem ainda manter o usuário logado entre páginas.
-  return NextResponse.json({
-    usuario: {
-      id: linha.id,
-      username: linha.username,
-      nomeCompleto: linha.nome_completo,
-      perfil: linha.perfil,
-      analistaVinculado: linha.analista_vinculado,
-      temaPreferido: linha.tema_preferido,
-    },
-  });
+  const usuarioSessao = {
+    id: linha.id,
+    username: linha.username,
+    nomeCompleto: linha.nome_completo,
+    perfil: linha.perfil,
+    analistaVinculado: linha.analista_vinculado,
+    temaPreferido: linha.tema_preferido,
+  };
+  await criarSessao(usuarioSessao);
+
+  return NextResponse.json({ usuario: usuarioSessao });
 }
