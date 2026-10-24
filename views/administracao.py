@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from gat import backup_externo
+from gat import backup_externo, supabase_sync
 from gat.arquivo_business_rules import perfil_pode_arquivar_e_restaurar
 from gat.config import DISCIPLINAS, MAX_BACKUPS, PERFIS_OPCOES, RESPONSAVEIS
 from gat.database import (
@@ -805,6 +805,30 @@ def _renderizar_backup_sistema(usuario: dict) -> None:
             registrar_atividade(usuario["username"], usuario.get("perfil"), "BACKUP_EXTERNO_TESTADO", detalhe="Falha")
             st.error(backup_externo.status()["mensagem"])
 
+    st.divider()
+    st.markdown("**Ressincronizar Supabase (versão em migração)**")
+    st.caption(
+        "A versão nova do sistema (Next.js/Vercel, em migração) lê os dados de uma cópia no Supabase, feita "
+        "numa migração anterior — essa cópia NÃO se atualiza sozinha com o que acontece aqui. Use este botão "
+        "sempre que precisar que a versão nova reflita os dados mais recentes (ex.: depois de trocar uma senha, "
+        "ou periodicamente durante a migração). Limpa e recarrega todas as tabelas do Supabase a partir deste "
+        "banco — não altera nada aqui, só o destino."
+    )
+    if supabase_sync.configurado():
+        st.success("SUPABASE_DB_URL configurada.", icon=":material/cloud_done:")
+        if st.button("Ressincronizar Supabase agora", icon=":material/cloud_sync:", key="admin_ressincronizar_supabase"):
+            st.session_state["admin_confirmar_ressync_supabase"] = True
+            st.rerun()
+    else:
+        st.warning(
+            "SUPABASE_DB_URL ainda não configurada — defina em Settings → Secrets do app no Streamlit Cloud "
+            "para habilitar este botão.",
+            icon=":material/cloud_off:",
+        )
+
+    if st.session_state.get("admin_confirmar_ressync_supabase"):
+        _dialog_confirmar_ressync_supabase(usuario)
+
 
 @st.dialog("Confirmar restauração de backup")
 def _dialog_confirmar_restauracao(usuario: dict) -> None:
@@ -829,3 +853,30 @@ def _dialog_confirmar_restauracao(usuario: dict) -> None:
             st.rerun()
         except Exception as exc:
             st.error(f"Não foi possível restaurar o backup: {exc}")
+
+
+@st.dialog("Confirmar ressincronização do Supabase")
+def _dialog_confirmar_ressync_supabase(usuario: dict) -> None:
+    st.warning(
+        "Isso vai apagar e recarregar TODAS as tabelas do Supabase usado pela versão em migração, substituindo "
+        "a cópia atual de lá pelos dados deste banco. Não afeta o sistema atual (aqui) de forma alguma — só o "
+        "destino no Supabase.",
+        icon=":material/warning:",
+    )
+    col1, col2 = st.columns(2)
+    if col1.button("Cancelar", use_container_width=True, key="admin_cancelar_ressync_supabase"):
+        del st.session_state["admin_confirmar_ressync_supabase"]
+        st.rerun()
+    if col2.button("Confirmar ressincronização", type="primary", use_container_width=True, key="admin_confirmar_ressync_supabase_botao"):
+        del st.session_state["admin_confirmar_ressync_supabase"]
+        try:
+            with st.spinner("Ressincronizando Supabase — isso pode levar alguns minutos..."):
+                resultado = supabase_sync.ressincronizar()
+            registrar_atividade(
+                usuario["username"], usuario.get("perfil"), "SUPABASE_RESSINCRONIZADO",
+                detalhe=f"{len(resultado)} tabelas, {sum(r['sqlite'] for r in resultado)} linhas",
+            )
+            st.success(f"Supabase ressincronizado — {len(resultado)} tabelas, todas as contagens bateram.")
+        except Exception as exc:
+            registrar_atividade(usuario["username"], usuario.get("perfil"), "SUPABASE_RESSINCRONIZADO", detalhe=f"Falha: {exc}")
+            st.error(f"Não foi possível ressincronizar: {exc}")
