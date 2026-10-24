@@ -23,7 +23,10 @@ export function LoginForm() {
       });
       if (!resposta.ok) {
         const dados = await resposta.json().catch(() => ({}));
-        setErro(dados.erro ?? "Usuário ou senha incorretos.");
+        // Erro de servidor (sem corpo com "erro" — ex.: SESSION_SECRET não
+        // configurada) não é a mesma coisa que usuário/senha errados; dizer
+        // isso induziria a tentar de novo achando que digitou errado.
+        setErro(dados.erro ?? "Erro no servidor ao processar o login. Tente novamente em instantes.");
         return;
       }
       router.push("/inicio");

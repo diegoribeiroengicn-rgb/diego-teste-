@@ -42,7 +42,19 @@ export async function POST(req: NextRequest) {
     analistaVinculado: linha.analista_vinculado,
     temaPreferido: linha.tema_preferido,
   };
-  await criarSessao(usuarioSessao);
+
+  try {
+    await criarSessao(usuarioSessao);
+  } catch (exc) {
+    // Senha confere, mas a sessão não pôde ser criada (ex.: SESSION_SECRET
+    // não configurada) — erro de configuração do servidor, não é a mesma
+    // coisa que usuário/senha errados, então não reaproveita a mensagem 401.
+    console.error("[login] falha ao criar sessão:", exc);
+    return NextResponse.json(
+      { erro: "Login confirmado, mas não foi possível iniciar a sessão. Contate o administrador." },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json({ usuario: usuarioSessao });
 }
