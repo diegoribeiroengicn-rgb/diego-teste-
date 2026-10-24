@@ -26,6 +26,11 @@ efetivamente gravar no Postgres — útil para validar a conexão e a
 contagem esperada antes de tocar em dados de verdade.
 `--somente-tabela` migra uma única tabela por vez, para conferir passo a
 passo em vez de tudo de uma vez.
+`--truncate-antes` apaga o conteúdo das tabelas no Postgres (TRUNCATE,
+não DROP — a estrutura continua igual) antes de inserir de novo — use
+para RESSINCRONIZAR um Supabase que já tinha uma cópia antiga dos dados
+(sem essa opção, rodar o script de novo falha com erro de chave
+duplicada). Nunca toca no SQLite de origem, só no destino Postgres.
 """
 
 from __future__ import annotations
@@ -99,6 +104,10 @@ def main() -> None:
     parser.add_argument("--schema-json", default="scripts/supabase_migration/schema_atual.json")
     parser.add_argument("--somente-tabela", default=None, help="Migra só esta tabela, para conferir aos poucos.")
     parser.add_argument("--dry-run", action="store_true", help="Não grava nada no Postgres, só simula e reporta.")
+    parser.add_argument(
+        "--truncate-antes", action="store_true",
+        help="Limpa (TRUNCATE) as tabelas no Postgres antes de inserir — para ressincronizar um Supabase que já tinha dados.",
+    )
     args = parser.parse_args()
 
     if psycopg2 is None:
@@ -127,6 +136,14 @@ def main() -> None:
             if args.somente_tabela not in ordem:
                 raise SystemExit(f"Tabela desconhecida: {args.somente_tabela}")
             ordem = [args.somente_tabela]
+
+        if args.truncate_antes and con_pg and not args.dry_run:
+            print("Limpando tabelas no Postgres antes de recarregar (ressincronização)...")
+            with con_pg.cursor() as cur:
+                for nome in reversed(ordem):
+                    cur.execute(f'TRUNCATE TABLE "{nome}" RESTART IDENTITY CASCADE')
+            con_pg.commit()
+            print("Tabelas limpas.\n")
 
         por_nome = {t["nome"]: t for t in schema}
         resultado: list[dict] = []
