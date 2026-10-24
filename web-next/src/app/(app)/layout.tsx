@@ -1,17 +1,29 @@
 import Image from "next/image";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { obterSessao } from "@/lib/session";
 import { LogoutButton } from "@/components/logout-button";
+import { NavSidebar, type GrupoNav } from "@/components/nav-sidebar";
 
 // Toda a área autenticada depende de sessão (cookie) — nunca é candidata
 // a página estática/prerenderizada.
 export const instant = false;
 
-const GRUPOS_NAV = [
+const GRUPOS_NAV: GrupoNav[] = [
   {
     titulo: "Prestadores",
-    itens: [{ rotulo: "Projetos", href: "/prestadores/projetos" }],
+    itens: [
+      { rotulo: "Projetos", href: "/prestadores/projetos" },
+      { rotulo: "Em Análise", href: "/prestadores/em-analise" },
+      { rotulo: "Em HOLD", href: "/prestadores/em-hold" },
+    ],
+  },
+  {
+    titulo: "Cessionários",
+    itens: [
+      { rotulo: "Projetos", href: "/cessionarios/projetos" },
+      { rotulo: "Em Análise", href: "/cessionarios/em-analise" },
+      { rotulo: "Em HOLD", href: "/cessionarios/em-hold" },
+    ],
   },
 ];
 
@@ -28,32 +40,7 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
           <Image src="/tecnoplano_logo.png" alt="Tecnoplano" width={120} height={44} className="h-8 w-auto" />
         </div>
 
-        <nav className="flex-1 space-y-5">
-          <Link
-            href="/inicio"
-            className="block rounded-lg px-3 py-2 text-sm font-medium text-(--color-text) hover:bg-(--color-surface-2)"
-          >
-            Início
-          </Link>
-          {GRUPOS_NAV.map((grupo) => (
-            <div key={grupo.titulo}>
-              <p className="px-3 text-xs font-semibold uppercase tracking-wider text-(--color-text-dim)">
-                {grupo.titulo}
-              </p>
-              <div className="mt-1 space-y-0.5">
-                {grupo.itens.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className="block rounded-lg px-3 py-2 text-sm font-medium text-(--color-text) hover:bg-(--color-surface-2)"
-                  >
-                    {item.rotulo}
-                  </Link>
-                ))}
-              </div>
-            </div>
-          ))}
-        </nav>
+        <NavSidebar grupos={GRUPOS_NAV} />
 
         <div className="border-t border-(--color-border) pt-4">
           <p className="truncate px-2 text-sm font-medium text-(--color-text)">
