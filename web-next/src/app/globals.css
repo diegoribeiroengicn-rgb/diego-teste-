@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+/* Paleta institucional Tecnoplano — os mesmos tokens do GAT em Streamlit
+   (gat/config.py::CORES + gat/styles.py::_PALETA_ESCURA), portados aqui
+   para manter a identidade visual idêntica entre as duas versões do
+   sistema durante a migração. */
+:root {
+  --color-bg: #F8FAFC;
+  --color-surface-1: #FFFFFF;
+  --color-surface-2: #F1F5F9;
+  --color-surface-3: #EFF4FF;
+  --color-border: #E2E8F0;
+  --color-border-strong: #CBD5E1;
+
+  --color-navy: #1B3A8A;
+  --color-blue: #0040A7;
+  --color-blue-2: #2563EB;
+  --color-blue-3: #DBEAFE;
+  --color-green: #16A34A;
+  --color-lime: #65A30D;
+  --color-red: #DC2626;
+  --color-orange: #EA580C;
+  --color-purple: #7C3AED;
+  --color-gold: #D97706;
+  --color-sky: #0284C7;
+
+  --color-text: #0F172A;
+  --color-text-weak: #64748B;
+  --color-text-dim: #94A3B8;
+
+  --color-green-bg: #DCFCE7;
+  --color-lime-bg: #ECFCCB;
+  --color-red-bg: #FEE2E2;
+  --color-orange-bg: #FFF7ED;
+  --color-purple-bg: #EDE9FE;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg: #10141C;
+    --color-surface-1: #1A212C;
+    --color-surface-2: #232B38;
+    --color-surface-3: #1E2A47;
+    --color-border: #2E3646;
+    --color-border-strong: #3D4759;
+
+    --color-navy: #7FA8F2;
+    --color-blue: #5B8DEF;
+    --color-blue-2: #4C7EE0;
+    --color-blue-3: #1E2A47;
+
+    --color-text: #E2E8F0;
+    --color-text-weak: #9FADC2;
+
+    --color-red-bg: #3A1F22;
+  }
+}
+
+:root[data-theme="dark"] {
+  --color-bg: #10141C;
+  --color-surface-1: #1A212C;
+  --color-surface-2: #232B38;
+  --color-surface-3: #1E2A47;
+  --color-border: #2E3646;
+  --color-border-strong: #3D4759;
+
+  --color-navy: #7FA8F2;
+  --color-blue: #5B8DEF;
+  --color-blue-2: #4C7EE0;
+  --color-blue-3: #1E2A47;
+
+  --color-text: #E2E8F0;
+  --color-text-weak: #9FADC2;
+
+  --color-red-bg: #3A1F22;
+}
+
+@theme inline {
+  --color-bg: var(--color-bg);
+  --color-surface-1: var(--color-surface-1);
+  --color-surface-2: var(--color-surface-2);
+  --color-surface-3: var(--color-surface-3);
+  --color-border: var(--color-border);
+  --color-border-strong: var(--color-border-strong);
+
+  --color-navy: var(--color-navy);
+  --color-blue: var(--color-blue);
+  --color-blue-2: var(--color-blue-2);
+  --color-blue-3: var(--color-blue-3);
+  --color-green: var(--color-green);
+  --color-lime: var(--color-lime);
+  --color-red: var(--color-red);
+  --color-orange: var(--color-orange);
+  --color-purple: var(--color-purple);
+  --color-gold: var(--color-gold);
+  --color-sky: var(--color-sky);
+
+  --color-text: var(--color-text);
+  --color-text-weak: var(--color-text-weak);
+  --color-text-dim: var(--color-text-dim);
+
+  --color-green-bg: var(--color-green-bg);
+  --color-lime-bg: var(--color-lime-bg);
+  --color-red-bg: var(--color-red-bg);
+  --color-orange-bg: var(--color-orange-bg);
+  --color-purple-bg: var(--color-purple-bg);
+
+  --font-sans: var(--font-inter);
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans), -apple-system, "Segoe UI", sans-serif;
+}
+
+* {
+  border-color: var(--color-border);
+}
