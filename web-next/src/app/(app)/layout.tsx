@@ -29,6 +29,10 @@ const GRUPOS_NAV: GrupoNav[] = [
       { rotulo: "Cadastro", href: "/cessionarios/cadastro" },
     ],
   },
+  {
+    titulo: "Avaliações",
+    itens: [{ rotulo: "Ranking", href: "/avaliacoes/ranking" }],
+  },
 ];
 
 export default async function LayoutApp({ children }: { children: React.ReactNode }) {
