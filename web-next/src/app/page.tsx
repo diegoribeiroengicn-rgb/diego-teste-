@@ -20,13 +20,13 @@ export default async function PaginaLogin() {
       <div className="relative flex w-full flex-col justify-between overflow-hidden bg-(--color-navy) px-8 py-10 text-white md:w-[44%] md:px-12 md:py-14">
         <PadraoDeFundo />
 
-        <div className="relative z-10 inline-flex w-fit items-center rounded-lg bg-white px-3 py-2 shadow-sm">
+        <div className="relative z-10 inline-flex w-fit items-center rounded-xl bg-white px-4 py-3 shadow-sm">
           <Image
             src="/tecnoplano_logo.png"
             alt="Tecnoplano"
             width={179}
             height={65}
-            className="h-7 w-auto"
+            className="h-11 w-auto md:h-12"
             priority
           />
         </div>
