@@ -12,6 +12,7 @@ const GRUPOS_NAV: GrupoNav[] = [
   {
     titulo: "Prestadores",
     itens: [
+      { rotulo: "Dashboard", href: "/prestadores/dashboard" },
       { rotulo: "Projetos", href: "/prestadores/projetos" },
       { rotulo: "Em Análise", href: "/prestadores/em-analise" },
       { rotulo: "Em HOLD", href: "/prestadores/em-hold" },
@@ -20,6 +21,7 @@ const GRUPOS_NAV: GrupoNav[] = [
   {
     titulo: "Cessionários",
     itens: [
+      { rotulo: "Dashboard", href: "/cessionarios/dashboard" },
       { rotulo: "Projetos", href: "/cessionarios/projetos" },
       { rotulo: "Em Análise", href: "/cessionarios/em-analise" },
       { rotulo: "Em HOLD", href: "/cessionarios/em-hold" },
