@@ -152,7 +152,6 @@ if pode_modulo(usuario, "prestadores"):
     grupo_prestadores.append(_pagina(lambda: em_analise.render(usuario, "prestadores"), "Em Análise", ":material/search:", "prestadores_em_analise"))
     grupo_prestadores.append(_pagina(lambda: hold.render(usuario, "prestadores"), "Em HOLD", ":material/pause_circle:", "prestadores_hold"))
     grupo_prestadores.append(_pagina(lambda: cadastro_prestadores.render(usuario), "Cadastro", ":material/badge:", "prestadores_cadastro"))
-    grupo_prestadores.append(_pagina(lambda: canteiros.render(usuario), "Canteiros", ":material/construction:", "prestadores_canteiros"))
     if pode_area(usuario, "avaliacoes.visualizar"):
         grupo_prestadores.append(_pagina(lambda: avaliacao_prestadores.render(usuario), "Avaliação", ":material/grade:", "prestadores_avaliacao"))
     paginas["Prestadores"] = grupo_prestadores
@@ -209,10 +208,6 @@ if pode_area(usuario, "lista_prioridades"):
     grupo_gestao.append(_pagina(lambda: lista_prioridades.render(usuario), "Lista de Prioridades", ":material/priority_high:", "gestao_lista_prioridades"))
 if pode_area(usuario, "lembretes"):
     grupo_gestao.append(_pagina(lambda: lembretes_pep.render(usuario), "Lembretes (Sem PEP)", ":material/pending_actions:", "gestao_lembretes"))
-if pode_area(usuario, "reunioes"):
-    grupo_gestao.append(_pagina(lambda: reunioes.render(usuario), "Reuniões", ":material/groups:", "gestao_reunioes"))
-    grupo_gestao.append(_pagina(lambda: planos_acao.render(usuario), "Planos de Ação", ":material/task_alt:", "gestao_planos_acao"))
-    grupo_gestao.append(_pagina(lambda: gestao_historico.render(usuario), "Histórico", ":material/history:", "gestao_historico"))
 if grupo_gestao:
     paginas["Gestão"] = grupo_gestao
 
