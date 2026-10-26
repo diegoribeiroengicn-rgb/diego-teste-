@@ -18,6 +18,13 @@ const _FERIADOS_TIMESTAMPS = new Set(
   FERIADOS_RJ.map(([ano, mes, dia]) => Date.UTC(ano, mes - 1, dia)),
 );
 
+/** Mesma lista de feriados, em "YYYY-MM-DD" — para módulos que preferem
+ * trabalhar com strings ISO em vez de tuplas (ex.: o motor de projeção
+ * do Gantt de Prestadores). */
+export const FERIADOS_RJ_ISO: readonly string[] = FERIADOS_RJ.map(
+  ([ano, mes, dia]) => `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`,
+);
+
 function ehFeriado(data: Date): boolean {
   return _FERIADOS_TIMESTAMPS.has(data.getTime());
 }

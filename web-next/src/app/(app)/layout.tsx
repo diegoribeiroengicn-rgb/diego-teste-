@@ -17,6 +17,7 @@ const GRUPOS_NAV: GrupoNav[] = [
       { rotulo: "Em Análise", href: "/prestadores/em-analise" },
       { rotulo: "Em HOLD", href: "/prestadores/em-hold" },
       { rotulo: "Cadastro", href: "/prestadores/cadastro" },
+      { rotulo: "Gantt", href: "/prestadores/gantt" },
     ],
   },
   {
