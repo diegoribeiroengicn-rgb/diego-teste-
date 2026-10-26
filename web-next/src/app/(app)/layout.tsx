@@ -33,7 +33,10 @@ const GRUPOS_NAV: GrupoNav[] = [
   },
   {
     titulo: "Avaliações",
-    itens: [{ rotulo: "Ranking", href: "/avaliacoes/ranking" }],
+    itens: [
+      { rotulo: "Registrar Avaliação", href: "/avaliacoes/nova" },
+      { rotulo: "Ranking", href: "/avaliacoes/ranking" },
+    ],
   },
   {
     titulo: "Gestão",
