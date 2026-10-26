@@ -12,6 +12,7 @@ import {
   type RespostasChecklist,
   type TipoEntidadeAvaliacao,
 } from "@/lib/avaliacao-checklist-calculo";
+import type { AvaliacaoChecklist } from "@/lib/avaliacao-checklist";
 
 const classeInput =
   "w-full rounded-lg border border-(--color-border) bg-(--color-surface-1) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-navy) focus:ring-2 focus:ring-(--color-navy)/20";
@@ -43,22 +44,27 @@ function hojeIso(): string {
 export function FormularioAvaliacaoChecklist({
   perguntas,
   responsaveis,
+  avaliacaoExistente,
+  onSalvo,
 }: {
   perguntas: PerguntaChecklist[];
   responsaveis: string[];
+  avaliacaoExistente?: AvaliacaoChecklist;
+  onSalvo?: () => void;
 }) {
+  const editando = !!avaliacaoExistente;
   const router = useRouter();
-  const [tipoEntidade, setTipoEntidade] = useState<TipoEntidadeAvaliacao>("PRESTADOR");
-  const [nomeEntidade, setNomeEntidade] = useState("");
-  const [codigoEntidade, setCodigoEntidade] = useState("");
-  const [disciplina, setDisciplina] = useState("");
-  const [atReferencia, setAtReferencia] = useState("");
-  const [revisao, setRevisao] = useState(1);
-  const [analistaResponsavel, setAnalistaResponsavel] = useState("");
-  const [dataAvaliacao, setDataAvaliacao] = useState(hojeIso());
-  const [nomeProjetista, setNomeProjetista] = useState("");
-  const [observacoesGerais, setObservacoesGerais] = useState("");
-  const [respostas, setRespostas] = useState<RespostasChecklist>({});
+  const [tipoEntidade, setTipoEntidade] = useState<TipoEntidadeAvaliacao>(avaliacaoExistente?.tipoEntidade ?? "PRESTADOR");
+  const [nomeEntidade, setNomeEntidade] = useState(avaliacaoExistente?.nomeEntidade ?? "");
+  const [codigoEntidade, setCodigoEntidade] = useState(avaliacaoExistente?.codigoEntidade ?? "");
+  const [disciplina, setDisciplina] = useState(avaliacaoExistente?.disciplina ?? "");
+  const [atReferencia, setAtReferencia] = useState(avaliacaoExistente?.atReferencia ?? "");
+  const [revisao, setRevisao] = useState(avaliacaoExistente?.revisao ?? 1);
+  const [analistaResponsavel, setAnalistaResponsavel] = useState(avaliacaoExistente?.analistaResponsavel ?? "");
+  const [dataAvaliacao, setDataAvaliacao] = useState(avaliacaoExistente?.dataAvaliacao?.slice(0, 10) ?? hojeIso());
+  const [nomeProjetista, setNomeProjetista] = useState(avaliacaoExistente?.nomeProjetista ?? "");
+  const [observacoesGerais, setObservacoesGerais] = useState(avaliacaoExistente?.observacoesGerais ?? "");
+  const [respostas, setRespostas] = useState<RespostasChecklist>(avaliacaoExistente?.respostas ?? {});
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
@@ -101,29 +107,42 @@ export function FormularioAvaliacaoChecklist({
 
     setSalvando(true);
     try {
-      const resposta = await fetch("/api/avaliacoes/checklist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tipoEntidade,
-          codigoEntidade: codigoEntidade.trim() || null,
-          nomeEntidade: nomeEntidade.trim(),
-          disciplina: disciplina.trim() || null,
-          atReferencia: atReferencia.trim() || null,
-          revisao,
-          dataAvaliacao,
-          analistaResponsavel: analistaResponsavel || null,
-          respostas,
-          pontuacao,
-          classificacao,
-          acompanhamento,
-          observacoesGerais: observacoesGerais.trim() || null,
-          nomeProjetista: tipoEntidade === "CESSIONARIO" ? nomeProjetista.trim() : null,
-        }),
-      });
+      const corpo = {
+        tipoEntidade,
+        codigoEntidade: codigoEntidade.trim() || null,
+        nomeEntidade: nomeEntidade.trim(),
+        disciplina: disciplina.trim() || null,
+        atReferencia: atReferencia.trim() || null,
+        revisao,
+        dataAvaliacao,
+        analistaResponsavel: analistaResponsavel || null,
+        respostas,
+        pontuacao,
+        classificacao,
+        acompanhamento,
+        observacoesGerais: observacoesGerais.trim() || null,
+        nomeProjetista: tipoEntidade === "CESSIONARIO" ? nomeProjetista.trim() : null,
+      };
+      const resposta = editando
+        ? await fetch(`/api/avaliacoes/checklist/${avaliacaoExistente!.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(corpo),
+          })
+        : await fetch("/api/avaliacoes/checklist", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(corpo),
+          });
       const dados = await resposta.json().catch(() => null);
       if (!resposta.ok) {
         setErro(dados?.erro || "Erro ao salvar avaliação.");
+        return;
+      }
+      if (editando) {
+        setSucesso("Avaliação atualizada com sucesso.");
+        router.refresh();
+        onSalvo?.();
         return;
       }
       setSucesso(
@@ -157,17 +176,23 @@ export function FormularioAvaliacaoChecklist({
 
   return (
     <div className="mt-6">
-      <div className="flex gap-1 rounded-full border border-(--color-border) bg-(--color-surface-1) p-1 text-sm font-medium w-fit">
-        {(["PRESTADOR", "CESSIONARIO"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTipoEntidade(t)}
-            className={`rounded-full px-4 py-1.5 transition-colors ${tipoEntidade === t ? "bg-(--color-navy) text-white" : "text-(--color-text-weak) hover:text-(--color-text)"}`}
-          >
-            {t === "PRESTADOR" ? "Prestador" : "Cessionário"}
-          </button>
-        ))}
-      </div>
+      {editando ? (
+        <p className="text-sm font-medium text-(--color-navy)">
+          Editando avaliação de {tipoEntidade === "PRESTADOR" ? "Prestador" : "Cessionário"}
+        </p>
+      ) : (
+        <div className="flex gap-1 rounded-full border border-(--color-border) bg-(--color-surface-1) p-1 text-sm font-medium w-fit">
+          {(["PRESTADOR", "CESSIONARIO"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTipoEntidade(t)}
+              className={`rounded-full px-4 py-1.5 transition-colors ${tipoEntidade === t ? "bg-(--color-navy) text-white" : "text-(--color-text-weak) hover:text-(--color-text)"}`}
+            >
+              {t === "PRESTADOR" ? "Prestador" : "Cessionário"}
+            </button>
+          ))}
+        </div>
+      )}
 
       <p className="mt-4 text-sm text-(--color-text-weak)">
         Checklist de avaliação, preferencialmente utilizado a partir da 1ª revisão. Cada pergunta conta 1 ponto
@@ -281,7 +306,7 @@ export function FormularioAvaliacaoChecklist({
         disabled={salvando}
         className="mt-4 rounded-full bg-(--color-navy) px-5 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
       >
-        {salvando ? "Salvando…" : "Salvar avaliação"}
+        {salvando ? "Salvando…" : editando ? "Salvar alterações" : "Salvar avaliação"}
       </button>
     </div>
   );

@@ -99,3 +99,69 @@ export async function atualizarAvaliacaoChecklist(id: number, dados: DadosAvalia
     ],
   );
 }
+
+export type AvaliacaoChecklist = DadosAvaliacaoChecklist & { id: number; criadoEm: string; criadoPor: string | null };
+
+type LinhaAvaliacao = {
+  id: number;
+  tipo_entidade: TipoEntidadeAvaliacao;
+  codigo_entidade: string | null;
+  nome_entidade: string;
+  disciplina: string | null;
+  at_referencia: string | null;
+  revisao: number;
+  data_avaliacao: string;
+  analista_responsavel: string | null;
+  respostas_json: string;
+  pontuacao: number;
+  classificacao: string;
+  acompanhamento: string;
+  observacoes_gerais: string | null;
+  nome_projetista: string | null;
+  criado_em: string;
+  criado_por: string | null;
+};
+
+function mapAvaliacao(row: LinhaAvaliacao): AvaliacaoChecklist {
+  let respostas: RespostasChecklist = {};
+  try {
+    respostas = JSON.parse(row.respostas_json);
+  } catch {
+    respostas = {};
+  }
+  return {
+    id: row.id,
+    tipoEntidade: row.tipo_entidade,
+    codigoEntidade: row.codigo_entidade,
+    nomeEntidade: row.nome_entidade,
+    disciplina: row.disciplina,
+    atReferencia: row.at_referencia,
+    revisao: row.revisao,
+    dataAvaliacao: row.data_avaliacao,
+    analistaResponsavel: row.analista_responsavel,
+    respostas,
+    pontuacao: row.pontuacao,
+    classificacao: row.classificacao,
+    acompanhamento: row.acompanhamento,
+    observacoesGerais: row.observacoes_gerais,
+    nomeProjetista: row.nome_projetista,
+    criadoEm: row.criado_em,
+    criadoPor: row.criado_por,
+  };
+}
+
+/** Histórico completo de avaliações por checklist (Prestadores +
+ * Cessionários), mais recentes primeiro. */
+export async function buscarAvaliacoesChecklist(): Promise<AvaliacaoChecklist[]> {
+  const pool = obterPool();
+  const { rows } = await pool.query<LinhaAvaliacao>(
+    `SELECT * FROM avaliacoes_checklist ORDER BY data_avaliacao DESC, id DESC`,
+  );
+  return rows.map(mapAvaliacao);
+}
+
+export async function buscarAvaliacaoChecklistPorId(id: number): Promise<AvaliacaoChecklist | null> {
+  const pool = obterPool();
+  const { rows } = await pool.query<LinhaAvaliacao>(`SELECT * FROM avaliacoes_checklist WHERE id = $1`, [id]);
+  return rows[0] ? mapAvaliacao(rows[0]) : null;
+}
