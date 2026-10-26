@@ -2,6 +2,7 @@ import { obterPool } from "@/lib/db";
 import { calcularHoldDias, diasUteisDecorridos, diasUteisEntre, emHold, hojeBr, saldoDiasUteis } from "@/lib/dias-uteis";
 import {
   TIPO_ALERTA_LABELS,
+  TIPO_ATRASO_REENVIO,
   chaveAvaliacao,
   determinarAlertasLinha,
   statusRadarAtivo,
@@ -10,6 +11,8 @@ import {
   type StatusRadar,
   type TipoAlerta,
 } from "@/lib/alertas-engine-calculo";
+import { calcularIntervalosRevisao } from "@/lib/revisoes-calculo";
+import { buscarLinhasRevisao } from "@/lib/revisoes";
 
 const STATUS_CANCELADO = "CANCELADO";
 const SLA_PRESTADORES_DIAS_UTEIS = 10;
@@ -174,31 +177,51 @@ async function buscarRadar(pool: ReturnType<typeof obterPool>): Promise<Map<stri
   return mapa;
 }
 
+function montarAlertaItem(
+  modulo: Origem,
+  projetoId: number,
+  campos: Omit<AlertaItem, "chaveRadar" | "modulo" | "projetoId" | "status" | "justificativa" | "providencia" | "responsavelTratamento" | "dataTratamento" | "observacao" | "adiadoPara">,
+  radar: Map<string, LinhaRadar>,
+): AlertaItem {
+  const chaveRadar = `${modulo}:${projetoId}:${campos.tipoAlerta}`;
+  const radarLinha = radar.get(chaveRadar);
+  return {
+    chaveRadar,
+    modulo,
+    projetoId,
+    ...campos,
+    status: (radarLinha?.status as StatusRadar) || "PENDENTE",
+    justificativa: radarLinha?.justificativa ?? null,
+    providencia: radarLinha?.providencia ?? null,
+    responsavelTratamento: radarLinha?.responsavel_tratamento ?? null,
+    dataTratamento: radarLinha?.data_tratamento ?? null,
+    observacao: radarLinha?.observacao ?? null,
+    adiadoPara: radarLinha?.adiado_para ?? null,
+  };
+}
+
 /** Monta os alertas de um módulo (Prestadores ou Cessionários) — reúne os
- * 7 critérios portados do motor consolidado (omite ATRASO_REENVIO, que
- * depende do motor de Linha do Tempo/devolutiva externa ainda não
- * portado), já com o status atual do ciclo de vida (alertas_radar).
- * Mesma regra de gat/alertas_engine.py::montar_alertas_modulo. */
+ * 8 critérios do motor consolidado, já com o status atual do ciclo de
+ * vida (alertas_radar). Mesma regra de
+ * gat/alertas_engine.py::montar_alertas_modulo. ATRASO_REENVIO é por
+ * INTERVALO entre revisões (gat/revisoes.py::alertas_atraso_reenvio),
+ * não por linha — montado à parte dos demais 7 critérios. */
 export async function buscarAlertasModulo(modulo: Origem): Promise<AlertaItem[]> {
   const pool = obterPool();
   const tipoEntidade = modulo === "prestadores" ? "PRESTADOR" : "CESSIONARIO";
-  const [linhas, { criticos, avaliados }, isentos, radar] = await Promise.all([
+  const [linhas, { criticos, avaliados }, isentos, radar, linhasRevisao] = await Promise.all([
     buscarLinhasModulo(pool, modulo),
     buscarCriticosEAvaliados(pool, tipoEntidade),
     buscarIsentos(pool, modulo),
     buscarRadar(pool),
+    buscarLinhasRevisao(modulo),
   ]);
 
   const alertas: AlertaItem[] = [];
   for (const linha of linhas) {
     const gerados = determinarAlertasLinha(linha, modulo, criticos, avaliados, isentos);
     for (const g of gerados) {
-      const chaveRadar = `${modulo}:${linha.id}:${g.tipoAlerta}`;
-      const radarLinha = radar.get(chaveRadar);
-      alertas.push({
-        chaveRadar,
-        modulo,
-        projetoId: linha.id,
+      alertas.push(montarAlertaItem(modulo, linha.id, {
         nome: linha.nome,
         codigo: linha.codigo,
         disciplina: linha.disciplina,
@@ -209,16 +232,27 @@ export async function buscarAlertasModulo(modulo: Origem): Promise<AlertaItem[]>
         tipoAlerta: g.tipoAlerta,
         motivoLabel: TIPO_ALERTA_LABELS[g.tipoAlerta],
         detalhe: g.detalhe,
-        status: (radarLinha?.status as StatusRadar) || "PENDENTE",
-        justificativa: radarLinha?.justificativa ?? null,
-        providencia: radarLinha?.providencia ?? null,
-        responsavelTratamento: radarLinha?.responsavel_tratamento ?? null,
-        dataTratamento: radarLinha?.data_tratamento ?? null,
-        observacao: radarLinha?.observacao ?? null,
-        adiadoPara: radarLinha?.adiado_para ?? null,
-      });
+      }, radar));
     }
   }
+
+  const intervalos = calcularIntervalosRevisao(linhasRevisao);
+  for (const intervalo of intervalos) {
+    if (intervalo.situacaoSla !== "FORA DO SLA" || intervalo.diasUteisRetorno == null) continue;
+    alertas.push(montarAlertaItem(modulo, intervalo.id, {
+      nome: intervalo.nome,
+      codigo: intervalo.codigo,
+      disciplina: intervalo.disciplina,
+      numAt: intervalo.numAt,
+      revisao: intervalo.revisaoAtual,
+      responsavel: intervalo.responsavel,
+      item: intervalo.item,
+      tipoAlerta: TIPO_ATRASO_REENVIO,
+      motivoLabel: TIPO_ALERTA_LABELS[TIPO_ATRASO_REENVIO],
+      detalhe: `REV${String(intervalo.revisaoAnterior).padStart(2, "0")}→REV${String(intervalo.revisaoAtual).padStart(2, "0")}: ${intervalo.diasUteisRetorno} dias úteis sem retorno`,
+    }, radar));
+  }
+
   return alertas;
 }
 

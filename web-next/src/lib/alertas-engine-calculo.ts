@@ -7,6 +7,7 @@ export const TIPO_AVALIACAO_OBRIGATORIA = "AVALIACAO_OBRIGATORIA";
 export const TIPO_PRAZO_PRIORITARIO = "PRAZO_PRIORITARIO";
 export const TIPO_ALERTA_MAXIMO = "ALERTA_MAXIMO";
 export const TIPO_ACOMPANHAMENTO_HOLD = "ACOMPANHAMENTO_HOLD";
+export const TIPO_ATRASO_REENVIO = "ATRASO_REENVIO";
 
 export type TipoAlerta =
   | typeof TIPO_PENDENTE_REUNIAO
@@ -15,7 +16,8 @@ export type TipoAlerta =
   | typeof TIPO_AVALIACAO_OBRIGATORIA
   | typeof TIPO_PRAZO_PRIORITARIO
   | typeof TIPO_ALERTA_MAXIMO
-  | typeof TIPO_ACOMPANHAMENTO_HOLD;
+  | typeof TIPO_ACOMPANHAMENTO_HOLD
+  | typeof TIPO_ATRASO_REENVIO;
 
 export const TIPO_ALERTA_LABELS: Record<TipoAlerta, string> = {
   [TIPO_PENDENTE_REUNIAO]: "Revisão ≥ REV2 sem liberação",
@@ -25,6 +27,7 @@ export const TIPO_ALERTA_LABELS: Record<TipoAlerta, string> = {
   [TIPO_PRAZO_PRIORITARIO]: "Prazo prioritário próximo do vencimento",
   [TIPO_ALERTA_MAXIMO]: "Alerta Máximo — pelo menos 24 horas de atraso real",
   [TIPO_ACOMPANHAMENTO_HOLD]: "Acompanhamento de HOLD (3+ dias úteis)",
+  [TIPO_ATRASO_REENVIO]: "Atraso no reenvio (retorno externo)",
 };
 
 export const STATUS_PENDENTE = "PENDENTE";
@@ -129,9 +132,9 @@ function emListaPrioridades(linha: LinhaAlertaBase): boolean {
 }
 
 /** Monta a lista de alertas disparados por uma linha de projeto — mesma
- * regra de gat/alertas_engine.py::montar_alertas_modulo (exceto o tipo
- * ATRASO_REENVIO, que depende do motor de Linha do Tempo/devolutiva
- * externa, ainda não portado). */
+ * regra de gat/alertas_engine.py::montar_alertas_modulo. ATRASO_REENVIO
+ * não nasce aqui: é por INTERVALO entre revisões (não por linha), montado
+ * à parte em lib/alertas-engine.ts a partir de revisoes-calculo.ts. */
 export function determinarAlertasLinha(
   linha: LinhaAlertaBase,
   modulo: Origem,

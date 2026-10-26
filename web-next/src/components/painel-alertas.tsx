@@ -27,6 +27,7 @@ const COR_TIPO: Record<TipoAlerta, string> = {
   PRAZO_PRIORITARIO: "var(--color-gold)",
   ALERTA_MAXIMO: "var(--color-red)",
   ACOMPANHAMENTO_HOLD: "var(--color-sky)",
+  ATRASO_REENVIO: "var(--color-orange)",
 };
 
 const COR_STATUS: Record<StatusRadar, string> = {
