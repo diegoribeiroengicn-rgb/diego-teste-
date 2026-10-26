@@ -38,6 +38,7 @@ const GRUPOS_NAV: GrupoNav[] = [
   {
     titulo: "Gestão",
     itens: [
+      { rotulo: "Meus Alertas", href: "/meus-alertas" },
       { rotulo: "Painel Consolidado", href: "/consolidado" },
       { rotulo: "Lista de Prioridades", href: "/prioridades" },
       { rotulo: "Lembretes (Sem PEP)", href: "/lembretes-pep" },
