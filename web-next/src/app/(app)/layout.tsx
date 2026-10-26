@@ -37,6 +37,10 @@ const GRUPOS_NAV: GrupoNav[] = [
     titulo: "Avaliações",
     itens: [{ rotulo: "Ranking", href: "/avaliacoes/ranking" }],
   },
+  {
+    titulo: "Gestão",
+    itens: [{ rotulo: "Lista de Prioridades", href: "/prioridades" }],
+  },
 ];
 
 export default async function LayoutApp({ children }: { children: React.ReactNode }) {
