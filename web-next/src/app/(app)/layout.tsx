@@ -47,6 +47,10 @@ const GRUPOS_NAV: GrupoNav[] = [
       { rotulo: "Histórico de Atividades", href: "/atividades" },
     ],
   },
+  {
+    titulo: "Sistema",
+    itens: [{ rotulo: "Manual do Sistema", href: "/manual-sistema" }],
+  },
 ];
 
 export default async function LayoutApp({ children }: { children: React.ReactNode }) {
