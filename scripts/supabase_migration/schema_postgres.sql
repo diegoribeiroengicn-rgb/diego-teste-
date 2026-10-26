@@ -34,6 +34,16 @@ CREATE TABLE "alertas_manuais" (
 CREATE INDEX "idx_alertas_manuais_status" ON "alertas_manuais" ("status");
 CREATE INDEX "idx_alertas_manuais_modulo" ON "alertas_manuais" ("modulo");
 
+CREATE TABLE "alertas_pessoais_vistos" (
+    "id" BIGSERIAL PRIMARY KEY,
+    "usuario" TEXT NOT NULL,
+    "tipo" TEXT NOT NULL,
+    "chave" TEXT NOT NULL,
+    "visto_em" TEXT NOT NULL
+);
+CREATE INDEX "idx_alertas_pessoais_vistos_usuario" ON "alertas_pessoais_vistos" ("usuario", "tipo");
+CREATE UNIQUE INDEX "sqlite_autoindex_alertas_pessoais_vistos_1" ON "alertas_pessoais_vistos" ("usuario", "tipo", "chave");
+
 CREATE TABLE "alertas_radar" (
     "id" BIGSERIAL PRIMARY KEY,
     "modulo" TEXT NOT NULL,
@@ -76,6 +86,20 @@ CREATE TABLE "atividades_usuario" (
     "data_hora" TEXT NOT NULL
 );
 CREATE INDEX "idx_atividades_usuario_periodo" ON "atividades_usuario" ("usuario", "data_hora");
+
+CREATE TABLE "avaliacao_checklist_perguntas" (
+    "id" BIGSERIAL PRIMARY KEY,
+    "categoria" TEXT NOT NULL,
+    "texto" TEXT NOT NULL,
+    "ordem_categoria" BIGINT NOT NULL,
+    "ordem_pergunta" BIGINT NOT NULL,
+    "ativo" BIGINT NOT NULL DEFAULT 1,
+    "criado_em" TEXT NOT NULL,
+    "criado_por" TEXT,
+    "atualizado_em" TEXT,
+    "atualizado_por" TEXT
+);
+CREATE INDEX "idx_avaliacao_checklist_perguntas_ordem" ON "avaliacao_checklist_perguntas" ("ativo", "ordem_categoria", "ordem_pergunta");
 
 CREATE TABLE "avaliacao_obrigatoria_isentos" (
     "modulo" TEXT NOT NULL,
@@ -129,7 +153,8 @@ CREATE TABLE "avaliacoes_checklist" (
     "observacoes_gerais" TEXT,
     "criado_em" TEXT NOT NULL,
     "criado_por" TEXT,
-    "obra_id" BIGINT
+    "obra_id" BIGINT,
+    "nome_projetista" TEXT
 );
 CREATE INDEX "idx_avaliacoes_checklist_obra" ON "avaliacoes_checklist" ("obra_id");
 CREATE INDEX "idx_avaliacoes_checklist_projeto" ON "avaliacoes_checklist" ("projeto_id");
@@ -264,11 +289,24 @@ CREATE TABLE "cessionarios" (
     "resumo_ultima_geracao_em" TEXT,
     "resumo_gerado_por" TEXT,
     "resumo_qtd_geracoes" BIGINT NOT NULL DEFAULT 0,
-    "avaliacao_opcional_perguntada_revisao" BIGINT
+    "avaliacao_opcional_perguntada_revisao" BIGINT,
+    "teve_substituicao" BIGINT NOT NULL DEFAULT 0,
+    "qtd_arquivos_substituidos" BIGINT
 );
 CREATE INDEX "idx_cessionarios_cadastro_id" ON "cessionarios" ("cessionario_cadastro_id");
 CREATE INDEX "idx_cessionarios_nome" ON "cessionarios" ("cessionario");
 CREATE INDEX "idx_cessionarios_num_at" ON "cessionarios" ("num_at");
+
+CREATE TABLE "cessionarios_ativos" (
+    "id" BIGSERIAL PRIMARY KEY,
+    "categoria" TEXT NOT NULL,
+    "quantidade" BIGINT NOT NULL DEFAULT 0,
+    "ordem" BIGINT NOT NULL DEFAULT 0,
+    "criado_em" TEXT NOT NULL,
+    "criado_por" TEXT,
+    "atualizado_em" TEXT,
+    "atualizado_por" TEXT
+);
 
 CREATE TABLE "codigos_disciplina" (
     "disciplina" TEXT,
@@ -445,6 +483,18 @@ CREATE TABLE "pmo_riscos" (
 );
 CREATE INDEX "idx_pmo_riscos_projeto" ON "pmo_riscos" ("projeto_id");
 
+CREATE TABLE "preferencias_conflito_planilha" (
+    "id" BIGSERIAL PRIMARY KEY,
+    "tabela" TEXT NOT NULL,
+    "chave" TEXT NOT NULL,
+    "campo" TEXT NOT NULL,
+    "identificacao" TEXT,
+    "criado_em" TEXT NOT NULL,
+    "criado_por" TEXT
+);
+CREATE INDEX "idx_preferencias_conflito_planilha_tabela" ON "preferencias_conflito_planilha" ("tabela");
+CREATE UNIQUE INDEX "sqlite_autoindex_preferencias_conflito_planilha_1" ON "preferencias_conflito_planilha" ("tabela", "chave", "campo");
+
 CREATE TABLE "prestadores" (
     "id" BIGSERIAL PRIMARY KEY,
     "item" BIGINT,
@@ -495,7 +545,9 @@ CREATE TABLE "prestadores" (
     "resumo_ultima_geracao_em" TEXT,
     "resumo_gerado_por" TEXT,
     "resumo_qtd_geracoes" BIGINT NOT NULL DEFAULT 0,
-    "avaliacao_opcional_perguntada_revisao" BIGINT
+    "avaliacao_opcional_perguntada_revisao" BIGINT,
+    "teve_substituicao" BIGINT NOT NULL DEFAULT 0,
+    "qtd_arquivos_substituidos" BIGINT
 );
 CREATE INDEX "idx_prestadores_obra_id" ON "prestadores" ("obra_id");
 CREATE INDEX "idx_prestadores_cadastro_id" ON "prestadores" ("prestador_cadastro_id");

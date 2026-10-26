@@ -216,6 +216,71 @@
     "total_linhas": 1
   },
   {
+    "nome": "alertas_pessoais_vistos",
+    "ddl_original": "CREATE TABLE alertas_pessoais_vistos (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            usuario TEXT NOT NULL,\n            tipo TEXT NOT NULL,\n            chave TEXT NOT NULL,\n            visto_em TEXT NOT NULL,\n            UNIQUE(usuario, tipo, chave)\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "usuario",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "tipo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "chave",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "visto_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "idx_alertas_pessoais_vistos_usuario",
+        "colunas": [
+          "usuario",
+          "tipo"
+        ],
+        "unico": false
+      },
+      {
+        "nome": "sqlite_autoindex_alertas_pessoais_vistos_1",
+        "colunas": [
+          "usuario",
+          "tipo",
+          "chave"
+        ],
+        "unico": true
+      }
+    ],
+    "total_linhas": 0
+  },
+  {
     "nome": "alertas_radar",
     "ddl_original": "CREATE TABLE alertas_radar (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                modulo TEXT NOT NULL,\n                projeto_id INTEGER NOT NULL,\n                tipo_alerta TEXT NOT NULL,\n                status TEXT NOT NULL DEFAULT 'ATIVO',\n                justificativa TEXT,\n                atualizado_em TEXT NOT NULL,\n                atualizado_por TEXT, providencia TEXT, responsavel_tratamento TEXT, data_tratamento TEXT, observacao TEXT, adiado_para TEXT,\n                UNIQUE(modulo, projeto_id, tipo_alerta)\n            )",
     "colunas": [
@@ -341,7 +406,7 @@
         "unico": true
       }
     ],
-    "total_linhas": 10
+    "total_linhas": 13
   },
   {
     "nome": "arquivo_auditoria",
@@ -425,7 +490,7 @@
         "unico": false
       }
     ],
-    "total_linhas": 5
+    "total_linhas": 23
   },
   {
     "nome": "atividades_usuario",
@@ -495,7 +560,99 @@
         "unico": false
       }
     ],
-    "total_linhas": 2404
+    "total_linhas": 3563
+  },
+  {
+    "nome": "avaliacao_checklist_perguntas",
+    "ddl_original": "CREATE TABLE avaliacao_checklist_perguntas (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            categoria TEXT NOT NULL,\n            texto TEXT NOT NULL,\n            ordem_categoria INTEGER NOT NULL,\n            ordem_pergunta INTEGER NOT NULL,\n            ativo INTEGER NOT NULL DEFAULT 1,\n            criado_em TEXT NOT NULL,\n            criado_por TEXT,\n            atualizado_em TEXT,\n            atualizado_por TEXT\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "categoria",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "texto",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "ordem_categoria",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "ordem_pergunta",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "ativo",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "1",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "idx_avaliacao_checklist_perguntas_ordem",
+        "colunas": [
+          "ativo",
+          "ordem_categoria",
+          "ordem_pergunta"
+        ],
+        "unico": false
+      }
+    ],
+    "total_linhas": 18
   },
   {
     "nome": "avaliacao_obrigatoria_isentos",
@@ -716,7 +873,7 @@
   },
   {
     "nome": "avaliacoes_checklist",
-    "ddl_original": "CREATE TABLE avaliacoes_checklist (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                tipo_entidade TEXT NOT NULL,\n                codigo_entidade TEXT,\n                nome_entidade TEXT NOT NULL,\n                disciplina TEXT,\n                projeto_id INTEGER,\n                at_referencia TEXT,\n                revisao INTEGER,\n                data_avaliacao TEXT NOT NULL,\n                analista_responsavel TEXT,\n                respostas_json TEXT NOT NULL,\n                pontuacao INTEGER NOT NULL,\n                classificacao TEXT NOT NULL,\n                acompanhamento TEXT NOT NULL,\n                observacoes_gerais TEXT,\n                criado_em TEXT NOT NULL,\n                criado_por TEXT\n            , obra_id INTEGER)",
+    "ddl_original": "CREATE TABLE avaliacoes_checklist (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                tipo_entidade TEXT NOT NULL,\n                codigo_entidade TEXT,\n                nome_entidade TEXT NOT NULL,\n                disciplina TEXT,\n                projeto_id INTEGER,\n                at_referencia TEXT,\n                revisao INTEGER,\n                data_avaliacao TEXT NOT NULL,\n                analista_responsavel TEXT,\n                respostas_json TEXT NOT NULL,\n                pontuacao INTEGER NOT NULL,\n                classificacao TEXT NOT NULL,\n                acompanhamento TEXT NOT NULL,\n                observacoes_gerais TEXT,\n                criado_em TEXT NOT NULL,\n                criado_por TEXT\n            , obra_id INTEGER, nome_projetista TEXT)",
     "colunas": [
       {
         "nome": "id",
@@ -843,6 +1000,13 @@
         "obrigatoria": false,
         "valor_padrao": null,
         "parte_da_pk": false
+      },
+      {
+        "nome": "nome_projetista",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
       }
     ],
     "chave_primaria": [
@@ -874,7 +1038,7 @@
         "unico": false
       }
     ],
-    "total_linhas": 4
+    "total_linhas": 30
   },
   {
     "nome": "avaliacoes_prestadores",
@@ -1046,7 +1210,7 @@
         "unico": true
       }
     ],
-    "total_linhas": 11
+    "total_linhas": 72
   },
   {
     "nome": "cadastro_cessionarios",
@@ -1377,7 +1541,7 @@
   },
   {
     "nome": "cessionarios",
-    "ddl_original": "CREATE TABLE cessionarios (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                item INTEGER,\n                codigo TEXT,\n                cessionario TEXT NOT NULL,\n                disciplina TEXT,\n                disciplina_sla TEXT,\n                revisao INTEGER NOT NULL DEFAULT 0,\n                num_documentos INTEGER NOT NULL DEFAULT 0,\n                data_solicitacao TEXT NOT NULL,\n                tipo TEXT,\n                sla_dias INTEGER,\n                data_limite TEXT,\n                data_analise TEXT,\n                hold_inicio TEXT,\n                hold_fim TEXT,\n                num_at TEXT,\n                revisao_at INTEGER,\n                responsavel TEXT,\n                status_analise TEXT NOT NULL DEFAULT 'EM ANÁLISE',\n                observacoes TEXT,\n                natureza_revisao TEXT,\n                num_erros INTEGER,\n                etg TEXT NOT NULL DEFAULT 'NÃO',\n                criado_em TEXT NOT NULL,\n                criado_por TEXT,\n                atualizado_em TEXT,\n                atualizado_por TEXT\n            , pep TEXT, cessionario_cadastro_id INTEGER, luc TEXT, numero_rci TEXT, numero_rvp TEXT, data_atualizacao_rci TEXT, data_atualizacao_rvp TEXT, sla_original INTEGER, sla_reduzido INTEGER NOT NULL DEFAULT 0, justificativa_sla TEXT, data_limite_original TEXT, sla_alterado_por TEXT, sla_alterado_em TEXT, data_limite_ajustada_manualmente INTEGER NOT NULL DEFAULT 0, arquivado_em TEXT, arquivado_por TEXT, motivo_arquivamento TEXT, arquivado_teste INTEGER NOT NULL DEFAULT 0, resumo_mfiles INTEGER NOT NULL DEFAULT 0, resumo_drive INTEGER NOT NULL DEFAULT 0, resumo_email INTEGER NOT NULL DEFAULT 0, resumo_popup_disparado_em TEXT, resumo_ultima_geracao_em TEXT, resumo_gerado_por TEXT, resumo_qtd_geracoes INTEGER NOT NULL DEFAULT 0, avaliacao_opcional_perguntada_revisao INTEGER)",
+    "ddl_original": "CREATE TABLE cessionarios (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                item INTEGER,\n                codigo TEXT,\n                cessionario TEXT NOT NULL,\n                disciplina TEXT,\n                disciplina_sla TEXT,\n                revisao INTEGER NOT NULL DEFAULT 0,\n                num_documentos INTEGER NOT NULL DEFAULT 0,\n                data_solicitacao TEXT NOT NULL,\n                tipo TEXT,\n                sla_dias INTEGER,\n                data_limite TEXT,\n                data_analise TEXT,\n                hold_inicio TEXT,\n                hold_fim TEXT,\n                num_at TEXT,\n                revisao_at INTEGER,\n                responsavel TEXT,\n                status_analise TEXT NOT NULL DEFAULT 'EM ANÁLISE',\n                observacoes TEXT,\n                natureza_revisao TEXT,\n                num_erros INTEGER,\n                etg TEXT NOT NULL DEFAULT 'NÃO',\n                criado_em TEXT NOT NULL,\n                criado_por TEXT,\n                atualizado_em TEXT,\n                atualizado_por TEXT\n            , pep TEXT, cessionario_cadastro_id INTEGER, luc TEXT, numero_rci TEXT, numero_rvp TEXT, data_atualizacao_rci TEXT, data_atualizacao_rvp TEXT, sla_original INTEGER, sla_reduzido INTEGER NOT NULL DEFAULT 0, justificativa_sla TEXT, data_limite_original TEXT, sla_alterado_por TEXT, sla_alterado_em TEXT, data_limite_ajustada_manualmente INTEGER NOT NULL DEFAULT 0, arquivado_em TEXT, arquivado_por TEXT, motivo_arquivamento TEXT, arquivado_teste INTEGER NOT NULL DEFAULT 0, resumo_mfiles INTEGER NOT NULL DEFAULT 0, resumo_drive INTEGER NOT NULL DEFAULT 0, resumo_email INTEGER NOT NULL DEFAULT 0, resumo_popup_disparado_em TEXT, resumo_ultima_geracao_em TEXT, resumo_gerado_por TEXT, resumo_qtd_geracoes INTEGER NOT NULL DEFAULT 0, avaliacao_opcional_perguntada_revisao INTEGER, teve_substituicao INTEGER NOT NULL DEFAULT 0, qtd_arquivos_substituidos INTEGER)",
     "colunas": [
       {
         "nome": "id",
@@ -1749,6 +1913,20 @@
         "obrigatoria": false,
         "valor_padrao": null,
         "parte_da_pk": false
+      },
+      {
+        "nome": "teve_substituicao",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "qtd_arquivos_substituidos",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
       }
     ],
     "chave_primaria": [
@@ -1778,7 +1956,75 @@
         "unico": false
       }
     ],
-    "total_linhas": 640
+    "total_linhas": 708
+  },
+  {
+    "nome": "cessionarios_ativos",
+    "ddl_original": "CREATE TABLE cessionarios_ativos (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            categoria TEXT NOT NULL,\n            quantidade INTEGER NOT NULL DEFAULT 0,\n            ordem INTEGER NOT NULL DEFAULT 0,\n            criado_em TEXT NOT NULL,\n            criado_por TEXT,\n            atualizado_em TEXT,\n            atualizado_por TEXT\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "categoria",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "quantidade",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "ordem",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "atualizado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [],
+    "total_linhas": 0
   },
   {
     "nome": "codigos_disciplina",
@@ -2160,7 +2406,7 @@
     ],
     "chaves_estrangeiras": [],
     "indices": [],
-    "total_linhas": 7730
+    "total_linhas": 25115
   },
   {
     "nome": "importacoes_planilha_historico",
@@ -2278,7 +2524,7 @@
         "unico": false
       }
     ],
-    "total_linhas": 14
+    "total_linhas": 38
   },
   {
     "nome": "manual_anexos",
@@ -2713,7 +2959,7 @@
       }
     ],
     "indices": [],
-    "total_linhas": 1464
+    "total_linhas": 1512
   },
   {
     "nome": "permissoes_modulo",
@@ -2755,7 +3001,7 @@
       }
     ],
     "indices": [],
-    "total_linhas": 93
+    "total_linhas": 96
   },
   {
     "nome": "planos_acao",
@@ -4030,8 +4276,86 @@
     "total_linhas": 0
   },
   {
+    "nome": "preferencias_conflito_planilha",
+    "ddl_original": "CREATE TABLE preferencias_conflito_planilha (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            tabela TEXT NOT NULL,\n            chave TEXT NOT NULL,\n            campo TEXT NOT NULL,\n            identificacao TEXT,\n            criado_em TEXT NOT NULL,\n            criado_por TEXT,\n            UNIQUE(tabela, chave, campo)\n        )",
+    "colunas": [
+      {
+        "nome": "id",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": true
+      },
+      {
+        "nome": "tabela",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "chave",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "campo",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "identificacao",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_em",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": true,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      },
+      {
+        "nome": "criado_por",
+        "tipo_sqlite": "TEXT",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
+      }
+    ],
+    "chave_primaria": [
+      "id"
+    ],
+    "chaves_estrangeiras": [],
+    "indices": [
+      {
+        "nome": "idx_preferencias_conflito_planilha_tabela",
+        "colunas": [
+          "tabela"
+        ],
+        "unico": false
+      },
+      {
+        "nome": "sqlite_autoindex_preferencias_conflito_planilha_1",
+        "colunas": [
+          "tabela",
+          "chave",
+          "campo"
+        ],
+        "unico": true
+      }
+    ],
+    "total_linhas": 228
+  },
+  {
     "nome": "prestadores",
-    "ddl_original": "CREATE TABLE prestadores (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                item INTEGER,\n                codigo TEXT,\n                prestador TEXT NOT NULL,\n                disciplina TEXT,\n                disciplina_sla TEXT,\n                peps TEXT,\n                obra_referencia TEXT,\n                revisao INTEGER NOT NULL DEFAULT 0,\n                num_documentos INTEGER NOT NULL DEFAULT 0,\n                data_solicitacao TEXT NOT NULL,\n                data_limite TEXT,\n                data_analise TEXT,\n                hold_inicio TEXT,\n                hold_fim TEXT,\n                num_at TEXT,\n                revisao_at INTEGER,\n                responsavel TEXT,\n                status_analise TEXT NOT NULL DEFAULT 'EM ANÁLISE',\n                observacoes TEXT,\n                natureza_revisao TEXT,\n                num_erros INTEGER,\n                etg TEXT NOT NULL DEFAULT 'NÃO',\n                criado_em TEXT NOT NULL,\n                criado_por TEXT,\n                atualizado_em TEXT,\n                atualizado_por TEXT\n            , prestador_cadastro_id INTEGER, obra_id INTEGER, sla_dias INTEGER, sla_original INTEGER, sla_reduzido INTEGER NOT NULL DEFAULT 0, nivel_prioridade INTEGER, justificativa_sla TEXT, data_limite_original TEXT, sla_alterado_por TEXT, sla_alterado_em TEXT, data_limite_ajustada_manualmente INTEGER NOT NULL DEFAULT 0, arquivado_em TEXT, arquivado_por TEXT, motivo_arquivamento TEXT, arquivado_teste INTEGER NOT NULL DEFAULT 0, resumo_mfiles INTEGER NOT NULL DEFAULT 0, resumo_drive INTEGER NOT NULL DEFAULT 0, resumo_email INTEGER NOT NULL DEFAULT 0, resumo_popup_disparado_em TEXT, resumo_ultima_geracao_em TEXT, resumo_gerado_por TEXT, resumo_qtd_geracoes INTEGER NOT NULL DEFAULT 0, avaliacao_opcional_perguntada_revisao INTEGER)",
+    "ddl_original": "CREATE TABLE prestadores (\n                id INTEGER PRIMARY KEY AUTOINCREMENT,\n                item INTEGER,\n                codigo TEXT,\n                prestador TEXT NOT NULL,\n                disciplina TEXT,\n                disciplina_sla TEXT,\n                peps TEXT,\n                obra_referencia TEXT,\n                revisao INTEGER NOT NULL DEFAULT 0,\n                num_documentos INTEGER NOT NULL DEFAULT 0,\n                data_solicitacao TEXT NOT NULL,\n                data_limite TEXT,\n                data_analise TEXT,\n                hold_inicio TEXT,\n                hold_fim TEXT,\n                num_at TEXT,\n                revisao_at INTEGER,\n                responsavel TEXT,\n                status_analise TEXT NOT NULL DEFAULT 'EM ANÁLISE',\n                observacoes TEXT,\n                natureza_revisao TEXT,\n                num_erros INTEGER,\n                etg TEXT NOT NULL DEFAULT 'NÃO',\n                criado_em TEXT NOT NULL,\n                criado_por TEXT,\n                atualizado_em TEXT,\n                atualizado_por TEXT\n            , prestador_cadastro_id INTEGER, obra_id INTEGER, sla_dias INTEGER, sla_original INTEGER, sla_reduzido INTEGER NOT NULL DEFAULT 0, nivel_prioridade INTEGER, justificativa_sla TEXT, data_limite_original TEXT, sla_alterado_por TEXT, sla_alterado_em TEXT, data_limite_ajustada_manualmente INTEGER NOT NULL DEFAULT 0, arquivado_em TEXT, arquivado_por TEXT, motivo_arquivamento TEXT, arquivado_teste INTEGER NOT NULL DEFAULT 0, resumo_mfiles INTEGER NOT NULL DEFAULT 0, resumo_drive INTEGER NOT NULL DEFAULT 0, resumo_email INTEGER NOT NULL DEFAULT 0, resumo_popup_disparado_em TEXT, resumo_ultima_geracao_em TEXT, resumo_gerado_por TEXT, resumo_qtd_geracoes INTEGER NOT NULL DEFAULT 0, avaliacao_opcional_perguntada_revisao INTEGER, teve_substituicao INTEGER NOT NULL DEFAULT 0, qtd_arquivos_substituidos INTEGER)",
     "colunas": [
       {
         "nome": "id",
@@ -4382,6 +4706,20 @@
         "obrigatoria": false,
         "valor_padrao": null,
         "parte_da_pk": false
+      },
+      {
+        "nome": "teve_substituicao",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": true,
+        "valor_padrao": "0",
+        "parte_da_pk": false
+      },
+      {
+        "nome": "qtd_arquivos_substituidos",
+        "tipo_sqlite": "INTEGER",
+        "obrigatoria": false,
+        "valor_padrao": null,
+        "parte_da_pk": false
       }
     ],
     "chave_primaria": [
@@ -4418,7 +4756,7 @@
         "unico": false
       }
     ],
-    "total_linhas": 583
+    "total_linhas": 879
   },
   {
     "nome": "repactuacoes_prazo",
@@ -4495,7 +4833,7 @@
         "unico": false
       }
     ],
-    "total_linhas": 0
+    "total_linhas": 4
   },
   {
     "nome": "resumo_conclusao_historico",
@@ -4586,7 +4924,7 @@
         "unico": false
       }
     ],
-    "total_linhas": 22
+    "total_linhas": 39
   },
   {
     "nome": "reuniao_participantes",
@@ -4846,7 +5184,7 @@
     ],
     "chaves_estrangeiras": [],
     "indices": [],
-    "total_linhas": 40
+    "total_linhas": 47
   },
   {
     "nome": "usuarios",
@@ -4971,6 +5309,6 @@
         "unico": true
       }
     ],
-    "total_linhas": 31
+    "total_linhas": 32
   }
 ]

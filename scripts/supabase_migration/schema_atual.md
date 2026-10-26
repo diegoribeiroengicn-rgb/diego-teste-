@@ -1,8 +1,8 @@
 # Radiografia do schema — GAT 2026 (SQLite)
 
-Total de tabelas: **45** · Total de linhas: **13228**
+Total de tabelas: **49** · Total de linhas: **32594**
 
-## `historico_edicoes` (7730 linha(s))
+## `historico_edicoes` (25115 linha(s))
 
 | Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
 |---|---|---|---|---|
@@ -15,7 +15,7 @@ Total de tabelas: **45** · Total de linhas: **13228**
 | `usuario` | TEXT | não | — |  |
 | `data_hora` | TEXT | sim | — |  |
 
-## `atividades_usuario` (2404 linha(s))
+## `atividades_usuario` (3563 linha(s))
 
 | Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
 |---|---|---|---|---|
@@ -30,7 +30,7 @@ Total de tabelas: **45** · Total de linhas: **13228**
 **Índices:**
 - `idx_atividades_usuario_periodo` em (usuario, data_hora)
 
-## `permissoes_area` (1464 linha(s))
+## `permissoes_area` (1512 linha(s))
 
 | Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
 |---|---|---|---|---|
@@ -41,7 +41,70 @@ Total de tabelas: **45** · Total de linhas: **13228**
 **Chaves estrangeiras:**
 - `usuario_id` → `usuarios.id`
 
-## `cessionarios` (640 linha(s))
+## `prestadores` (879 linha(s))
+
+| Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
+|---|---|---|---|---|
+| `id` | INTEGER | não | — | sim |
+| `item` | INTEGER | não | — |  |
+| `codigo` | TEXT | não | — |  |
+| `prestador` | TEXT | sim | — |  |
+| `disciplina` | TEXT | não | — |  |
+| `disciplina_sla` | TEXT | não | — |  |
+| `peps` | TEXT | não | — |  |
+| `obra_referencia` | TEXT | não | — |  |
+| `revisao` | INTEGER | sim | 0 |  |
+| `num_documentos` | INTEGER | sim | 0 |  |
+| `data_solicitacao` | TEXT | sim | — |  |
+| `data_limite` | TEXT | não | — |  |
+| `data_analise` | TEXT | não | — |  |
+| `hold_inicio` | TEXT | não | — |  |
+| `hold_fim` | TEXT | não | — |  |
+| `num_at` | TEXT | não | — |  |
+| `revisao_at` | INTEGER | não | — |  |
+| `responsavel` | TEXT | não | — |  |
+| `status_analise` | TEXT | sim | 'EM ANÁLISE' |  |
+| `observacoes` | TEXT | não | — |  |
+| `natureza_revisao` | TEXT | não | — |  |
+| `num_erros` | INTEGER | não | — |  |
+| `etg` | TEXT | sim | 'NÃO' |  |
+| `criado_em` | TEXT | sim | — |  |
+| `criado_por` | TEXT | não | — |  |
+| `atualizado_em` | TEXT | não | — |  |
+| `atualizado_por` | TEXT | não | — |  |
+| `prestador_cadastro_id` | INTEGER | não | — |  |
+| `obra_id` | INTEGER | não | — |  |
+| `sla_dias` | INTEGER | não | — |  |
+| `sla_original` | INTEGER | não | — |  |
+| `sla_reduzido` | INTEGER | sim | 0 |  |
+| `nivel_prioridade` | INTEGER | não | — |  |
+| `justificativa_sla` | TEXT | não | — |  |
+| `data_limite_original` | TEXT | não | — |  |
+| `sla_alterado_por` | TEXT | não | — |  |
+| `sla_alterado_em` | TEXT | não | — |  |
+| `data_limite_ajustada_manualmente` | INTEGER | sim | 0 |  |
+| `arquivado_em` | TEXT | não | — |  |
+| `arquivado_por` | TEXT | não | — |  |
+| `motivo_arquivamento` | TEXT | não | — |  |
+| `arquivado_teste` | INTEGER | sim | 0 |  |
+| `resumo_mfiles` | INTEGER | sim | 0 |  |
+| `resumo_drive` | INTEGER | sim | 0 |  |
+| `resumo_email` | INTEGER | sim | 0 |  |
+| `resumo_popup_disparado_em` | TEXT | não | — |  |
+| `resumo_ultima_geracao_em` | TEXT | não | — |  |
+| `resumo_gerado_por` | TEXT | não | — |  |
+| `resumo_qtd_geracoes` | INTEGER | sim | 0 |  |
+| `avaliacao_opcional_perguntada_revisao` | INTEGER | não | — |  |
+| `teve_substituicao` | INTEGER | sim | 0 |  |
+| `qtd_arquivos_substituidos` | INTEGER | não | — |  |
+
+**Índices:**
+- `idx_prestadores_obra_id` em (obra_id)
+- `idx_prestadores_cadastro_id` em (prestador_cadastro_id)
+- `idx_prestadores_nome` em (prestador)
+- `idx_prestadores_num_at` em (num_at)
+
+## `cessionarios` (708 linha(s))
 
 | Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
 |---|---|---|---|---|
@@ -98,74 +161,31 @@ Total de tabelas: **45** · Total de linhas: **13228**
 | `resumo_gerado_por` | TEXT | não | — |  |
 | `resumo_qtd_geracoes` | INTEGER | sim | 0 |  |
 | `avaliacao_opcional_perguntada_revisao` | INTEGER | não | — |  |
+| `teve_substituicao` | INTEGER | sim | 0 |  |
+| `qtd_arquivos_substituidos` | INTEGER | não | — |  |
 
 **Índices:**
 - `idx_cessionarios_cadastro_id` em (cessionario_cadastro_id)
 - `idx_cessionarios_nome` em (cessionario)
 - `idx_cessionarios_num_at` em (num_at)
 
-## `prestadores` (583 linha(s))
+## `preferencias_conflito_planilha` (228 linha(s))
 
 | Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
 |---|---|---|---|---|
 | `id` | INTEGER | não | — | sim |
-| `item` | INTEGER | não | — |  |
-| `codigo` | TEXT | não | — |  |
-| `prestador` | TEXT | sim | — |  |
-| `disciplina` | TEXT | não | — |  |
-| `disciplina_sla` | TEXT | não | — |  |
-| `peps` | TEXT | não | — |  |
-| `obra_referencia` | TEXT | não | — |  |
-| `revisao` | INTEGER | sim | 0 |  |
-| `num_documentos` | INTEGER | sim | 0 |  |
-| `data_solicitacao` | TEXT | sim | — |  |
-| `data_limite` | TEXT | não | — |  |
-| `data_analise` | TEXT | não | — |  |
-| `hold_inicio` | TEXT | não | — |  |
-| `hold_fim` | TEXT | não | — |  |
-| `num_at` | TEXT | não | — |  |
-| `revisao_at` | INTEGER | não | — |  |
-| `responsavel` | TEXT | não | — |  |
-| `status_analise` | TEXT | sim | 'EM ANÁLISE' |  |
-| `observacoes` | TEXT | não | — |  |
-| `natureza_revisao` | TEXT | não | — |  |
-| `num_erros` | INTEGER | não | — |  |
-| `etg` | TEXT | sim | 'NÃO' |  |
+| `tabela` | TEXT | sim | — |  |
+| `chave` | TEXT | sim | — |  |
+| `campo` | TEXT | sim | — |  |
+| `identificacao` | TEXT | não | — |  |
 | `criado_em` | TEXT | sim | — |  |
 | `criado_por` | TEXT | não | — |  |
-| `atualizado_em` | TEXT | não | — |  |
-| `atualizado_por` | TEXT | não | — |  |
-| `prestador_cadastro_id` | INTEGER | não | — |  |
-| `obra_id` | INTEGER | não | — |  |
-| `sla_dias` | INTEGER | não | — |  |
-| `sla_original` | INTEGER | não | — |  |
-| `sla_reduzido` | INTEGER | sim | 0 |  |
-| `nivel_prioridade` | INTEGER | não | — |  |
-| `justificativa_sla` | TEXT | não | — |  |
-| `data_limite_original` | TEXT | não | — |  |
-| `sla_alterado_por` | TEXT | não | — |  |
-| `sla_alterado_em` | TEXT | não | — |  |
-| `data_limite_ajustada_manualmente` | INTEGER | sim | 0 |  |
-| `arquivado_em` | TEXT | não | — |  |
-| `arquivado_por` | TEXT | não | — |  |
-| `motivo_arquivamento` | TEXT | não | — |  |
-| `arquivado_teste` | INTEGER | sim | 0 |  |
-| `resumo_mfiles` | INTEGER | sim | 0 |  |
-| `resumo_drive` | INTEGER | sim | 0 |  |
-| `resumo_email` | INTEGER | sim | 0 |  |
-| `resumo_popup_disparado_em` | TEXT | não | — |  |
-| `resumo_ultima_geracao_em` | TEXT | não | — |  |
-| `resumo_gerado_por` | TEXT | não | — |  |
-| `resumo_qtd_geracoes` | INTEGER | sim | 0 |  |
-| `avaliacao_opcional_perguntada_revisao` | INTEGER | não | — |  |
 
 **Índices:**
-- `idx_prestadores_obra_id` em (obra_id)
-- `idx_prestadores_cadastro_id` em (prestador_cadastro_id)
-- `idx_prestadores_nome` em (prestador)
-- `idx_prestadores_num_at` em (num_at)
+- `idx_preferencias_conflito_planilha_tabela` em (tabela)
+- `sqlite_autoindex_preferencias_conflito_planilha_1` (único) em (tabela, chave, campo)
 
-## `permissoes_modulo` (93 linha(s))
+## `permissoes_modulo` (96 linha(s))
 
 | Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
 |---|---|---|---|---|
@@ -175,6 +195,23 @@ Total de tabelas: **45** · Total de linhas: **13228**
 
 **Chaves estrangeiras:**
 - `usuario_id` → `usuarios.id`
+
+## `backups_historico` (72 linha(s))
+
+| Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
+|---|---|---|---|---|
+| `id` | INTEGER | não | — | sim |
+| `arquivo` | TEXT | sim | — |  |
+| `tipo` | TEXT | sim | 'AUTOMATICO' |  |
+| `usuario` | TEXT | não | — |  |
+| `tamanho_bytes` | INTEGER | não | — |  |
+| `criado_em` | TEXT | sim | — |  |
+| `situacao` | TEXT | sim | 'OK' |  |
+| `observacoes` | TEXT | não | — |  |
+
+**Índices:**
+- `idx_backups_historico_arquivo` em (arquivo)
+- `sqlite_autoindex_backups_historico_1` (único) em (arquivo)
 
 ## `cadastro_cessionarios` (52 linha(s))
 
@@ -205,6 +242,16 @@ Total de tabelas: **45** · Total de linhas: **13228**
 - `idx_cadastro_cessionarios_codigo` em (codigo)
 - `sqlite_autoindex_cadastro_cessionarios_1` (único) em (codigo)
 
+## `schema_version` (47 linha(s))
+
+| Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
+|---|---|---|---|---|
+| `id` | INTEGER | não | — | sim |
+| `versao` | INTEGER | sim | — |  |
+| `aplicado_em` | TEXT | sim | — |  |
+| `descricao` | TEXT | sim | — |  |
+| `status` | TEXT | sim | — |  |
+
 ## `manual_capitulos` (42 linha(s))
 
 | Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
@@ -218,15 +265,23 @@ Total de tabelas: **45** · Total de linhas: **13228**
 | `atualizado_em` | TEXT | não | — |  |
 | `atualizado_por` | TEXT | não | — |  |
 
-## `schema_version` (40 linha(s))
+## `resumo_conclusao_historico` (39 linha(s))
 
 | Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
 |---|---|---|---|---|
 | `id` | INTEGER | não | — | sim |
-| `versao` | INTEGER | sim | — |  |
-| `aplicado_em` | TEXT | sim | — |  |
-| `descricao` | TEXT | sim | — |  |
-| `status` | TEXT | sim | — |  |
+| `tabela` | TEXT | sim | — |  |
+| `registro_id` | INTEGER | sim | — |  |
+| `evento` | TEXT | sim | — |  |
+| `mfiles` | INTEGER | sim | 0 |  |
+| `drive` | INTEGER | sim | 0 |  |
+| `email` | INTEGER | sim | 0 |  |
+| `selecao_anterior` | TEXT | não | — |  |
+| `usuario` | TEXT | sim | — |  |
+| `data_hora` | TEXT | sim | — |  |
+
+**Índices:**
+- `idx_resumo_conclusao_historico_registro` em (tabela, registro_id)
 
 ## `cadastro_prestadores` (38 linha(s))
 
@@ -256,6 +311,28 @@ Total de tabelas: **45** · Total de linhas: **13228**
 - `idx_cadastro_prestadores_codigo` em (codigo)
 - `sqlite_autoindex_cadastro_prestadores_1` (único) em (codigo)
 
+## `importacoes_planilha_historico` (38 linha(s))
+
+| Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
+|---|---|---|---|---|
+| `id` | INTEGER | não | — | sim |
+| `data_hora` | TEXT | sim | — |  |
+| `usuario` | TEXT | sim | — |  |
+| `nome_arquivo` | TEXT | sim | — |  |
+| `origem` | TEXT | sim | — |  |
+| `lidos` | INTEGER | sim | 0 |  |
+| `novos` | INTEGER | sim | 0 |  |
+| `atualizados` | INTEGER | sim | 0 |  |
+| `conflitos_tratados` | INTEGER | sim | 0 |  |
+| `ignorados` | INTEGER | sim | 0 |  |
+| `inconsistencias` | INTEGER | sim | 0 |  |
+| `resultado` | TEXT | sim | — |  |
+| `erro` | TEXT | não | — |  |
+| `backup_ref` | TEXT | não | — |  |
+
+**Índices:**
+- `idx_importacoes_planilha_historico_data` em (data_hora)
+
 ## `codigos_disciplina` (35 linha(s))
 
 | Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
@@ -266,7 +343,7 @@ Total de tabelas: **45** · Total de linhas: **13228**
 | `atualizado_em` | TEXT | sim | — |  |
 | `atualizado_por` | TEXT | sim | — |  |
 
-## `usuarios` (31 linha(s))
+## `usuarios` (32 linha(s))
 
 | Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
 |---|---|---|---|---|
@@ -289,64 +366,71 @@ Total de tabelas: **45** · Total de linhas: **13228**
 **Índices:**
 - `sqlite_autoindex_usuarios_1` (único) em (username)
 
-## `resumo_conclusao_historico` (22 linha(s))
+## `avaliacoes_checklist` (30 linha(s))
+
+| Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
+|---|---|---|---|---|
+| `id` | INTEGER | não | — | sim |
+| `tipo_entidade` | TEXT | sim | — |  |
+| `codigo_entidade` | TEXT | não | — |  |
+| `nome_entidade` | TEXT | sim | — |  |
+| `disciplina` | TEXT | não | — |  |
+| `projeto_id` | INTEGER | não | — |  |
+| `at_referencia` | TEXT | não | — |  |
+| `revisao` | INTEGER | não | — |  |
+| `data_avaliacao` | TEXT | sim | — |  |
+| `analista_responsavel` | TEXT | não | — |  |
+| `respostas_json` | TEXT | sim | — |  |
+| `pontuacao` | INTEGER | sim | — |  |
+| `classificacao` | TEXT | sim | — |  |
+| `acompanhamento` | TEXT | sim | — |  |
+| `observacoes_gerais` | TEXT | não | — |  |
+| `criado_em` | TEXT | sim | — |  |
+| `criado_por` | TEXT | não | — |  |
+| `obra_id` | INTEGER | não | — |  |
+| `nome_projetista` | TEXT | não | — |  |
+
+**Índices:**
+- `idx_avaliacoes_checklist_obra` em (obra_id)
+- `idx_avaliacoes_checklist_projeto` em (projeto_id)
+- `idx_avaliacoes_checklist_entidade` em (tipo_entidade, codigo_entidade, disciplina)
+
+## `arquivo_auditoria` (23 linha(s))
 
 | Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
 |---|---|---|---|---|
 | `id` | INTEGER | não | — | sim |
 | `tabela` | TEXT | sim | — |  |
 | `registro_id` | INTEGER | sim | — |  |
-| `evento` | TEXT | sim | — |  |
-| `mfiles` | INTEGER | sim | 0 |  |
-| `drive` | INTEGER | sim | 0 |  |
-| `email` | INTEGER | sim | 0 |  |
-| `selecao_anterior` | TEXT | não | — |  |
+| `tipo_operacao` | TEXT | sim | — |  |
 | `usuario` | TEXT | sim | — |  |
 | `data_hora` | TEXT | sim | — |  |
+| `justificativa` | TEXT | não | — |  |
+| `descricao_registro` | TEXT | não | — |  |
+| `origem` | TEXT | não | — |  |
 
 **Índices:**
-- `idx_resumo_conclusao_historico_registro` em (tabela, registro_id)
+- `idx_arquivo_auditoria_tabela` em (tabela, registro_id)
 
-## `importacoes_planilha_historico` (14 linha(s))
+## `avaliacao_checklist_perguntas` (18 linha(s))
 
 | Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
 |---|---|---|---|---|
 | `id` | INTEGER | não | — | sim |
-| `data_hora` | TEXT | sim | — |  |
-| `usuario` | TEXT | sim | — |  |
-| `nome_arquivo` | TEXT | sim | — |  |
-| `origem` | TEXT | sim | — |  |
-| `lidos` | INTEGER | sim | 0 |  |
-| `novos` | INTEGER | sim | 0 |  |
-| `atualizados` | INTEGER | sim | 0 |  |
-| `conflitos_tratados` | INTEGER | sim | 0 |  |
-| `ignorados` | INTEGER | sim | 0 |  |
-| `inconsistencias` | INTEGER | sim | 0 |  |
-| `resultado` | TEXT | sim | — |  |
-| `erro` | TEXT | não | — |  |
-| `backup_ref` | TEXT | não | — |  |
-
-**Índices:**
-- `idx_importacoes_planilha_historico_data` em (data_hora)
-
-## `backups_historico` (11 linha(s))
-
-| Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
-|---|---|---|---|---|
-| `id` | INTEGER | não | — | sim |
-| `arquivo` | TEXT | sim | — |  |
-| `tipo` | TEXT | sim | 'AUTOMATICO' |  |
-| `usuario` | TEXT | não | — |  |
-| `tamanho_bytes` | INTEGER | não | — |  |
+| `categoria` | TEXT | sim | — |  |
+| `texto` | TEXT | sim | — |  |
+| `ordem_categoria` | INTEGER | sim | — |  |
+| `ordem_pergunta` | INTEGER | sim | — |  |
+| `ativo` | INTEGER | sim | 1 |  |
 | `criado_em` | TEXT | sim | — |  |
-| `situacao` | TEXT | sim | 'OK' |  |
-| `observacoes` | TEXT | não | — |  |
+| `criado_por` | TEXT | não | — |  |
+| `atualizado_em` | TEXT | não | — |  |
+| `atualizado_por` | TEXT | não | — |  |
 
 **Índices:**
-- `idx_backups_historico_arquivo` em (arquivo)
-- `sqlite_autoindex_backups_historico_1` (único) em (arquivo)
+- `idx_avaliacao_checklist_perguntas_ordem` em (ativo, ordem_categoria, ordem_pergunta)
 
-## `alertas_radar` (10 linha(s))
+## `alertas_radar` (13 linha(s))
 
 | Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
 |---|---|---|---|---|
@@ -369,23 +453,6 @@ Total de tabelas: **45** · Total de linhas: **13228**
 - `idx_alertas_radar_projeto` em (modulo, projeto_id)
 - `sqlite_autoindex_alertas_radar_1` (único) em (modulo, projeto_id, tipo_alerta)
 
-## `arquivo_auditoria` (5 linha(s))
-
-| Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
-|---|---|---|---|---|
-| `id` | INTEGER | não | — | sim |
-| `tabela` | TEXT | sim | — |  |
-| `registro_id` | INTEGER | sim | — |  |
-| `tipo_operacao` | TEXT | sim | — |  |
-| `usuario` | TEXT | sim | — |  |
-| `data_hora` | TEXT | sim | — |  |
-| `justificativa` | TEXT | não | — |  |
-| `descricao_registro` | TEXT | não | — |  |
-| `origem` | TEXT | não | — |  |
-
-**Índices:**
-- `idx_arquivo_auditoria_tabela` em (tabela, registro_id)
-
 ## `configuracoes` (5 linha(s))
 
 | Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
@@ -393,33 +460,21 @@ Total de tabelas: **45** · Total de linhas: **13228**
 | `chave` | TEXT | não | — | sim |
 | `valor` | TEXT | sim | — |  |
 
-## `avaliacoes_checklist` (4 linha(s))
+## `repactuacoes_prazo` (4 linha(s))
 
 | Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
 |---|---|---|---|---|
 | `id` | INTEGER | não | — | sim |
-| `tipo_entidade` | TEXT | sim | — |  |
-| `codigo_entidade` | TEXT | não | — |  |
-| `nome_entidade` | TEXT | sim | — |  |
-| `disciplina` | TEXT | não | — |  |
-| `projeto_id` | INTEGER | não | — |  |
-| `at_referencia` | TEXT | não | — |  |
-| `revisao` | INTEGER | não | — |  |
-| `data_avaliacao` | TEXT | sim | — |  |
-| `analista_responsavel` | TEXT | não | — |  |
-| `respostas_json` | TEXT | sim | — |  |
-| `pontuacao` | INTEGER | sim | — |  |
-| `classificacao` | TEXT | sim | — |  |
-| `acompanhamento` | TEXT | sim | — |  |
-| `observacoes_gerais` | TEXT | não | — |  |
-| `criado_em` | TEXT | sim | — |  |
-| `criado_por` | TEXT | não | — |  |
-| `obra_id` | INTEGER | não | — |  |
+| `tabela` | TEXT | sim | — |  |
+| `registro_id` | INTEGER | sim | — |  |
+| `data_anterior` | TEXT | não | — |  |
+| `data_nova` | TEXT | não | — |  |
+| `motivo` | TEXT | sim | — |  |
+| `usuario` | TEXT | não | — |  |
+| `data_hora` | TEXT | sim | — |  |
 
 **Índices:**
-- `idx_avaliacoes_checklist_obra` em (obra_id)
-- `idx_avaliacoes_checklist_projeto` em (projeto_id)
-- `idx_avaliacoes_checklist_entidade` em (tipo_entidade, codigo_entidade, disciplina)
+- `idx_repactuacoes_prazo_registro` em (tabela, registro_id)
 
 ## `alertas_manuais` (1 linha(s))
 
@@ -526,6 +581,20 @@ Total de tabelas: **45** · Total de linhas: **13228**
 | `motivo_arquivamento` | TEXT | não | — |  |
 | `arquivado_teste` | INTEGER | sim | 0 |  |
 
+## `alertas_pessoais_vistos` (0 linha(s))
+
+| Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
+|---|---|---|---|---|
+| `id` | INTEGER | não | — | sim |
+| `usuario` | TEXT | sim | — |  |
+| `tipo` | TEXT | sim | — |  |
+| `chave` | TEXT | sim | — |  |
+| `visto_em` | TEXT | sim | — |  |
+
+**Índices:**
+- `idx_alertas_pessoais_vistos_usuario` em (usuario, tipo)
+- `sqlite_autoindex_alertas_pessoais_vistos_1` (único) em (usuario, tipo, chave)
+
 ## `avaliacao_obrigatoria_isentos` (0 linha(s))
 
 | Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
@@ -580,6 +649,19 @@ Total de tabelas: **45** · Total de linhas: **13228**
 | `observacoes` | TEXT | não | — |  |
 | `criado_em` | TEXT | sim | — |  |
 | `criado_por` | TEXT | não | — |  |
+
+## `cessionarios_ativos` (0 linha(s))
+
+| Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
+|---|---|---|---|---|
+| `id` | INTEGER | não | — | sim |
+| `categoria` | TEXT | sim | — |  |
+| `quantidade` | INTEGER | sim | 0 |  |
+| `ordem` | INTEGER | sim | 0 |  |
+| `criado_em` | TEXT | sim | — |  |
+| `criado_por` | TEXT | não | — |  |
+| `atualizado_em` | TEXT | não | — |  |
+| `atualizado_por` | TEXT | não | — |  |
 
 ## `devolutiva_cobrancas` (0 linha(s))
 
@@ -903,22 +985,6 @@ Total de tabelas: **45** · Total de linhas: **13228**
 
 **Índices:**
 - `idx_pmo_riscos_projeto` em (projeto_id)
-
-## `repactuacoes_prazo` (0 linha(s))
-
-| Coluna | Tipo (SQLite) | Obrigatória | Padrão | PK |
-|---|---|---|---|---|
-| `id` | INTEGER | não | — | sim |
-| `tabela` | TEXT | sim | — |  |
-| `registro_id` | INTEGER | sim | — |  |
-| `data_anterior` | TEXT | não | — |  |
-| `data_nova` | TEXT | não | — |  |
-| `motivo` | TEXT | sim | — |  |
-| `usuario` | TEXT | não | — |  |
-| `data_hora` | TEXT | sim | — |  |
-
-**Índices:**
-- `idx_repactuacoes_prazo_registro` em (tabela, registro_id)
 
 ## `reuniao_participantes` (0 linha(s))
 
