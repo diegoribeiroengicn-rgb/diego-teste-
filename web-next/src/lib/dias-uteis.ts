@@ -120,3 +120,13 @@ export function calcularHoldDias(holdInicio: string | null, holdFim: string | nu
 export function emHold(holdInicio: string | null, holdFim: string | null): boolean {
   return paraData(holdInicio) !== null && paraData(holdFim) === null;
 }
+
+/** Dias corridos (calendário cheio, sem descontar fim de semana/feriado)
+ * entre duas datas — usado onde a regra de negócio conta tempo corrido,
+ * não dias úteis (ex.: dias sem PEP, janela de atraso do dashboard). */
+export function diasCorridosEntre(dataInicio: string | null, dataFim: string | null): number | null {
+  const inicio = paraData(dataInicio);
+  const fim = paraData(dataFim);
+  if (!inicio || !fim) return null;
+  return Math.round((fim.getTime() - inicio.getTime()) / 86400000);
+}

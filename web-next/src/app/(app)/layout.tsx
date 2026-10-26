@@ -1,9 +1,7 @@
-import Image from "next/image";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { obterSessao } from "@/lib/session";
-import { LogoutButton } from "@/components/logout-button";
-import { NavSidebar, type GrupoNav } from "@/components/nav-sidebar";
+import { AppShell } from "@/components/app-shell";
+import type { GrupoNav } from "@/components/nav-sidebar";
 
 // Toda a área autenticada depende de sessão (cookie) — nunca é candidata
 // a página estática/prerenderizada.
@@ -42,6 +40,7 @@ const GRUPOS_NAV: GrupoNav[] = [
     itens: [
       { rotulo: "Painel Consolidado", href: "/consolidado" },
       { rotulo: "Lista de Prioridades", href: "/prioridades" },
+      { rotulo: "Lembretes (Sem PEP)", href: "/lembretes-pep" },
       { rotulo: "Painel de Analistas", href: "/analistas" },
       { rotulo: "Histórico de Atividades", href: "/atividades" },
     ],
@@ -55,26 +54,8 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="flex w-64 shrink-0 flex-col border-r border-(--color-border) bg-(--color-surface-1) px-4 py-5">
-        <div className="mb-6 flex items-center gap-2 px-2">
-          <Image src="/tecnoplano_logo.png" alt="Tecnoplano" width={120} height={44} className="h-8 w-auto" />
-        </div>
-
-        <NavSidebar grupos={GRUPOS_NAV} />
-
-        <div className="border-t border-(--color-border) pt-4">
-          <Link href="/perfil" className="block rounded-lg px-2 py-1 hover:bg-(--color-surface-2)">
-            <p className="truncate text-sm font-medium text-(--color-text)">
-              {sessao.nomeCompleto || sessao.username}
-            </p>
-            <p className="text-xs text-(--color-text-weak)">{sessao.perfil}</p>
-          </Link>
-          <LogoutButton />
-        </div>
-      </aside>
-
-      <main className="flex-1 bg-(--color-bg)">{children}</main>
-    </div>
+    <AppShell grupos={GRUPOS_NAV} nome={sessao.nomeCompleto || sessao.username} perfil={sessao.perfil}>
+      {children}
+    </AppShell>
   );
 }
