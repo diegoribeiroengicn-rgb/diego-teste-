@@ -28,6 +28,7 @@ const GRUPOS_NAV: GrupoNav[] = [
       { rotulo: "Em HOLD", href: "/cessionarios/em-hold" },
       { rotulo: "Cadastro", href: "/cessionarios/cadastro" },
       { rotulo: "Cessionários Ativos", href: "/cessionarios/ativos" },
+      { rotulo: "One Page Report", href: "/cessionarios/opr" },
     ],
   },
   {
