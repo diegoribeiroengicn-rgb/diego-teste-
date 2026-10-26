@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { obterPool } from "@/lib/db";
 import { criarSessao } from "@/lib/session";
+import { registrarAtividade } from "@/lib/atividades";
 
 // Autenticação contra a MESMA tabela `usuarios` do GAT (Streamlit) — senha
 // com hash bcrypt já existente, sem recriar nenhuma conta. Mantém a
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
   pool
     .query("UPDATE usuarios SET ultimo_acesso = $1 WHERE username = $2", [new Date().toISOString(), linha.username])
     .catch((exc) => console.error("[login] falha ao registrar último acesso:", exc));
+  void registrarAtividade(linha.username, linha.perfil, "LOGIN", "web-next");
 
   return NextResponse.json({ usuario: usuarioSessao });
 }
