@@ -42,6 +42,7 @@ const GRUPOS_NAV: GrupoNav[] = [
       { rotulo: "Lista de Prioridades", href: "/prioridades" },
       { rotulo: "Lembretes (Sem PEP)", href: "/lembretes-pep" },
       { rotulo: "Painel de Analistas", href: "/analistas" },
+      { rotulo: "KPIs de Prazo dos Analistas", href: "/analistas/prazo" },
       { rotulo: "Histórico de Atividades", href: "/atividades" },
     ],
   },
