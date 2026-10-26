@@ -78,6 +78,7 @@ export function TabelaProjetos({
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="text-xs font-medium text-(--color-text-dim)">
+              <th className="px-5 py-3">Item</th>
               <th className="px-5 py-3">Código</th>
               <th className="px-5 py-3">{colunaEntidade}</th>
               <th className="px-5 py-3">Disciplina</th>
@@ -91,13 +92,14 @@ export function TabelaProjetos({
           <tbody>
             {projetos.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-5 py-16 text-center text-(--color-text-weak)">
+                <td colSpan={9} className="px-5 py-16 text-center text-(--color-text-weak)">
                   Nenhum projeto encontrado.
                 </td>
               </tr>
             ) : (
               projetos.map((p) => (
                 <tr key={p.id} className="border-t border-(--color-border) first:border-0 hover:bg-(--color-surface-2)/60">
+                  <td className="px-5 py-3.5 tabular-nums text-(--color-text-weak)">{p.item ?? "—"}</td>
                   <td className="px-5 py-3.5 font-medium text-(--color-text)">{p.codigo}</td>
                   <td className="px-5 py-3.5 text-(--color-text)">{p.entidade}</td>
                   <td className="px-5 py-3.5 text-(--color-text-weak)">{p.disciplina}</td>

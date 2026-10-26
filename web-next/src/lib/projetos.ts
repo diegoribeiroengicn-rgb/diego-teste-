@@ -2,6 +2,7 @@ import { obterPool } from "@/lib/db";
 
 export type Projeto = {
   id: number;
+  item: number | null;
   codigo: string;
   entidade: string;
   disciplina: string;
@@ -37,7 +38,7 @@ export async function buscarProjetos(
   }
 
   const { rows } = await pool.query<Omit<Projeto, "entidade"> & Record<string, unknown>>(
-    `SELECT id, codigo, "${colunaEntidade}" AS entidade, disciplina, revisao, status_analise, num_at, data_limite, responsavel
+    `SELECT id, item, codigo, "${colunaEntidade}" AS entidade, disciplina, revisao, status_analise, num_at, data_limite, responsavel
      FROM ${tabela}
      WHERE ${condicoes.join(" AND ")}
      ORDER BY data_limite ASC NULLS LAST
