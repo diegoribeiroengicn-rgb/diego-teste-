@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { obterSessao } from "@/lib/session";
 import { LogoutButton } from "@/components/logout-button";
@@ -54,10 +55,12 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
         <NavSidebar grupos={GRUPOS_NAV} />
 
         <div className="border-t border-(--color-border) pt-4">
-          <p className="truncate px-2 text-sm font-medium text-(--color-text)">
-            {sessao.nomeCompleto || sessao.username}
-          </p>
-          <p className="px-2 text-xs text-(--color-text-weak)">{sessao.perfil}</p>
+          <Link href="/perfil" className="block rounded-lg px-2 py-1 hover:bg-(--color-surface-2)">
+            <p className="truncate text-sm font-medium text-(--color-text)">
+              {sessao.nomeCompleto || sessao.username}
+            </p>
+            <p className="text-xs text-(--color-text-weak)">{sessao.perfil}</p>
+          </Link>
           <LogoutButton />
         </div>
       </aside>

@@ -56,5 +56,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Best-effort — não deve derrubar o login se falhar.
+  pool
+    .query("UPDATE usuarios SET ultimo_acesso = $1 WHERE username = $2", [new Date().toISOString(), linha.username])
+    .catch((exc) => console.error("[login] falha ao registrar último acesso:", exc));
+
   return NextResponse.json({ usuario: usuarioSessao });
 }
