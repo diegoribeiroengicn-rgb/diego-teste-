@@ -71,6 +71,34 @@ function diasUteisEntreDatas(dataInicio: Date, dataFim: Date): number {
   return contador * sinal;
 }
 
+/** Equivalente a WORKDAY do Excel: soma `quantidade` dias úteis a
+ * `dataBase`, pulando fins de semana e feriados do RJ (`quantidade`
+ * negativo subtrai). Mesma regra de gat/calendario.py::somar_dias_uteis. */
+export function somarDiasUteis(dataBase: Date | null, quantidade: number): Date | null {
+  if (!dataBase) return null;
+  const direcao = quantidade >= 0 ? 1 : -1;
+  let restante = Math.abs(quantidade);
+  const cursor = new Date(dataBase);
+  while (restante > 0) {
+    cursor.setUTCDate(cursor.getUTCDate() + direcao);
+    const diaSemana = cursor.getUTCDay();
+    if (diaSemana !== 0 && diaSemana !== 6 && !ehFeriado(cursor)) restante--;
+  }
+  return cursor;
+}
+
+/** Data limite/prevista de entrega a partir da data de solicitação e do
+ * SLA em dias úteis — replica a fórmula original da planilha:
+ * WORKDAY(data_solicitacao - 1, sla, feriados). Mesma regra de
+ * gat/calendario.py::calcular_data_limite. */
+export function calcularDataLimite(dataSolicitacao: string | null, slaDiasUteis: number): Date | null {
+  const base = paraData(dataSolicitacao);
+  if (!base) return null;
+  const menosUm = new Date(base);
+  menosUm.setUTCDate(menosUm.getUTCDate() - 1);
+  return somarDiasUteis(menosUm, slaDiasUteis);
+}
+
 /** Equivalente a NETWORKDAYS do Excel: dias úteis entre duas datas
  * (inclusive), descontando fins de semana e feriados do RJ. */
 export function diasUteisEntre(dataInicio: string | null, dataFim: string | null): number {

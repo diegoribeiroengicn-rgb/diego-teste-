@@ -20,6 +20,25 @@ export const DISCIPLINAS = [
   "HVAC", "GERAL", "DRENAGEM",
 ];
 
+export const DISCIPLINAS_SLA = [
+  "ARQUITETURA", "ELÉTRICA", "INSTALAÇÕES HIDROSSANITÁRIAS", "SPK",
+  "DETECÇÃO", "SINAL. EMERGÊNCIA/R. DE FUGA/EXTINTORES", "HVAC", "CIVIL",
+  "PAVIMENTO", "ART/RRT", "ESTRUTURAS",
+];
+
+/** EM HOLD e RIOGALEÃO são os dois status de pendência "aguardando
+ * terceiro" de Cessionários — não inverter: EM HOLD = a análise depende
+ * de um retorno do projetista; RIOGALEÃO = depende de uma resposta do
+ * próprio RIOgaleão. Mesma lista de gat/config.py::STATUS_ANALISE_OPCOES. */
+export const STATUS_ANALISE_OPCOES = [
+  "EM ANÁLISE", "LIBERADO", "LIBERADO C/ REST.", "NÃO LIBERADO",
+  "EM HOLD", "RIOGALEÃO", "OBSOLETO", "CANCELADO",
+];
+
+export const TIPO_CESSIONARIO_OPCOES = ["Quiosque", "Loja", "Externo", "Outros"];
+
+export const ETG_OPCOES = ["NÃO", "SIM"];
+
 /** Mesma lista de views/administracao.py::_TIPOS_HISTORICO — "reunioes"
  * e "planos_acao" nunca têm linhas (área cortada do sistema), mas a
  * opção de filtro continua existindo para não quebrar quem já viu o

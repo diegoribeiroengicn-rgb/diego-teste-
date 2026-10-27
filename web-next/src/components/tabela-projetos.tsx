@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { BuscaAnalista } from "@/components/busca-analista";
 import { BotaoDarBaixa } from "@/components/dar-baixa";
 import type { Projeto } from "@/lib/projetos";
@@ -33,6 +34,8 @@ export function TabelaProjetos({
   busca,
   analistaProprio,
   temAnalistaProprio,
+  podeCadastrar,
+  podeEditar,
 }: {
   titulo: string;
   colunaEntidade: string;
@@ -41,6 +44,8 @@ export function TabelaProjetos({
   busca: string;
   analistaProprio: string | null | undefined;
   temAnalistaProprio: boolean;
+  podeCadastrar?: boolean;
+  podeEditar?: boolean;
 }) {
   const porStatus = contagemPorStatus(projetos);
 
@@ -57,7 +62,17 @@ export function TabelaProjetos({
                 : "Todas as análises"}
           </p>
         </div>
-        <BuscaAnalista valorInicial={busca} />
+        <div className="flex items-end gap-3">
+          <BuscaAnalista valorInicial={busca} />
+          {podeCadastrar && (
+            <Link
+              href={`/${tabela}/analise/novo`}
+              className="rounded-full bg-(--color-navy) px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+            >
+              Novo Cadastro
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
@@ -115,7 +130,17 @@ export function TabelaProjetos({
                   <td className="px-5 py-3.5 text-(--color-text-weak)">{formatarData(p.data_limite)}</td>
                   <td className="px-5 py-3.5 text-(--color-text-weak)">{p.responsavel || "—"}</td>
                   <td className="px-5 py-3.5">
-                    <BotaoDarBaixa tabela={tabela} projetoId={p.id} statusAtual={p.status_analise} />
+                    <div className="flex items-center gap-2">
+                      {podeEditar && (
+                        <Link
+                          href={`/${tabela}/analise/${p.id}`}
+                          className="rounded-full border border-(--color-border) px-3 py-1 text-xs font-medium text-(--color-text) hover:bg-(--color-surface-2)"
+                        >
+                          Editar
+                        </Link>
+                      )}
+                      <BotaoDarBaixa tabela={tabela} projetoId={p.id} statusAtual={p.status_analise} />
+                    </div>
                   </td>
                 </tr>
               ))

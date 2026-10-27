@@ -1,5 +1,6 @@
 import { buscarProjetos } from "@/lib/projetos";
 import { obterSessao } from "@/lib/session";
+import { areaPermitida } from "@/lib/permissoes";
 import { TabelaProjetos } from "@/components/tabela-projetos";
 
 export default async function PaginaProjetosPrestadores({
@@ -11,6 +12,8 @@ export default async function PaginaProjetosPrestadores({
   const { q } = await searchParams;
   const busca = (q || "").trim();
   const analistaProprio = sessao?.analistaVinculado || null;
+  const podeCadastrar = sessao ? await areaPermitida(sessao.id, sessao.perfil, "prestadores.cadastrar") : false;
+  const podeEditar = sessao ? await areaPermitida(sessao.id, sessao.perfil, "prestadores.editar") : false;
 
   const projetos = await buscarProjetos("prestadores", { termoResponsavel: busca, analistaProprio });
 
@@ -23,6 +26,8 @@ export default async function PaginaProjetosPrestadores({
       busca={busca}
       analistaProprio={analistaProprio}
       temAnalistaProprio={!!analistaProprio}
+      podeCadastrar={podeCadastrar}
+      podeEditar={podeEditar}
     />
   );
 }
