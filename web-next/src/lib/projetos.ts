@@ -61,3 +61,34 @@ export async function buscarProjetos(
   );
   return rows as unknown as Projeto[];
 }
+
+export type ProjetoComOrigem = Projeto & { origem: Tabela };
+
+/** Mesma busca de `buscarProjetos`, mas junta prestadores e cessionários
+ * em uma única lista (usado pelo GAT Mobile, que não separa as telas por
+ * módulo) — reordenada no mesmo critério (analista logado primeiro, por
+ * data limite) depois de unir os dois resultados. */
+export async function buscarProjetosCombinados(
+  opcoes: { termoResponsavel: string; analistaProprio?: string | null; statusEntre?: string[] },
+): Promise<ProjetoComOrigem[]> {
+  const [prestadores, cessionarios] = await Promise.all([
+    buscarProjetos("prestadores", opcoes),
+    buscarProjetos("cessionarios", opcoes),
+  ]);
+  const combinados: ProjetoComOrigem[] = [
+    ...prestadores.map((p) => ({ ...p, origem: "prestadores" as const })),
+    ...cessionarios.map((p) => ({ ...p, origem: "cessionarios" as const })),
+  ];
+  const proprio = (opcoes.analistaProprio || "").toUpperCase();
+  combinados.sort((a, b) => {
+    if (proprio) {
+      const aProprio = (a.responsavel || "").toUpperCase() === proprio;
+      const bProprio = (b.responsavel || "").toUpperCase() === proprio;
+      if (aProprio !== bProprio) return aProprio ? -1 : 1;
+    }
+    if (!a.data_limite) return 1;
+    if (!b.data_limite) return -1;
+    return a.data_limite.localeCompare(b.data_limite);
+  });
+  return combinados;
+}
