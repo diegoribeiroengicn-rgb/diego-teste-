@@ -59,7 +59,9 @@ function Etapa({ titulo, data, dias, responsavel, observacao }: { titulo: string
   );
 }
 
-function SequenciaProjeto({ linhasProjeto }: { linhasProjeto: LinhaRevisao[] }) {
+/** Exportado para reaproveitamento fora deste módulo (ex.: Localização
+ * de ATs) — mesma sequência cronológica, sem duplicar a lógica. */
+export function SequenciaProjeto({ linhasProjeto }: { linhasProjeto: LinhaRevisao[] }) {
   const ordenado = [...linhasProjeto].sort((a, b) => a.revisao - b.revisao);
   return (
     <div className="space-y-3">

@@ -59,11 +59,15 @@ export type LinhaRevisao = {
   observacoes: string | null;
 };
 
-function chaveEntidade(linha: Pick<LinhaRevisao, "codigo" | "nome">): string {
+export function chaveEntidade(linha: Pick<LinhaRevisao, "codigo" | "nome">): string {
   return linha.codigo && linha.codigo.trim() ? linha.codigo : linha.nome || "";
 }
 
-function chaveProjeto(linha: LinhaRevisao): string {
+/** Chave de um projeto (código/nome + N° AT + disciplina, sem acentos) —
+ * mesmo critério de gat.revisoes.projetos_por_entidade, reaproveitado
+ * fora deste módulo (ex.: Localização de ATs) para marcar a revisão mais
+ * recente de cada projeto sem duplicar a lógica de agrupamento. */
+export function chaveProjeto(linha: LinhaRevisao): string {
   const entidade = chaveEntidade(linha);
   if (atValido(linha.numAt)) {
     return `${entidade}||${linha.numAt}||${textoSemAcentos(linha.disciplina)}`;
