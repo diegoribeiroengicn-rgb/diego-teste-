@@ -58,7 +58,10 @@ const GRUPOS_NAV: GrupoNav[] = [
   },
   {
     titulo: "Sistema",
-    itens: [{ rotulo: "Manual do Sistema", href: "/manual-sistema" }],
+    itens: [
+      { rotulo: "Manual do Sistema", href: "/manual-sistema" },
+      { rotulo: "Administração", href: "/administracao" },
+    ],
   },
 ];
 
