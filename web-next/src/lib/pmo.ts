@@ -10,6 +10,7 @@ import {
   proximoLembreteCronograma,
   proximoMarco,
   type AlertaPmo,
+  type AtividadeComCpm,
   type AtividadeCronograma,
   type Comunicacao,
   type Entregavel,
@@ -229,6 +230,193 @@ export async function obterAlertaCronograma(projetoId: number): Promise<AlertaCr
   const pool = obterPool();
   const { rows } = await pool.query<AlertaCronograma>("SELECT * FROM pmo_alertas_cronograma WHERE projeto_id = $1", [projetoId]);
   return rows[0] ?? null;
+}
+
+/** Mesma regra de gat/database.py::encerrar_alerta_manual, reaproveitada
+ * pelo PMO ao encerrar o alerta de cronograma pendente assim que um
+ * cronograma é anexado. */
+async function encerrarAlertaManualPmo(alertaId: number, motivo: string, usuario: string): Promise<void> {
+  const pool = obterPool();
+  const agora = new Date().toISOString();
+  await pool.query(
+    "UPDATE alertas_manuais SET status = 'ENCERRADO', motivo_encerramento = $1, encerrado_por = $2, encerrado_em = $3 WHERE id = $4",
+    [motivo, usuario, agora, alertaId],
+  );
+  await registrarHistorico("alertas_manuais", alertaId, { status: "ABERTO" }, { status: "ENCERRADO", motivo_encerramento: motivo }, usuario);
+}
+
+/** Mesma regra de gat/database.py::reabrir_alerta_manual. */
+async function reabrirAlertaManualPmo(alertaId: number, usuario: string): Promise<void> {
+  const pool = obterPool();
+  await pool.query(
+    "UPDATE alertas_manuais SET status = 'ABERTO', motivo_encerramento = NULL, encerrado_por = NULL, encerrado_em = NULL WHERE id = $1",
+    [alertaId],
+  );
+  await registrarHistorico("alertas_manuais", alertaId, { status: "ENCERRADO" }, { status: "ABERTO" }, usuario);
+}
+
+async function obterAlertaManualPmo(alertaId: number): Promise<{ id: number } | null> {
+  const pool = obterPool();
+  const { rows } = await pool.query<{ id: number }>("SELECT id FROM alertas_manuais WHERE id = $1", [alertaId]);
+  return rows[0] ?? null;
+}
+
+/** Encerra o alerta de cronograma pendente assim que um cronograma é
+ * anexado — mesma regra de
+ * gat/pmo_database.py::_encerrar_alerta_cronograma. */
+async function encerrarAlertaCronograma(projetoId: number, usuario: string): Promise<void> {
+  const estado = await obterAlertaCronograma(projetoId);
+  if (!estado || estado.status !== "ATIVO") return;
+  const pool = obterPool();
+  const agora = new Date().toISOString();
+  await pool.query(
+    "UPDATE pmo_alertas_cronograma SET status = 'ENCERRADO', encerrado_em = $1, anexado_por = $2, anexado_em = $3 WHERE projeto_id = $4",
+    [agora, usuario, agora, projetoId],
+  );
+  await registrarHistorico("pmo_alertas_cronograma", estado.id, { status: "ATIVO" }, { status: "ENCERRADO", anexado_por: usuario }, usuario);
+  if (estado.alerta_manual_id) await encerrarAlertaManualPmo(estado.alerta_manual_id, "Cronograma anexado.", usuario);
+}
+
+/** Reativa o alerta de cronograma pendente quando o cronograma ativo é
+ * removido, reiniciando a contagem dos lembretes — mesma regra de
+ * gat/pmo_database.py::_reativar_alerta_cronograma. */
+async function reativarAlertaCronograma(projetoId: number, usuario: string): Promise<void> {
+  const estado = await obterAlertaCronograma(projetoId);
+  if (!estado) {
+    await criarAlertaCronogramaPendente(projetoId, usuario);
+    return;
+  }
+  if (estado.status === "ATIVO") return;
+
+  const pool = obterPool();
+  const proximo = proximoLembreteCronograma(new Date()).toISOString().slice(0, 10);
+  await pool.query(
+    "UPDATE pmo_alertas_cronograma SET status = 'ATIVO', qtd_lembretes = 0, ultimo_lembrete_em = NULL, " +
+      "proximo_lembrete_em = $1, encerrado_em = NULL, anexado_por = NULL, anexado_em = NULL WHERE projeto_id = $2",
+    [proximo, projetoId],
+  );
+  await registrarHistorico("pmo_alertas_cronograma", estado.id, { status: "ENCERRADO" }, { status: "ATIVO" }, usuario);
+
+  const alertaExiste = estado.alerta_manual_id ? await obterAlertaManualPmo(estado.alerta_manual_id) : null;
+  if (estado.alerta_manual_id && alertaExiste) {
+    await reabrirAlertaManualPmo(estado.alerta_manual_id, usuario);
+  } else {
+    await criarAlertaCronogramaPendente(projetoId, usuario);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Cronograma — anexar, remover, documentos e lembretes
+// ---------------------------------------------------------------------------
+
+export type ArquivoCronograma = {
+  id: number;
+  projeto_id: number;
+  nome_arquivo: string;
+  formato: string;
+  interpretado: boolean;
+  ativo: boolean;
+  enviado_por: string;
+  enviado_em: string;
+  removido_por: string | null;
+  removido_em: string | null;
+};
+
+/** Registra um novo arquivo de cronograma como o cronograma ativo do
+ * projeto — o(s) arquivo(s) anterior(es) não são apagados, apenas ficam
+ * marcados como inativos (histórico completo preservado). Quando
+ * `atividades` é informado (interpretação automática disponível para
+ * Excel e Primavera XER), já grava as atividades com o caminho crítico
+ * calculado. Encerra automaticamente o alerta de cronograma pendente.
+ * Mesma regra de gat/pmo_database.py::anexar_cronograma. */
+export async function anexarCronograma(
+  projetoId: number, nomeArquivo: string, formato: string, conteudo: Buffer,
+  atividades: AtividadeComCpm[] | null, usuario: string,
+): Promise<number> {
+  const pool = obterPool();
+  const agora = new Date().toISOString();
+
+  await pool.query(
+    "UPDATE pmo_cronograma_arquivos SET ativo = false, removido_por = $1, removido_em = $2 WHERE projeto_id = $3 AND ativo = true",
+    [usuario, agora, projetoId],
+  );
+
+  const interpretado = !!atividades?.length;
+  const { rows } = await pool.query<{ id: number }>(
+    "INSERT INTO pmo_cronograma_arquivos (projeto_id, nome_arquivo, formato, conteudo, interpretado, ativo, enviado_por, enviado_em) " +
+      "VALUES ($1,$2,$3,$4,$5,true,$6,$7) RETURNING id",
+    [projetoId, nomeArquivo, formato, conteudo, interpretado, usuario, agora],
+  );
+  const arquivoId = rows[0].id;
+
+  if (atividades?.length) {
+    for (const a of atividades) {
+      await pool.query(
+        "INSERT INTO pmo_cronograma_atividades (arquivo_id, projeto_id, identificador_origem, nome, data_inicio, data_fim, " +
+          "duracao_dias, percentual_concluido, e_marco, predecessoras, caminho_critico, folga_dias) " +
+          "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+        [
+          arquivoId, projetoId, a.identificador_origem, a.nome, a.data_inicio, a.data_fim,
+          a.duracao_dias, a.percentual_concluido, a.e_marco, a.predecessoras, a.caminho_critico, a.folga_dias,
+        ],
+      );
+    }
+  }
+  await registrarHistorico("pmo_cronograma_arquivos", arquivoId, {}, { nome_arquivo: nomeArquivo, formato }, usuario);
+  await encerrarAlertaCronograma(projetoId, usuario);
+  return arquivoId;
+}
+
+/** Remove (soft — preserva o arquivo e as atividades para histórico) o
+ * cronograma ativo do projeto e reativa automaticamente o alerta de
+ * cronograma pendente. Mesma regra de
+ * gat/pmo_database.py::remover_cronograma_ativo. */
+export async function removerCronogramaAtivo(projetoId: number, usuario: string): Promise<void> {
+  const pool = obterPool();
+  const { rows } = await pool.query<{ id: number }>(
+    "SELECT id FROM pmo_cronograma_arquivos WHERE projeto_id = $1 AND ativo = true", [projetoId],
+  );
+  if (!rows.length) return;
+  const agora = new Date().toISOString();
+  await pool.query(
+    "UPDATE pmo_cronograma_arquivos SET ativo = false, removido_por = $1, removido_em = $2 WHERE id = $3",
+    [usuario, agora, rows[0].id],
+  );
+  await registrarHistorico("pmo_cronograma_arquivos", rows[0].id, { ativo: true }, { ativo: false }, usuario);
+  await reativarAlertaCronograma(projetoId, usuario);
+}
+
+export async function obterCronogramaAtivo(projetoId: number): Promise<ArquivoCronograma | null> {
+  const pool = obterPool();
+  const { rows } = await pool.query<ArquivoCronograma>(
+    "SELECT id, projeto_id, nome_arquivo, formato, interpretado, ativo, enviado_por, enviado_em, removido_por, removido_em " +
+      "FROM pmo_cronograma_arquivos WHERE projeto_id = $1 AND ativo = true AND arquivado_em IS NULL",
+    [projetoId],
+  );
+  return rows[0] ?? null;
+}
+
+/** Só documentos ativos — os arquivados pelo módulo Arquivo ficam
+ * disponíveis exclusivamente na tela de Arquivo. Mesma regra de
+ * gat/pmo_database.py::listar_arquivos_cronograma. */
+export async function listarArquivosCronograma(projetoId: number): Promise<ArquivoCronograma[]> {
+  const pool = obterPool();
+  const { rows } = await pool.query<ArquivoCronograma>(
+    "SELECT id, projeto_id, nome_arquivo, formato, interpretado, ativo, enviado_por, enviado_em, removido_por, removido_em " +
+      "FROM pmo_cronograma_arquivos WHERE projeto_id = $1 AND arquivado_em IS NULL ORDER BY enviado_em DESC",
+    [projetoId],
+  );
+  return rows;
+}
+
+export type LembreteCronograma = { id: number; projeto_id: number; enviado_em: string; mensagem: string };
+
+export async function listarLembretesCronograma(projetoId: number): Promise<LembreteCronograma[]> {
+  const pool = obterPool();
+  const { rows } = await pool.query<LembreteCronograma>(
+    "SELECT * FROM pmo_cronograma_lembretes WHERE projeto_id = $1 ORDER BY enviado_em DESC", [projetoId],
+  );
+  return rows;
 }
 
 // ---------------------------------------------------------------------------

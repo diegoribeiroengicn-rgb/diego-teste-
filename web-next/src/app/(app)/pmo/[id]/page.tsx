@@ -19,5 +19,5 @@ export default async function PaginaPmoProjeto({ params }: { params: Promise<{ i
   }
 
   const { id } = await params;
-  return <PainelPmoProjeto projetoId={Number(id)} />;
+  return <PainelPmoProjeto projetoId={Number(id)} perfil={sessao.perfil} />;
 }

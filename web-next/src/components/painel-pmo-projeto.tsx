@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from "recharts";
+import {
   BIBLIOTECA_KPIS,
   KPI_ORDEM,
   LABEL_STATUS,
@@ -16,6 +19,7 @@ import {
   TIPOS_COMUNICACAO,
   calcularPercentualExecucao,
   calcularSpi,
+  curvaSPlanejada,
   formatarDataBr,
   formatarMoeda,
   percentualPlanejadoAte,
@@ -28,6 +32,8 @@ import {
   type ResumoFinanceiro,
   type Risco,
 } from "@/lib/pmo-calculo";
+import { perfilPodeArquivarERestaurar } from "@/lib/arquivo-calculo";
+import type { ArquivoCronograma, LembreteCronograma } from "@/lib/pmo";
 
 const COR_SAUDE: Record<string, string> = { [SAUDE_VERDE]: "var(--color-green)", [SAUDE_AMARELO]: "var(--color-gold)", [SAUDE_VERMELHO]: "var(--color-red)" };
 const ICONE_SAUDE: Record<string, string> = { [SAUDE_VERDE]: "🟢", [SAUDE_AMARELO]: "🟡", [SAUDE_VERMELHO]: "🔴" };
@@ -38,11 +44,13 @@ const botaoPrimario = "rounded-full bg-(--color-navy) px-5 py-2 text-sm font-med
 const botaoSecundario = "rounded-full border border-(--color-border) px-5 py-2 text-sm font-medium text-(--color-text)";
 
 const TABS_POR_KPI: { chave: string; rotulo: string }[] = [
+  { chave: "cronograma", rotulo: "Cronograma" },
+  { chave: "curva_s", rotulo: "Curva S" },
+  { chave: "financeiro", rotulo: "Financeiro" },
   { chave: "medicoes", rotulo: "Medições" },
   { chave: "entregaveis", rotulo: "Entregáveis" },
   { chave: "riscos", rotulo: "Riscos" },
   { chave: "comunicacoes", rotulo: "Comunicações" },
-  { chave: "financeiro", rotulo: "Financeiro" },
 ];
 
 type RespostaProjeto = {
@@ -289,6 +297,247 @@ function AbaDashboard({ projetoId, kpisHabilitados }: { projetoId: number; kpisH
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {cartoes.map((c) => <CartaoDashboard key={c.titulo} {...c} />)}
+    </div>
+  );
+}
+
+type RespostaCronograma = {
+  cronogramaAtivo: ArquivoCronograma | null;
+  atividades: AtividadeCronograma[];
+  arquivos: ArquivoCronograma[];
+  lembretes: LembreteCronograma[];
+};
+
+function AbaCronograma({ projetoId, perfil }: { projetoId: number; perfil: string }) {
+  const [dados, setDados] = useState<RespostaCronograma | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [processando, setProcessando] = useState(false);
+  const [erroUpload, setErroUpload] = useState<string | null>(null);
+  const [sucessoUpload, setSucessoUpload] = useState<string | null>(null);
+  const [removendo, setRemovendo] = useState(false);
+
+  const podeArquivar = perfilPodeArquivarERestaurar(perfil);
+
+  function carregar() {
+    fetch(`/api/pmo/projetos/${projetoId}/cronograma`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error();
+        return r.json();
+      })
+      .then(setDados)
+      .catch(() => setErro("Não foi possível carregar o Cronograma."));
+  }
+
+  useEffect(carregar, [projetoId]);
+
+  async function processarEAnexar() {
+    if (!arquivo) return;
+    setProcessando(true);
+    setErroUpload(null);
+    setSucessoUpload(null);
+    try {
+      const formData = new FormData();
+      formData.append("arquivo", arquivo);
+      const resposta = await fetch(`/api/pmo/projetos/${projetoId}/cronograma`, { method: "POST", body: formData });
+      const corpo = await resposta.json().catch(() => null);
+      if (!resposta.ok) {
+        setErroUpload(corpo?.erro || "Erro ao processar o cronograma.");
+        return;
+      }
+      setSucessoUpload(
+        corpo.interpretado
+          ? `Cronograma anexado e interpretado automaticamente (${corpo.quantidadeAtividades} atividades).`
+          : "Arquivo .mpp anexado como referência (sem interpretação automática).",
+      );
+      setArquivo(null);
+      carregar();
+    } finally {
+      setProcessando(false);
+    }
+  }
+
+  async function removerCronograma() {
+    setRemovendo(true);
+    try {
+      await fetch(`/api/pmo/projetos/${projetoId}/cronograma/remover`, { method: "POST" });
+      carregar();
+    } finally {
+      setRemovendo(false);
+    }
+  }
+
+  async function arquivarDocumento(arquivoId: number) {
+    await fetch(`/api/pmo/projetos/${projetoId}/cronograma/arquivar-documento`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ arquivoId }),
+    });
+    carregar();
+  }
+
+  if (erro) return <p className="text-sm text-(--color-red)">{erro}</p>;
+  if (!dados) return <p className="text-sm text-(--color-text-weak)">Carregando…</p>;
+
+  const { cronogramaAtivo, atividades, arquivos, lembretes } = dados;
+
+  return (
+    <div>
+      {cronogramaAtivo ? (
+        <div className="rounded-xl border border-(--color-green)/30 bg-(--color-green)/10 px-4 py-3">
+          <p className="text-sm text-(--color-green)">
+            ✅ Cronograma ativo: <strong>{cronogramaAtivo.nome_arquivo}</strong> (enviado por {cronogramaAtivo.enviado_por} em {formatarDataBr(cronogramaAtivo.enviado_em)}).
+          </p>
+          <button onClick={removerCronograma} disabled={removendo} className={`mt-3 ${botaoSecundario}`}>
+            {removendo ? "Removendo…" : "Remover cronograma"}
+          </button>
+        </div>
+      ) : (
+        <p className="rounded-xl border border-(--color-gold)/30 bg-(--color-gold)/10 px-4 py-3 text-sm text-(--color-gold)">
+          🟡 Nenhum cronograma anexado — o alerta &quot;Cronograma pendente de recebimento.&quot; está ativo e o gerente
+          receberá lembretes a cada 3 dias úteis até que um cronograma seja anexado.
+        </p>
+      )}
+
+      {cronogramaAtivo && (
+        atividades.length > 0 ? (
+          <div className="mt-4 overflow-x-auto rounded-2xl border border-(--color-border) bg-(--color-surface-1)">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-(--color-border) text-xs text-(--color-text-weak)">
+                  <th className="px-4 py-2">Atividade</th><th className="px-4 py-2">Início</th><th className="px-4 py-2">Término</th>
+                  <th className="px-4 py-2">Duração</th><th className="px-4 py-2">% Concluído</th>
+                  <th className="px-4 py-2">Marco</th><th className="px-4 py-2">Caminho Crítico</th><th className="px-4 py-2">Folga</th>
+                </tr>
+              </thead>
+              <tbody>
+                {atividades.map((a) => (
+                  <tr key={a.id} className="border-b border-(--color-border) last:border-0">
+                    <td className="px-4 py-2 text-(--color-text)">{a.nome}</td>
+                    <td className="px-4 py-2 text-(--color-text)">{formatarDataBr(a.data_inicio)}</td>
+                    <td className="px-4 py-2 text-(--color-text)">{formatarDataBr(a.data_fim)}</td>
+                    <td className="px-4 py-2 tabular-nums text-(--color-text)">{a.duracao_dias ?? "—"}</td>
+                    <td className="px-4 py-2 tabular-nums text-(--color-text)">{a.percentual_concluido}%</td>
+                    <td className="px-4 py-2 text-(--color-text)">{a.e_marco ? "Sim" : "Não"}</td>
+                    <td className="px-4 py-2 text-(--color-text)">{a.caminho_critico ? "Sim" : "Não"}</td>
+                    <td className="px-4 py-2 tabular-nums text-(--color-text)">{a.folga_dias ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-(--color-text-weak)">Arquivo anexado sem interpretação automática (formato .mpp — apenas armazenado como referência).</p>
+        )
+      )}
+
+      <div className="mt-6 rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-4">
+        <p className="text-sm font-semibold text-(--color-text)">Anexar novo cronograma</p>
+        <p className="mt-1 text-xs text-(--color-text-weak)">
+          Interpretação automática de atividades, marcos, dependências e caminho crítico disponível para Excel
+          (.xlsx) e Primavera (.xer). Arquivos MS Project (.mpp) são aceitos apenas como anexo de referência —
+          exporte para Excel ou XER para ter a leitura automática.
+        </p>
+        <input
+          type="file" accept=".xlsx,.xls,.xer,.mpp"
+          onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
+          className="mt-3 block w-full text-sm text-(--color-text)"
+        />
+        {erroUpload && <p className="mt-2 text-sm text-(--color-red)">{erroUpload}</p>}
+        {sucessoUpload && <p className="mt-2 text-sm text-(--color-green)">{sucessoUpload}</p>}
+        <button onClick={processarEAnexar} disabled={!arquivo || processando} className={`mt-3 ${botaoPrimario}`}>
+          {processando ? "Processando…" : "Processar e anexar"}
+        </button>
+      </div>
+
+      {lembretes.length > 0 && (
+        <details className="mt-4 rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-(--color-text)">Histórico de lembretes automáticos ({lembretes.length})</summary>
+          <div className="mt-3 flex flex-col gap-2">
+            {lembretes.map((l) => (
+              <div key={l.id} className="rounded-xl border border-(--color-border) px-3 py-2 text-sm text-(--color-text)">
+                <span className="text-(--color-text-weak)">{formatarDataBr(l.enviado_em)}</span> — {l.mensagem}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
+      {arquivos.length > 0 && (
+        <details className="mt-4 rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-(--color-text)">Documentos de cronograma anexados ({arquivos.length})</summary>
+          <div className="mt-3 flex flex-col gap-2">
+            {arquivos.map((a) => (
+              <div key={a.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-(--color-border) px-3 py-2">
+                <p className="text-sm text-(--color-text)">
+                  <strong>{a.nome_arquivo}</strong> ({a.formato}) — {a.ativo ? "ativo" : "removido"}, enviado por {a.enviado_por}
+                </p>
+                {podeArquivar && (
+                  <button onClick={() => arquivarDocumento(a.id)} className={botaoSecundario}>Arquivar</button>
+                )}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function AbaCurvaS({ projetoId }: { projetoId: number }) {
+  const [atividades, setAtividades] = useState<AtividadeCronograma[] | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/pmo/projetos/${projetoId}/cronograma`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error();
+        return r.json();
+      })
+      .then((c: RespostaCronograma) => setAtividades(c.atividades))
+      .catch(() => setErro("Não foi possível carregar a Curva S."));
+  }, [projetoId]);
+
+  if (erro) return <p className="text-sm text-(--color-red)">{erro}</p>;
+  if (!atividades) return <p className="text-sm text-(--color-text-weak)">Carregando…</p>;
+  if (!atividades.length) {
+    return <p className="text-sm text-(--color-text-weak)">Anexe um cronograma na aba Cronograma para gerar a Curva S automaticamente.</p>;
+  }
+
+  const curva = curvaSPlanejada(atividades);
+  if (curva.length === 0) {
+    return <p className="text-sm text-(--color-text-weak)">Não foi possível calcular a Curva S — verifique se as atividades têm datas de início/término.</p>;
+  }
+
+  const pctRealizado = calcularPercentualExecucao(atividades);
+  const hoje = new Date();
+  const pctPlanejadoHoje = percentualPlanejadoAte(atividades, hoje);
+  const desvio = pctRealizado - pctPlanejadoHoje;
+
+  const dadosGrafico = curva.map((p) => ({
+    data: p.data.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }),
+    planejado: p.pctPlanejado,
+  }));
+
+  return (
+    <div>
+      <div className="h-80 rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-4">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={dadosGrafico} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+            <XAxis dataKey="data" tick={{ fontSize: 12 }} />
+            <YAxis tick={{ fontSize: 12 }} unit="%" />
+            <Tooltip formatter={(valor: number) => `${valor.toFixed(1)}%`} />
+            <ReferenceLine y={pctRealizado} stroke="var(--color-green)" strokeDasharray="4 4" label={{ value: `Realizado atual: ${pctRealizado.toFixed(0)}%`, fontSize: 11, fill: "var(--color-green)", position: "insideTopRight" }} />
+            <Line type="monotone" dataKey="planejado" name="Planejado" stroke="var(--color-navy)" strokeWidth={2} dot={{ r: 3 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <CartaoMetrica titulo="Planejado até hoje" valor={`${pctPlanejadoHoje.toFixed(0)}%`} />
+        <CartaoMetrica titulo="Realizado atual" valor={`${pctRealizado.toFixed(0)}%`} />
+        <CartaoMetrica titulo="Desvio" valor={`${desvio >= 0 ? "+" : ""}${desvio.toFixed(0)} p.p.`} />
+      </div>
     </div>
   );
 }
@@ -833,7 +1082,7 @@ const ABAS_FIXAS = ["resumo", "dashboard"] as const;
 const ABAS_FINAIS = ["biblioteca", "configuracao"] as const;
 type Aba = (typeof ABAS_FIXAS)[number] | (typeof ABAS_FINAIS)[number] | (typeof TABS_POR_KPI)[number]["chave"];
 
-export function PainelPmoProjeto({ projetoId }: { projetoId: number }) {
+export function PainelPmoProjeto({ projetoId, perfil }: { projetoId: number; perfil: string }) {
   const router = useRouter();
   const [dados, setDados] = useState<RespostaProjeto | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -1019,6 +1268,8 @@ export function PainelPmoProjeto({ projetoId }: { projetoId: number }) {
         )}
 
         {aba === "dashboard" && <AbaDashboard projetoId={projetoId} kpisHabilitados={kpisHabilitadosSet} />}
+        {aba === "cronograma" && kpisHabilitadosSet.has("cronograma") && <AbaCronograma projetoId={projetoId} perfil={perfil} />}
+        {aba === "curva_s" && kpisHabilitadosSet.has("curva_s") && <AbaCurvaS projetoId={projetoId} />}
         {aba === "medicoes" && kpisHabilitadosSet.has("medicoes") && <AbaMedicoes projetoId={projetoId} />}
         {aba === "entregaveis" && kpisHabilitadosSet.has("entregaveis") && <AbaEntregaveis projetoId={projetoId} />}
         {aba === "riscos" && kpisHabilitadosSet.has("riscos") && <AbaRiscos projetoId={projetoId} />}
@@ -1028,7 +1279,7 @@ export function PainelPmoProjeto({ projetoId }: { projetoId: number }) {
         {aba === "configuracao" && (
           <AbaConfiguracao
             projeto={projeto}
-            podeArquivar
+            podeArquivar={perfilPodeArquivarERestaurar(perfil)}
             onStatusAlterado={() => { carregar(); router.refresh(); }}
             onArquivado={() => router.push("/pmo")}
           />
@@ -1036,8 +1287,7 @@ export function PainelPmoProjeto({ projetoId }: { projetoId: number }) {
       </div>
 
       <p className="mt-10 text-xs text-(--color-text-dim)">
-        Cronograma (upload e interpretação automática de Excel/Primavera) e Curva S serão disponibilizados em um
-        próximo incremento do módulo PMO. Relatórios/OPR (exportação em Word) ficam fora de escopo, assim como em
+        Relatórios/OPR (exportação em Word) ficam fora de escopo, assim como em
         todo o restante do sistema.
       </p>
     </div>

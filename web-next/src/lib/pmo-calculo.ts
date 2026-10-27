@@ -305,6 +305,132 @@ export function calcularSpi(percentualRealizado: number, percentualPlanejado: nu
 }
 
 // ---------------------------------------------------------------------------
+// Cronograma — importação (formatos aceitos) e CPM (caminho crítico)
+// ---------------------------------------------------------------------------
+
+export const FORMATOS_INTERPRETAVEIS = new Set(["excel", "xer"]);
+export const FORMATOS_ACEITOS = new Set(["excel", "xer", "mpp"]);
+
+/** Mesma regra de gat/pmo_cronograma_import.py::detectar_formato. */
+export function detectarFormatoCronograma(nomeArquivo: string): string {
+  const extensao = nomeArquivo.includes(".") ? nomeArquivo.split(".").pop()!.toLowerCase() : "";
+  if (["xlsx", "xls", "xlsm"].includes(extensao)) return "excel";
+  if (extensao === "xer") return "xer";
+  if (extensao === "mpp") return "mpp";
+  throw new Error(`Formato de arquivo não suportado: .${extensao}. Envie um arquivo Excel (.xlsx), Primavera (.xer) ou MS Project (.mpp).`);
+}
+
+/** Atividade já interpretada (de Excel ou XER), antes do CPM ser
+ * calculado — mesmas colunas de
+ * gat/pmo_cronograma_import.py::COLUNAS_ATIVIDADE_SAIDA. */
+export type AtividadeInterpretada = {
+  identificador_origem: string | null;
+  nome: string;
+  data_inicio: string | null;
+  data_fim: string | null;
+  duracao_dias: number;
+  percentual_concluido: number;
+  e_marco: number;
+  predecessoras: string | null;
+};
+
+export type AtividadeComCpm = AtividadeInterpretada & { folga_dias: number; caminho_critico: number };
+
+/** Ordenação topológica (Kahn) do grafo de dependências. Ciclos
+ * porventura presentes no arquivo de origem (erro de digitação nas
+ * predecessoras) são quebrados mantendo a ordem original das atividades
+ * restantes, para nunca travar o processamento do cronograma. Mesma
+ * regra de gat/pmo_business_rules.py::_ordenacao_topologica. */
+function ordenacaoTopologica(indices: number[], predecessorasPorIndice: Map<number, number[]>): number[] {
+  const grauEntrada = new Map(indices.map((i) => [i, predecessorasPorIndice.get(i)!.length]));
+  const sucessoras = new Map<number, number[]>(indices.map((i) => [i, []]));
+  for (const [idx, preds] of predecessorasPorIndice) {
+    for (const pred of preds) sucessoras.get(pred)!.push(idx);
+  }
+
+  const fila = indices.filter((i) => grauEntrada.get(i) === 0);
+  const ordenados: number[] = [];
+  while (fila.length) {
+    const atual = fila.shift()!;
+    ordenados.push(atual);
+    for (const suc of sucessoras.get(atual)!) {
+      grauEntrada.set(suc, grauEntrada.get(suc)! - 1);
+      if (grauEntrada.get(suc) === 0) fila.push(suc);
+    }
+  }
+
+  if (ordenados.length < indices.length) {
+    const restantes = indices.filter((i) => !ordenados.includes(i));
+    ordenados.push(...restantes);
+  }
+  return ordenados;
+}
+
+/** Calcula, a partir das atividades e suas predecessoras (identificadores
+ * de origem do arquivo importado), a Data de Início Cedo/Tardio, a folga
+ * e se cada atividade está no caminho crítico (folga = 0).
+ *
+ * Implementação clássica de CPM (forward pass + backward pass) sobre um
+ * grafo de dependências, em dias relativos — não depende do calendário de
+ * dias úteis do GAT. Atividades com dependência não resolvida
+ * (predecessora inexistente no arquivo) são tratadas como sem
+ * predecessoras, para nunca travar o cálculo por causa de um dado
+ * incompleto na planilha de origem. Mesma regra de
+ * gat/pmo_business_rules.py::calcular_caminho_critico. */
+export function calcularCaminhoCritico(atividades: AtividadeInterpretada[]): AtividadeComCpm[] {
+  if (!atividades.length) return [];
+
+  const porId = new Map<string, number>();
+  atividades.forEach((a, idx) => {
+    if (a.identificador_origem) porId.set(a.identificador_origem, idx);
+  });
+
+  function predecessorasIndices(valor: string | null): number[] {
+    if (!valor || !valor.trim()) return [];
+    return valor
+      .split(",")
+      .map((c) => c.trim())
+      .filter((c) => porId.has(c))
+      .map((c) => porId.get(c)!);
+  }
+
+  const indices = atividades.map((_, i) => i);
+  const predecessorasPorIndice = new Map<number, number[]>(indices.map((i) => [i, predecessorasIndices(atividades[i].predecessoras)]));
+  const sucessorasPorIndice = new Map<number, number[]>(indices.map((i) => [i, []]));
+  for (const [idx, preds] of predecessorasPorIndice) {
+    for (const pred of preds) sucessorasPorIndice.get(pred)!.push(idx);
+  }
+
+  const ordem = ordenacaoTopologica(indices, predecessorasPorIndice);
+
+  const duracao = atividades.map((a) => Math.max(a.duracao_dias || 0, 0));
+  const inicioCedo = new Map<number, number>(indices.map((i) => [i, 0]));
+  const fimCedo = new Map<number, number>(indices.map((i) => [i, 0]));
+  for (const idx of ordem) {
+    const preds = predecessorasPorIndice.get(idx)!;
+    const ic = preds.length ? Math.max(...preds.map((p) => fimCedo.get(p)!)) : 0;
+    inicioCedo.set(idx, ic);
+    fimCedo.set(idx, ic + duracao[idx]);
+  }
+
+  const duracaoProjeto = Math.max(0, ...Array.from(fimCedo.values()));
+
+  const fimTardio = new Map<number, number>(indices.map((i) => [i, duracaoProjeto]));
+  const inicioTardio = new Map<number, number>(indices.map((i) => [i, duracaoProjeto]));
+  for (const idx of [...ordem].reverse()) {
+    const sucs = sucessorasPorIndice.get(idx)!;
+    const ft = sucs.length ? Math.min(...sucs.map((s) => inicioTardio.get(s)!)) : duracaoProjeto;
+    fimTardio.set(idx, ft);
+    inicioTardio.set(idx, ft - duracao[idx]);
+  }
+
+  return atividades.map((a, idx) => {
+    const folga = Math.round((inicioTardio.get(idx)! - inicioCedo.get(idx)!) * 100) / 100;
+    return { ...a, duracao_dias: duracao[idx], folga_dias: folga, caminho_critico: folga <= 0.01 ? 1 : 0 };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Medições, Entregáveis, Riscos, Comunicações
 // ---------------------------------------------------------------------------
 
