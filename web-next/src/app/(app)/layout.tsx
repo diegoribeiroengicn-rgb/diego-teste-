@@ -57,6 +57,12 @@ const GRUPOS_NAV: GrupoNav[] = [
     ],
   },
   {
+    titulo: "PMO",
+    itens: [
+      { rotulo: "Portfólio de Projetos", href: "/pmo" },
+    ],
+  },
+  {
     titulo: "Sistema",
     itens: [
       { rotulo: "Manual do Sistema", href: "/manual-sistema" },
