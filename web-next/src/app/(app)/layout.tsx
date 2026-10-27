@@ -61,6 +61,7 @@ const GRUPOS_NAV: GrupoNav[] = [
     itens: [
       { rotulo: "Manual do Sistema", href: "/manual-sistema" },
       { rotulo: "Administração", href: "/administracao" },
+      { rotulo: "Arquivo", href: "/arquivo" },
     ],
   },
 ];
