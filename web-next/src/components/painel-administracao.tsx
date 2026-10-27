@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AREAS_PERMISSAO,
-  DISCIPLINAS,
   GRUPOS_AREA,
   MODULOS_CONTROLADOS,
   MODULOS_LABELS,
@@ -14,7 +13,6 @@ import {
   TIPOS_HISTORICO,
 } from "@/lib/administracao-calculo";
 import type {
-  CodigoDisciplina,
   DiagnosticoImportacao,
   PerguntaChecklistAdmin,
   RegistroHistorico,
@@ -644,94 +642,6 @@ function SecaoHistorico() {
   );
 }
 
-function SecaoCentralCodificacao({ codigosDisciplina }: { codigosDisciplina: CodigoDisciplina[] }) {
-  const router = useRouter();
-  const linhasIniciais = useMemo(() => {
-    const porDisciplina = new Map(codigosDisciplina.map((c) => [c.disciplina, c]));
-    const faltantes = DISCIPLINAS.filter((d) => !porDisciplina.has(d)).map((d) => ({ disciplina: d, codigo: null, descricao: null }));
-    return [...codigosDisciplina, ...faltantes].sort((a, b) => a.disciplina.localeCompare(b.disciplina));
-  }, [codigosDisciplina]);
-
-  const [linhas, setLinhas] = useState(linhasIniciais);
-  const [salvando, setSalvando] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-  const [sucesso, setSucesso] = useState<string | null>(null);
-
-  function atualizarLinha(disciplina: string, campo: "codigo" | "descricao", valor: string) {
-    setLinhas((atual) => atual.map((l) => (l.disciplina === disciplina ? { ...l, [campo]: valor || null } : l)));
-  }
-
-  async function salvar() {
-    setSalvando(true);
-    setErro(null);
-    setSucesso(null);
-    try {
-      const resposta = await fetch("/api/admin/codigos-disciplina", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ codigos: linhas }),
-      });
-      if (!resposta.ok) {
-        setErro("Erro ao salvar códigos de disciplina.");
-        return;
-      }
-      setSucesso("Códigos de disciplina atualizados com sucesso.");
-      router.refresh();
-    } finally {
-      setSalvando(false);
-    }
-  }
-
-  return (
-    <div>
-      <p className="text-sm font-semibold text-(--color-text)">Central de Codificação — código de disciplina</p>
-      <p className="mt-1 text-xs text-(--color-text-weak)">
-        Código numérico de especialidade (procedimento PR-PRO-002 &quot;Codificação de Documentação Técnica&quot;)
-        usado para montar o segmento de disciplina (DDD) do número da AT no Resumo de Conclusão:
-        AT-NNN-AA-PPP-DDD-RR. Uma disciplina sem código cadastrado não trava o Resumo — o segmento fica apenas
-        omitido no número da AT até que o código seja definido aqui.
-      </p>
-
-      <div className="mt-4 overflow-x-auto rounded-2xl border border-(--color-border) bg-(--color-surface-1)">
-        <table className="w-full min-w-[700px] text-left text-sm">
-          <thead>
-            <tr className="text-xs font-medium text-(--color-text-dim)">
-              <th className="px-4 py-3">Disciplina</th>
-              <th className="px-4 py-3">Código (DDD)</th>
-              <th className="px-4 py-3">Descrição (PR-PRO-002)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {linhas.map((l) => (
-              <tr key={l.disciplina} className="border-t border-(--color-border) first:border-0">
-                <td className="px-4 py-2.5 text-(--color-text-weak)">{l.disciplina}</td>
-                <td className="px-4 py-2.5">
-                  <input
-                    value={l.codigo ?? ""} onChange={(e) => atualizarLinha(l.disciplina, "codigo", e.target.value)}
-                    placeholder="Ex.: 400" className="w-28 rounded-lg border border-(--color-border) bg-(--color-bg) px-2 py-1 text-sm text-(--color-text) outline-none focus:border-(--color-navy)"
-                  />
-                </td>
-                <td className="px-4 py-2.5">
-                  <input
-                    value={l.descricao ?? ""} onChange={(e) => atualizarLinha(l.disciplina, "descricao", e.target.value)}
-                    className="w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-2 py-1 text-sm text-(--color-text) outline-none focus:border-(--color-navy)"
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {erro && <p className="mt-2 text-sm text-(--color-red)">{erro}</p>}
-      {sucesso && <p className="mt-2 text-sm text-(--color-green)">{sucesso}</p>}
-      <button onClick={salvar} disabled={salvando} className="mt-4 rounded-full bg-(--color-navy) px-5 py-2 text-sm font-medium text-white disabled:opacity-60">
-        {salvando ? "Salvando…" : "Salvar códigos de disciplina"}
-      </button>
-    </div>
-  );
-}
-
 function SecaoChecklistPerguntas({ perguntasIniciais }: { perguntasIniciais: PerguntaChecklistAdmin[] }) {
   const router = useRouter();
   const [perguntas, setPerguntas] = useState(perguntasIniciais);
@@ -909,18 +819,16 @@ const ABAS_LABEL: Record<string, string> = {
   validacao: "Validação de Dados",
   historico: "Histórico e Auditoria",
   configuracoes: "Configurações",
-  codificacao: "Central de Codificação",
   checklist: "Checklist de Avaliação",
 };
 
 export function PainelAdministracao({
-  usuarios, validacao, codigosDisciplina, perguntasChecklist,
+  usuarios, validacao, perguntasChecklist,
   podeAdministrarUsuarios, podeAuditoria, podeConfigurar,
   diasAtencaoInicial, diasCriticoInicial, metaRev2Inicial,
 }: {
   usuarios: Usuario[];
   validacao: { prestadores: DiagnosticoImportacao; cessionarios: DiagnosticoImportacao };
-  codigosDisciplina: CodigoDisciplina[];
   perguntasChecklist: PerguntaChecklistAdmin[];
   podeAdministrarUsuarios: boolean;
   podeAuditoria: boolean;
@@ -934,7 +842,7 @@ export function PainelAdministracao({
     if (podeAdministrarUsuarios) abas.push("usuarios");
     abas.push("validacao");
     if (podeAuditoria) abas.push("historico");
-    if (podeConfigurar) abas.push("configuracoes", "codificacao", "checklist");
+    if (podeConfigurar) abas.push("configuracoes", "checklist");
     return abas;
   }, [podeAdministrarUsuarios, podeAuditoria, podeConfigurar]);
 
@@ -965,7 +873,6 @@ export function PainelAdministracao({
         {aba === "configuracoes" && podeConfigurar && (
           <SecaoConfiguracoes diasAtencaoInicial={diasAtencaoInicial} diasCriticoInicial={diasCriticoInicial} metaRev2Inicial={metaRev2Inicial} />
         )}
-        {aba === "codificacao" && podeConfigurar && <SecaoCentralCodificacao codigosDisciplina={codigosDisciplina} />}
         {aba === "checklist" && podeConfigurar && <SecaoChecklistPerguntas perguntasIniciais={perguntasChecklist} />}
       </div>
     </div>

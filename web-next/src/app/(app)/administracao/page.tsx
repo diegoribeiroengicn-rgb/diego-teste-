@@ -1,7 +1,6 @@
 import { obterSessao } from "@/lib/session";
 import { areaPermitida } from "@/lib/permissoes";
 import {
-  listarCodigosDisciplina,
   listarPerguntasChecklistAdmin,
   listarUsuarios,
   obterConfiguracao,
@@ -19,13 +18,12 @@ export default async function PaginaAdministracao() {
     areaPermitida(sessao.id, sessao.perfil, "configuracoes"),
   ]);
 
-  const [usuarios, validacao, diasAtencao, diasCritico, metaRev2, codigosDisciplina, perguntasChecklist] = await Promise.all([
+  const [usuarios, validacao, diasAtencao, diasCritico, metaRev2, perguntasChecklist] = await Promise.all([
     podeAdministrarUsuarios ? listarUsuarios() : Promise.resolve([]),
     relatorioValidacaoImportacao(),
     podeConfigurar ? obterConfiguracao("pep_dias_atencao", "3") : Promise.resolve("3"),
     podeConfigurar ? obterConfiguracao("pep_dias_critico", "6") : Promise.resolve("6"),
     podeConfigurar ? obterConfiguracao("meta_aprovacao_rev2", "80") : Promise.resolve("80"),
-    podeConfigurar ? listarCodigosDisciplina() : Promise.resolve([]),
     podeConfigurar ? listarPerguntasChecklistAdmin(false) : Promise.resolve([]),
   ]);
 
@@ -33,7 +31,6 @@ export default async function PaginaAdministracao() {
     <PainelAdministracao
       usuarios={usuarios}
       validacao={validacao}
-      codigosDisciplina={codigosDisciplina}
       perguntasChecklist={perguntasChecklist}
       podeAdministrarUsuarios={podeAdministrarUsuarios}
       podeAuditoria={podeAuditoria}

@@ -1,4 +1,5 @@
 import { BuscaAnalista } from "@/components/busca-analista";
+import { BotaoDarBaixa } from "@/components/dar-baixa";
 import type { Projeto } from "@/lib/projetos";
 
 const CORES_STATUS: Record<string, string> = {
@@ -27,17 +28,17 @@ function contagemPorStatus(projetos: Projeto[]): [string, number][] {
 export function TabelaProjetos({
   titulo,
   colunaEntidade,
+  tabela,
   projetos,
   busca,
-  filtrandoPorMim,
   analistaProprio,
   temAnalistaProprio,
 }: {
   titulo: string;
   colunaEntidade: string;
+  tabela: "prestadores" | "cessionarios";
   projetos: Projeto[];
   busca: string;
-  filtrandoPorMim: boolean;
   analistaProprio: string | null | undefined;
   temAnalistaProprio: boolean;
 }) {
@@ -49,14 +50,14 @@ export function TabelaProjetos({
         <div>
           <h1 className="text-2xl font-semibold text-(--color-text)">{titulo}</h1>
           <p className="mt-1 text-sm text-(--color-text-weak)">
-            {filtrandoPorMim
-              ? `Suas análises, ${analistaProprio}`
-              : busca
-                ? `Responsáveis que contêm "${busca}"`
+            {busca
+              ? `Responsáveis que contêm "${busca}"`
+              : temAnalistaProprio
+                ? `Todas as análises — as suas (${analistaProprio}) aparecem primeiro, por ordem de vencimento`
                 : "Todas as análises"}
           </p>
         </div>
-        <BuscaAnalista valorInicial={busca} temAnalistaProprio={temAnalistaProprio} />
+        <BuscaAnalista valorInicial={busca} />
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
@@ -74,8 +75,8 @@ export function TabelaProjetos({
         ))}
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-2xl border border-(--color-border) bg-(--color-surface-1)">
-        <table className="w-full text-left text-sm">
+      <div className="mt-6 overflow-x-auto rounded-2xl border border-(--color-border) bg-(--color-surface-1)">
+        <table className="w-full min-w-[920px] text-left text-sm">
           <thead>
             <tr className="text-xs font-medium text-(--color-text-dim)">
               <th className="px-5 py-3">Item</th>
@@ -87,12 +88,13 @@ export function TabelaProjetos({
               <th className="px-5 py-3">Status</th>
               <th className="px-5 py-3">Data Limite</th>
               <th className="px-5 py-3">Responsável</th>
+              <th className="px-5 py-3">Ação</th>
             </tr>
           </thead>
           <tbody>
             {projetos.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-5 py-16 text-center text-(--color-text-weak)">
+                <td colSpan={10} className="px-5 py-16 text-center text-(--color-text-weak)">
                   Nenhum projeto encontrado.
                 </td>
               </tr>
@@ -112,6 +114,9 @@ export function TabelaProjetos({
                   </td>
                   <td className="px-5 py-3.5 text-(--color-text-weak)">{formatarData(p.data_limite)}</td>
                   <td className="px-5 py-3.5 text-(--color-text-weak)">{p.responsavel || "—"}</td>
+                  <td className="px-5 py-3.5">
+                    <BotaoDarBaixa tabela={tabela} projetoId={p.id} statusAtual={p.status_analise} />
+                  </td>
                 </tr>
               ))
             )}

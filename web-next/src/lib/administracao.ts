@@ -191,26 +191,6 @@ export async function listarHistorico(tabela: string | null, limite: number | nu
   }));
 }
 
-export type CodigoDisciplina = { disciplina: string; codigo: string | null; descricao: string | null };
-
-export async function listarCodigosDisciplina(): Promise<CodigoDisciplina[]> {
-  const pool = obterPool();
-  const { rows } = await pool.query<CodigoDisciplina>(`SELECT disciplina, codigo, descricao FROM codigos_disciplina ORDER BY disciplina`);
-  return rows;
-}
-
-/** Cria ou atualiza o código de uma disciplina (upsert por nome).
- * Mesma regra de gat/database.py::definir_codigo_disciplina. */
-export async function definirCodigoDisciplina(disciplina: string, codigo: string | null, descricao: string | null, usuario: string): Promise<void> {
-  const pool = obterPool();
-  await pool.query(
-    `INSERT INTO codigos_disciplina (disciplina, codigo, descricao, atualizado_em, atualizado_por)
-     VALUES ($1,$2,$3,$4,$5)
-     ON CONFLICT (disciplina) DO UPDATE SET codigo = excluded.codigo, descricao = excluded.descricao,
-       atualizado_em = excluded.atualizado_em, atualizado_por = excluded.atualizado_por`,
-    [disciplina.trim().toUpperCase(), (codigo || "").trim() || null, (descricao || "").trim() || null, new Date().toISOString(), usuario],
-  );
-}
 
 export type PerguntaChecklistAdmin = {
   id: number;

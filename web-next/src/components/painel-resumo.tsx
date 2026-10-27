@@ -50,16 +50,10 @@ export function PainelResumo({
   titulo,
   projetos,
   busca,
-  filtrandoPorMim,
-  analistaProprio,
-  temAnalistaProprio,
 }: {
   titulo: string;
   projetos: Projeto[];
   busca: string;
-  filtrandoPorMim: boolean;
-  analistaProprio: string | null | undefined;
-  temAnalistaProprio: boolean;
 }) {
   const porStatus = contarPor(projetos, "status_analise");
   const porDisciplina = contarPor(projetos, "disciplina");
@@ -71,10 +65,10 @@ export function PainelResumo({
         <div>
           <h1 className="text-2xl font-semibold text-(--color-text)">{titulo}</h1>
           <p className="mt-1 text-sm text-(--color-text-weak)">
-            {filtrandoPorMim ? `Suas análises, ${analistaProprio}` : busca ? `Responsáveis que contêm "${busca}"` : "Todas as análises"}
+            {busca ? `Responsáveis que contêm "${busca}"` : "Todas as análises"}
           </p>
         </div>
-        <BuscaAnalista valorInicial={busca} temAnalistaProprio={temAnalistaProprio} />
+        <BuscaAnalista valorInicial={busca} />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">

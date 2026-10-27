@@ -3,7 +3,7 @@
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
-export function BuscaAnalista({ valorInicial, temAnalistaProprio }: { valorInicial: string; temAnalistaProprio: boolean }) {
+export function BuscaAnalista({ valorInicial }: { valorInicial: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -37,7 +37,7 @@ export function BuscaAnalista({ valorInicial, temAnalistaProprio }: { valorInici
           className="w-72 rounded-full border border-(--color-border) bg-(--color-surface-1) py-2 pl-9 pr-4 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-navy) focus:ring-2 focus:ring-(--color-navy)/15"
         />
       </div>
-      {(valor || !temAnalistaProprio) && (
+      {valor && (
         <button
           onClick={() => {
             setValor("");
@@ -45,7 +45,7 @@ export function BuscaAnalista({ valorInicial, temAnalistaProprio }: { valorInici
           }}
           className="rounded-full px-3 py-1.5 text-xs font-medium text-(--color-text-weak) hover:bg-(--color-surface-2) hover:text-(--color-text)"
         >
-          {temAnalistaProprio ? "Voltar pras minhas análises" : "Limpar"}
+          Limpar
         </button>
       )}
     </div>

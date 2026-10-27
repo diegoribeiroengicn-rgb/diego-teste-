@@ -10,20 +10,19 @@ export default async function PaginaEmAnaliseCessionarios({
   const sessao = await obterSessao();
   const { q } = await searchParams;
   const busca = (q || "").trim();
-  const filtrandoPorMim = !busca && !!sessao?.analistaVinculado;
-  const termoResponsavel = busca || sessao?.analistaVinculado || "";
+  const analistaProprio = sessao?.analistaVinculado || null;
 
-  const projetos = await buscarProjetos("cessionarios", { termoResponsavel, statusEntre: ["EM ANÁLISE"] });
+  const projetos = await buscarProjetos("cessionarios", { termoResponsavel: busca, analistaProprio, statusEntre: ["EM ANÁLISE"] });
 
   return (
     <TabelaProjetos
       titulo="Cessionários — Em Análise"
       colunaEntidade="Cessionário"
+      tabela="cessionarios"
       projetos={projetos}
       busca={busca}
-      filtrandoPorMim={filtrandoPorMim}
-      analistaProprio={sessao?.analistaVinculado}
-      temAnalistaProprio={!!sessao?.analistaVinculado}
+      analistaProprio={analistaProprio}
+      temAnalistaProprio={!!analistaProprio}
     />
   );
 }

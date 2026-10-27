@@ -10,20 +10,19 @@ export default async function PaginaEmHoldPrestadores({
   const sessao = await obterSessao();
   const { q } = await searchParams;
   const busca = (q || "").trim();
-  const filtrandoPorMim = !busca && !!sessao?.analistaVinculado;
-  const termoResponsavel = busca || sessao?.analistaVinculado || "";
+  const analistaProprio = sessao?.analistaVinculado || null;
 
-  const projetos = await buscarProjetos("prestadores", { termoResponsavel, statusEntre: ["EM HOLD"] });
+  const projetos = await buscarProjetos("prestadores", { termoResponsavel: busca, analistaProprio, statusEntre: ["EM HOLD"] });
 
   return (
     <TabelaProjetos
       titulo="Prestadores — Em HOLD"
       colunaEntidade="Prestador"
+      tabela="prestadores"
       projetos={projetos}
       busca={busca}
-      filtrandoPorMim={filtrandoPorMim}
-      analistaProprio={sessao?.analistaVinculado}
-      temAnalistaProprio={!!sessao?.analistaVinculado}
+      analistaProprio={analistaProprio}
+      temAnalistaProprio={!!analistaProprio}
     />
   );
 }

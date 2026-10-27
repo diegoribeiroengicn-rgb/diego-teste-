@@ -10,24 +10,19 @@ export default async function PaginaProjetosPrestadores({
   const sessao = await obterSessao();
   const { q } = await searchParams;
   const busca = (q || "").trim();
+  const analistaProprio = sessao?.analistaVinculado || null;
 
-  // Sem busca explícita e com analista vinculado ao próprio login: mostra
-  // só as análises do próprio analista (filtro padrão, não só ordenação) —
-  // quem não tem analista vinculado (ex.: ADMIN/GESTOR) vê tudo por padrão.
-  const filtrandoPorMim = !busca && !!sessao?.analistaVinculado;
-  const termoResponsavel = busca || sessao?.analistaVinculado || "";
-
-  const projetos = await buscarProjetos("prestadores", { termoResponsavel });
+  const projetos = await buscarProjetos("prestadores", { termoResponsavel: busca, analistaProprio });
 
   return (
     <TabelaProjetos
       titulo="Prestadores — Projetos"
       colunaEntidade="Prestador"
+      tabela="prestadores"
       projetos={projetos}
       busca={busca}
-      filtrandoPorMim={filtrandoPorMim}
-      analistaProprio={sessao?.analistaVinculado}
-      temAnalistaProprio={!!sessao?.analistaVinculado}
+      analistaProprio={analistaProprio}
+      temAnalistaProprio={!!analistaProprio}
     />
   );
 }
