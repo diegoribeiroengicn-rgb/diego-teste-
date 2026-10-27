@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { RegistrarServiceWorker } from "@/components/registrar-service-worker";
+import { obterSessao } from "@/lib/session";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -24,9 +25,16 @@ export const viewport = {
   themeColor: "#1B3A8A",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+// O tema (claro/escuro) depende da sessão (cookie) em todo o sistema —
+// mesmo motivo de (app)/layout.tsx: nunca é candidato a página estática.
+export const instant = false;
+
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const sessao = await obterSessao();
+  const tema = sessao?.temaPreferido === "escuro" ? "dark" : "light";
+
   return (
-    <html lang="pt-BR" className={`${inter.variable} h-full antialiased`}>
+    <html lang="pt-BR" data-theme={tema} className={`${inter.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         <RegistrarServiceWorker />
         {children}

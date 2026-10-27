@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { NavSidebar, type GrupoNav } from "@/components/nav-sidebar";
 import { LogoutButton } from "@/components/logout-button";
+import { ToggleTema } from "@/components/toggle-tema";
 
 function IconeMenu() {
   return (
@@ -26,11 +27,13 @@ export function AppShell({
   grupos,
   nome,
   perfil,
+  temaPreferido,
   children,
 }: {
   grupos: GrupoNav[];
   nome: string;
   perfil: string;
+  temaPreferido: string;
   children: React.ReactNode;
 }) {
   const [aberto, setAberto] = useState(false);
@@ -60,6 +63,7 @@ export function AppShell({
           <p className="truncate text-sm font-medium text-(--color-text)">{nome}</p>
           <p className="text-xs text-(--color-text-weak)">{perfil}</p>
         </Link>
+        <ToggleTema temaInicial={temaPreferido} />
         <LogoutButton />
       </div>
     </>

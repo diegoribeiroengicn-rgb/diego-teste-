@@ -79,7 +79,7 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
   }
 
   return (
-    <AppShell grupos={GRUPOS_NAV} nome={sessao.nomeCompleto || sessao.username} perfil={sessao.perfil}>
+    <AppShell grupos={GRUPOS_NAV} nome={sessao.nomeCompleto || sessao.username} perfil={sessao.perfil} temaPreferido={sessao.temaPreferido}>
       {children}
     </AppShell>
   );

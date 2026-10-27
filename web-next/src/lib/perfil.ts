@@ -45,3 +45,11 @@ export async function registrarUltimoAcesso(username: string): Promise<void> {
   const pool = obterPool();
   await pool.query("UPDATE usuarios SET ultimo_acesso = $1 WHERE username = $2", [new Date().toISOString(), username]);
 }
+
+/** Salva a preferência de tema (Claro/Escuro) do próprio usuário —
+ * individual por conta, persistida no banco (sobrevive a logout/login) —
+ * mesma regra de gat/database.py::definir_tema_usuario. */
+export async function definirTemaUsuario(username: string, tema: "claro" | "escuro"): Promise<void> {
+  const pool = obterPool();
+  await pool.query("UPDATE usuarios SET tema_preferido = $1 WHERE username = $2", [tema, username]);
+}
