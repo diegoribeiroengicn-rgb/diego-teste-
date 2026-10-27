@@ -216,7 +216,7 @@ export async function buscarDadosOprCessionarios(mes: number, ano: number): Prom
     `SELECT id, disciplina, revisao, status_analise, num_documentos,
             data_solicitacao, data_analise, hold_inicio, hold_fim,
             sla_dias, tipo, teve_substituicao
-     FROM cessionarios`,
+     FROM cessionarios WHERE arquivado_em IS NULL`,
   );
 
   const completo = enriquecerCessionarios(filtrarAtivos(rows));

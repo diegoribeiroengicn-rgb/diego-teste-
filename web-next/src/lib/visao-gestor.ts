@@ -97,14 +97,14 @@ export async function buscarBaseVisaoGestor(): Promise<LinhaBaseGestor[]> {
       `SELECT id, codigo, prestador AS nome_entidade, disciplina, revisao, num_at, responsavel, status_analise,
               data_solicitacao, data_limite, data_analise, hold_inicio, hold_fim, sla_dias, sla_reduzido,
               nivel_prioridade, NULL AS tipo
-       FROM prestadores WHERE status_analise != $1`,
+       FROM prestadores WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),
     pool.query<LinhaBanco>(
       `SELECT id, codigo, cessionario AS nome_entidade, disciplina, revisao, num_at, responsavel, status_analise,
               data_solicitacao, data_limite, data_analise, hold_inicio, hold_fim, sla_dias, sla_reduzido,
               NULL::int AS nivel_prioridade, tipo
-       FROM cessionarios WHERE status_analise != $1`,
+       FROM cessionarios WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),
   ]);

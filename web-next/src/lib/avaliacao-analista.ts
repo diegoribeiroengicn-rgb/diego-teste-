@@ -25,7 +25,7 @@ async function analistasComEtgNoPeriodo(pool: ReturnType<typeof obterPool>, mes:
   const resultado = new Set<string>();
   for (const tabela of ["prestadores", "cessionarios"] as const) {
     const { rows } = await pool.query<{ responsavel: string | null; data_solicitacao: string | null }>(
-      `SELECT responsavel, data_solicitacao FROM ${tabela} WHERE etg = 'SIM'`,
+      `SELECT responsavel, data_solicitacao FROM ${tabela} WHERE etg = 'SIM' AND arquivado_em IS NULL`,
     );
     for (const r of rows) {
       if (!r.responsavel) continue;
@@ -72,7 +72,7 @@ export async function avaliacoesObrigatoriasDoMes(
   ]) {
     const { rows: linhas } = await pool.query<LinhaCandidato>(
       `SELECT id, codigo, ${cfg.coluna} AS nome, disciplina, revisao, data_analise, num_at, item
-       FROM ${cfg.tabela} WHERE responsavel = $1 AND status_analise != 'CANCELADO'`,
+       FROM ${cfg.tabela} WHERE responsavel = $1 AND status_analise != 'CANCELADO' AND arquivado_em IS NULL`,
       [analista],
     );
 

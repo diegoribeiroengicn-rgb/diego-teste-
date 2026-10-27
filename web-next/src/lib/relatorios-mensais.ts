@@ -86,7 +86,7 @@ export async function buscarLinhasProdutividade(modulos: ModuloProdutividade[]):
       `SELECT id, item, codigo, prestador AS nome_entidade, disciplina, revisao, num_documentos,
               data_solicitacao, data_analise, hold_inicio, hold_fim, sla_dias, NULL AS tipo,
               num_at, responsavel, status_analise
-       FROM prestadores WHERE status_analise != $1`,
+       FROM prestadores WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     );
     rows.forEach((r) => resultados.push(enriquecerLinha(r, "prestadores")));
@@ -96,7 +96,7 @@ export async function buscarLinhasProdutividade(modulos: ModuloProdutividade[]):
       `SELECT id, item, codigo, cessionario AS nome_entidade, disciplina, revisao, num_documentos,
               data_solicitacao, data_analise, hold_inicio, hold_fim, sla_dias, tipo,
               num_at, responsavel, status_analise
-       FROM cessionarios WHERE status_analise != $1`,
+       FROM cessionarios WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     );
     rows.forEach((r) => resultados.push(enriquecerLinha(r, "cessionarios")));

@@ -29,7 +29,7 @@ export async function buscarProjetos(
 ): Promise<Projeto[]> {
   const colunaEntidade = COLUNA_ENTIDADE[tabela];
   const pool = obterPool();
-  const condicoes = [`($1 = '' OR UPPER(responsavel) LIKE UPPER('%' || $1 || '%'))`];
+  const condicoes = [`($1 = '' OR UPPER(responsavel) LIKE UPPER('%' || $1 || '%'))`, `arquivado_em IS NULL`];
   const parametros: unknown[] = [opcoes.termoResponsavel];
 
   if (opcoes.statusEntre?.length) {

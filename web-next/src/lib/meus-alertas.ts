@@ -64,13 +64,13 @@ export async function buscarAlertasPrazoPessoais(analistaVinculado: string | nul
     pool.query<LinhaProjeto>(
       `SELECT id, codigo, prestador AS nome_entidade, disciplina, num_at, responsavel, status_analise,
               data_solicitacao, data_limite, data_analise, hold_inicio, hold_fim, sla_dias, revisao, NULL AS tipo
-       FROM prestadores WHERE UPPER(TRIM(responsavel)) = $1 AND status_analise = $2`,
+       FROM prestadores WHERE UPPER(TRIM(responsavel)) = $1 AND status_analise = $2 AND arquivado_em IS NULL`,
       [alvo, STATUS_EM_ANALISE],
     ),
     pool.query<LinhaProjeto>(
       `SELECT id, codigo, cessionario AS nome_entidade, disciplina, num_at, responsavel, status_analise,
               data_solicitacao, data_limite, data_analise, hold_inicio, hold_fim, sla_dias, revisao, tipo
-       FROM cessionarios WHERE UPPER(TRIM(responsavel)) = $1 AND status_analise = $2`,
+       FROM cessionarios WHERE UPPER(TRIM(responsavel)) = $1 AND status_analise = $2 AND arquivado_em IS NULL`,
       [alvo, STATUS_EM_ANALISE],
     ),
   ]);

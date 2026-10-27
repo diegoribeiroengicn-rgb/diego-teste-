@@ -8,9 +8,9 @@ export async function buscarResponsaveisDistintos(): Promise<string[]> {
   const pool = obterPool();
   const { rows } = await pool.query<{ responsavel: string }>(
     `SELECT DISTINCT responsavel FROM (
-       SELECT responsavel FROM prestadores WHERE responsavel IS NOT NULL AND TRIM(responsavel) != ''
+       SELECT responsavel FROM prestadores WHERE responsavel IS NOT NULL AND TRIM(responsavel) != '' AND arquivado_em IS NULL
        UNION
-       SELECT responsavel FROM cessionarios WHERE responsavel IS NOT NULL AND TRIM(responsavel) != ''
+       SELECT responsavel FROM cessionarios WHERE responsavel IS NOT NULL AND TRIM(responsavel) != '' AND arquivado_em IS NULL
      ) t ORDER BY responsavel`,
   );
   return rows.map((r) => r.responsavel);

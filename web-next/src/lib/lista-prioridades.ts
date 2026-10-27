@@ -198,14 +198,14 @@ export async function buscarListaPrioridades(): Promise<ItemPrioridade[]> {
               nivel_prioridade, sla_reduzido, sla_dias, sla_original,
               data_solicitacao, data_limite, data_analise, hold_inicio, hold_fim,
               justificativa_sla, status_analise
-       FROM prestadores`,
+       FROM prestadores WHERE arquivado_em IS NULL`,
     ),
     pool.query<LinhaBanco>(
       `SELECT id, codigo, cessionario AS nome_entidade, num_at, disciplina, revisao, responsavel,
               NULL::int AS nivel_prioridade, sla_reduzido, sla_dias, sla_original,
               data_solicitacao, data_limite, data_analise, hold_inicio, hold_fim,
               justificativa_sla, status_analise, tipo
-       FROM cessionarios`,
+       FROM cessionarios WHERE arquivado_em IS NULL`,
     ),
   ]);
 

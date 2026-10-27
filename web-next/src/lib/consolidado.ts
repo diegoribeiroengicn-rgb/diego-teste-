@@ -79,14 +79,14 @@ export async function buscarLinhasConsolidado(): Promise<LinhaConsolidada[]> {
       `SELECT id, responsavel, status_analise, disciplina, revisao,
               data_solicitacao, data_analise, data_limite, hold_inicio, hold_fim,
               sla_dias, NULL AS tipo, peps
-       FROM prestadores WHERE status_analise != $1`,
+       FROM prestadores WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),
     pool.query<LinhaBanco>(
       `SELECT id, responsavel, status_analise, disciplina, revisao,
               data_solicitacao, data_analise, data_limite, hold_inicio, hold_fim,
               sla_dias, tipo, NULL AS peps
-       FROM cessionarios WHERE status_analise != $1`,
+       FROM cessionarios WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),
   ]);

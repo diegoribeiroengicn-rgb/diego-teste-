@@ -87,7 +87,7 @@ export async function buscarLinhasRevisao(origem: Origem): Promise<LinhaRevisao[
     `SELECT id, item, codigo, ${colunaNome} AS nome_entidade, disciplina, num_at, revisao, responsavel, status_analise,
             data_solicitacao, data_analise, data_limite, hold_inicio, hold_fim, observacoes, sla_dias,
             ${origem === "cessionarios" ? "tipo" : "NULL AS tipo"}
-     FROM ${origem} WHERE status_analise != $1`,
+     FROM ${origem} WHERE status_analise != $1 AND arquivado_em IS NULL`,
     [STATUS_CANCELADO],
   );
   return rows.map((r) => enriquecerLinha(r, origem));

@@ -33,7 +33,7 @@ export async function buscarLinhasGantt(): Promise<LinhaBrutaGantt[]> {
     `SELECT id, item, codigo, prestador, disciplina, disciplina_sla, obra_referencia,
             revisao, num_documentos, data_solicitacao, data_limite, data_limite_ajustada_manualmente,
             data_analise, hold_inicio, hold_fim, num_at, revisao_at, responsavel, status_analise
-     FROM prestadores`,
+     FROM prestadores WHERE arquivado_em IS NULL`,
   );
   return rows.map((r) => ({
     row: r.id,

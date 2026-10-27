@@ -40,7 +40,7 @@ export async function buscarLembretesPep(): Promise<LembretePep[]> {
     buscarLimiaresCriticidadePep(pool),
     pool.query<LinhaBanco>(
       `SELECT id, item, codigo, prestador, disciplina, num_at, responsavel, data_solicitacao, peps
-       FROM prestadores WHERE status_analise != $1`,
+       FROM prestadores WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),
   ]);

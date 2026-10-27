@@ -88,13 +88,13 @@ export async function buscarLinhasPrazo(): Promise<LinhaPrazo[]> {
     pool.query<LinhaBanco>(
       `SELECT id, responsavel, disciplina, revisao, num_at, status_analise,
               data_solicitacao, data_limite, data_analise, hold_inicio, hold_fim, sla_dias, NULL AS tipo
-       FROM prestadores WHERE status_analise != $1`,
+       FROM prestadores WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),
     pool.query<LinhaBanco>(
       `SELECT id, responsavel, disciplina, revisao, num_at, status_analise,
               data_solicitacao, data_limite, data_analise, hold_inicio, hold_fim, sla_dias, tipo
-       FROM cessionarios WHERE status_analise != $1`,
+       FROM cessionarios WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),
   ]);

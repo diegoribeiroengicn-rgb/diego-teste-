@@ -100,14 +100,14 @@ export async function buscarLinhasLocalizacao(): Promise<LinhaLocalizacao[]> {
       `SELECT id, item, codigo, prestador AS nome_entidade, disciplina, num_at, revisao, responsavel, status_analise,
               data_solicitacao, data_analise, data_limite, hold_inicio, hold_fim, observacoes, sla_dias, NULL AS tipo,
               obra_referencia AS obra, atualizado_em, resumo_mfiles, resumo_drive, resumo_email
-       FROM prestadores WHERE status_analise != $1`,
+       FROM prestadores WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),
     pool.query<LinhaBanco>(
       `SELECT id, item, codigo, cessionario AS nome_entidade, disciplina, num_at, revisao, responsavel, status_analise,
               data_solicitacao, data_analise, data_limite, hold_inicio, hold_fim, observacoes, sla_dias, tipo,
               tipo AS obra, atualizado_em, resumo_mfiles, resumo_drive, resumo_email
-       FROM cessionarios WHERE status_analise != $1`,
+       FROM cessionarios WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),
   ]);
