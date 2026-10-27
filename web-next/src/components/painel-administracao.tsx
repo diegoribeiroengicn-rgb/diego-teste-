@@ -4,14 +4,22 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AREAS_PERMISSAO,
+  DISCIPLINAS,
   GRUPOS_AREA,
   MODULOS_CONTROLADOS,
   MODULOS_LABELS,
   PERFIL_ANALISTA,
   PERFIS_OPCOES,
   RESPONSAVEIS,
+  TIPOS_HISTORICO,
 } from "@/lib/administracao-calculo";
-import type { Usuario } from "@/lib/administracao";
+import type {
+  CodigoDisciplina,
+  DiagnosticoImportacao,
+  PerguntaChecklistAdmin,
+  RegistroHistorico,
+  Usuario,
+} from "@/lib/administracao";
 import type { PermissoesUsuario } from "@/lib/permissoes";
 
 function formatarDataHora(valor: string | null): string {
@@ -19,6 +27,15 @@ function formatarDataHora(valor: string | null): string {
   const data = new Date(valor);
   if (Number.isNaN(data.getTime())) return valor;
   return data.toLocaleString("pt-BR");
+}
+
+function CartaoKpi({ titulo, valor, cor }: { titulo: string; valor: string; cor?: string }) {
+  return (
+    <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) px-4 py-4">
+      <p className="text-xl font-semibold tabular-nums" style={cor ? { color: cor } : undefined}>{valor}</p>
+      <p className="mt-1 text-xs text-(--color-text-weak)">{titulo}</p>
+    </div>
+  );
 }
 
 function FormularioNovoUsuario({ onCriado }: { onCriado: () => void }) {
@@ -504,22 +521,422 @@ function SecaoConfiguracoes({
   );
 }
 
+function SecaoValidacaoDados({ validacao }: { validacao: { prestadores: DiagnosticoImportacao; cessionarios: DiagnosticoImportacao } }) {
+  const total = validacao.prestadores.totalImportados + validacao.cessionarios.totalImportados;
+  return (
+    <div>
+      <p className="text-sm font-semibold text-(--color-text)">Validação da importação dos dados históricos</p>
+      <p className="mt-1 text-xs text-(--color-text-weak)">
+        Calculado a partir dos registros efetivamente gravados no banco (não depende do arquivo de origem estar
+        disponível). A numeração de Item é preservada exatamente como veio da planilha — nunca renumerada.
+      </p>
+
+      {([["Prestadores", validacao.prestadores], ["Cessionários", validacao.cessionarios]] as const).map(([titulo, dados]) => (
+        <div key={titulo} className="mt-6 rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-6">
+          <p className="text-sm font-semibold text-(--color-text)">{titulo}</p>
+          <div className="mt-3 grid grid-cols-3 gap-3 max-w-lg">
+            <CartaoKpi titulo="Registros importados" valor={String(dados.totalImportados)} />
+            <CartaoKpi titulo="Item mínimo" valor={dados.itemMinimo != null ? String(dados.itemMinimo) : "-"} />
+            <CartaoKpi titulo="Item máximo" valor={dados.itemMaximo != null ? String(dados.itemMaximo) : "-"} />
+          </div>
+          {dados.itensAusentesNaOrigem.length > 0 ? (
+            <p className="mt-3 rounded-xl border border-(--color-gold)/40 bg-(--color-gold)/10 px-4 py-3 text-xs text-(--color-text)">
+              A numeração de Item vai de {dados.itemMinimo} a {dados.itemMaximo} (
+              {(dados.itemMaximo ?? 0) - (dados.itemMinimo ?? 0) + 1} números), mas{" "}
+              <strong>{dados.itensAusentesNaOrigem.length}</strong> número(s) de Item não possuem nenhuma linha
+              correspondente na planilha de origem: <strong>{dados.itensAusentesNaOrigem.join(", ")}</strong>. Isso
+              indica que essas linhas já não existiam fisicamente na planilha (removidas na origem antes da
+              importação, sem reaproveitamento de numeração) — todas as demais linhas foram importadas sem nenhum
+              filtro de status, PEP ou duplicidade.
+            </p>
+          ) : (
+            <p className="mt-3 rounded-xl border border-(--color-green)/30 bg-(--color-green)/10 px-4 py-3 text-xs text-(--color-text)">
+              Numeração de Item contígua — nenhuma linha da planilha de origem ficou de fora da importação.
+            </p>
+          )}
+        </div>
+      ))}
+
+      <div className="mt-6 max-w-xs">
+        <CartaoKpi titulo="Total geral importado (Prestadores + Cessionários)" valor={String(total)} cor="var(--color-navy)" />
+      </div>
+    </div>
+  );
+}
+
+function SecaoHistorico() {
+  const [tabela, setTabela] = useState("Todas");
+  const [completo, setCompleto] = useState(false);
+  const [registros, setRegistros] = useState<RegistroHistorico[] | null>(null);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (tabela !== "Todas") params.set("tabela", tabela);
+    if (completo) params.set("completo", "1");
+    fetch(`/api/admin/historico?${params.toString()}`)
+      .then((r) => r.json())
+      .then((dados) => setRegistros(dados.registros ?? []))
+      .catch(() => setErro("Não foi possível carregar o histórico."))
+      .finally(() => setCarregando(false));
+  }, [tabela, completo]);
+
+  function formatarDataHora(valor: string): string {
+    const data = new Date(valor);
+    return Number.isNaN(data.getTime()) ? valor : data.toLocaleString("pt-BR");
+  }
+
+  return (
+    <div>
+      <p className="text-sm font-semibold text-(--color-text)">Histórico de edições e auditoria de segurança</p>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <select value={tabela} onChange={(e) => setTabela(e.target.value)} className="rounded-full border border-(--color-border) bg-(--color-surface-1) px-3 py-2 text-xs font-medium outline-none focus:border-(--color-navy)">
+          {TIPOS_HISTORICO.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <label className="flex items-center gap-2 text-xs text-(--color-text-weak)">
+          <input type="checkbox" checked={completo} onChange={(e) => setCompleto(e.target.checked)} />
+          Carregar histórico completo
+        </label>
+      </div>
+      {!completo && registros && <p className="mt-2 text-xs text-(--color-text-dim)">Mostrando os {registros.length} registros mais recentes.</p>}
+
+      {carregando ? (
+        <p className="mt-4 text-xs text-(--color-text-dim)">Carregando…</p>
+      ) : erro || !registros ? (
+        <p className="mt-4 text-sm text-(--color-red)">{erro || "Não foi possível carregar o histórico."}</p>
+      ) : (
+        <div className="mt-4 overflow-x-auto rounded-2xl border border-(--color-border) bg-(--color-surface-1)">
+          <table className="w-full min-w-[1000px] text-left text-sm">
+            <thead>
+              <tr className="text-xs font-medium text-(--color-text-dim)">
+                <th className="px-4 py-3">Tabela</th>
+                <th className="px-4 py-3">Registro</th>
+                <th className="px-4 py-3">Campo</th>
+                <th className="px-4 py-3">Valor anterior</th>
+                <th className="px-4 py-3">Valor novo</th>
+                <th className="px-4 py-3">Usuário</th>
+                <th className="px-4 py-3">Data/Hora</th>
+              </tr>
+            </thead>
+            <tbody>
+              {registros.length === 0 ? (
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-(--color-text-weak)">Nenhum registro encontrado.</td></tr>
+              ) : (
+                registros.map((r) => (
+                  <tr key={r.id} className="border-t border-(--color-border) first:border-0">
+                    <td className="px-4 py-2.5 text-(--color-text-weak)">{r.tabela}</td>
+                    <td className="px-4 py-2.5 text-(--color-text-weak)">{r.registroId}</td>
+                    <td className="px-4 py-2.5 font-medium text-(--color-text)">{r.campo}</td>
+                    <td className="px-4 py-2.5 text-(--color-text-weak)">{r.valorAnterior ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-(--color-text-weak)">{r.valorNovo ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-(--color-text-weak)">{r.usuario}</td>
+                    <td className="px-4 py-2.5 text-(--color-text-weak)">{formatarDataHora(r.dataHora)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SecaoCentralCodificacao({ codigosDisciplina }: { codigosDisciplina: CodigoDisciplina[] }) {
+  const router = useRouter();
+  const linhasIniciais = useMemo(() => {
+    const porDisciplina = new Map(codigosDisciplina.map((c) => [c.disciplina, c]));
+    const faltantes = DISCIPLINAS.filter((d) => !porDisciplina.has(d)).map((d) => ({ disciplina: d, codigo: null, descricao: null }));
+    return [...codigosDisciplina, ...faltantes].sort((a, b) => a.disciplina.localeCompare(b.disciplina));
+  }, [codigosDisciplina]);
+
+  const [linhas, setLinhas] = useState(linhasIniciais);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [sucesso, setSucesso] = useState<string | null>(null);
+
+  function atualizarLinha(disciplina: string, campo: "codigo" | "descricao", valor: string) {
+    setLinhas((atual) => atual.map((l) => (l.disciplina === disciplina ? { ...l, [campo]: valor || null } : l)));
+  }
+
+  async function salvar() {
+    setSalvando(true);
+    setErro(null);
+    setSucesso(null);
+    try {
+      const resposta = await fetch("/api/admin/codigos-disciplina", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codigos: linhas }),
+      });
+      if (!resposta.ok) {
+        setErro("Erro ao salvar códigos de disciplina.");
+        return;
+      }
+      setSucesso("Códigos de disciplina atualizados com sucesso.");
+      router.refresh();
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div>
+      <p className="text-sm font-semibold text-(--color-text)">Central de Codificação — código de disciplina</p>
+      <p className="mt-1 text-xs text-(--color-text-weak)">
+        Código numérico de especialidade (procedimento PR-PRO-002 &quot;Codificação de Documentação Técnica&quot;)
+        usado para montar o segmento de disciplina (DDD) do número da AT no Resumo de Conclusão:
+        AT-NNN-AA-PPP-DDD-RR. Uma disciplina sem código cadastrado não trava o Resumo — o segmento fica apenas
+        omitido no número da AT até que o código seja definido aqui.
+      </p>
+
+      <div className="mt-4 overflow-x-auto rounded-2xl border border-(--color-border) bg-(--color-surface-1)">
+        <table className="w-full min-w-[700px] text-left text-sm">
+          <thead>
+            <tr className="text-xs font-medium text-(--color-text-dim)">
+              <th className="px-4 py-3">Disciplina</th>
+              <th className="px-4 py-3">Código (DDD)</th>
+              <th className="px-4 py-3">Descrição (PR-PRO-002)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {linhas.map((l) => (
+              <tr key={l.disciplina} className="border-t border-(--color-border) first:border-0">
+                <td className="px-4 py-2.5 text-(--color-text-weak)">{l.disciplina}</td>
+                <td className="px-4 py-2.5">
+                  <input
+                    value={l.codigo ?? ""} onChange={(e) => atualizarLinha(l.disciplina, "codigo", e.target.value)}
+                    placeholder="Ex.: 400" className="w-28 rounded-lg border border-(--color-border) bg-(--color-bg) px-2 py-1 text-sm text-(--color-text) outline-none focus:border-(--color-navy)"
+                  />
+                </td>
+                <td className="px-4 py-2.5">
+                  <input
+                    value={l.descricao ?? ""} onChange={(e) => atualizarLinha(l.disciplina, "descricao", e.target.value)}
+                    className="w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-2 py-1 text-sm text-(--color-text) outline-none focus:border-(--color-navy)"
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {erro && <p className="mt-2 text-sm text-(--color-red)">{erro}</p>}
+      {sucesso && <p className="mt-2 text-sm text-(--color-green)">{sucesso}</p>}
+      <button onClick={salvar} disabled={salvando} className="mt-4 rounded-full bg-(--color-navy) px-5 py-2 text-sm font-medium text-white disabled:opacity-60">
+        {salvando ? "Salvando…" : "Salvar códigos de disciplina"}
+      </button>
+    </div>
+  );
+}
+
+function SecaoChecklistPerguntas({ perguntasIniciais }: { perguntasIniciais: PerguntaChecklistAdmin[] }) {
+  const router = useRouter();
+  const [perguntas, setPerguntas] = useState(perguntasIniciais);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [sucesso, setSucesso] = useState<string | null>(null);
+
+  const [categoriaNova, setCategoriaNova] = useState("");
+  const [categoriaSelecionada, setCategoriaSelecionada] = useState("— Nova categoria —");
+  const [textoNovo, setTextoNovo] = useState("");
+  const [ordemCategoriaNova, setOrdemCategoriaNova] = useState(1);
+  const [ordemPerguntaNova, setOrdemPerguntaNova] = useState(1);
+  const [adicionando, setAdicionando] = useState(false);
+  const [erroNova, setErroNova] = useState<string | null>(null);
+
+  const categoriasExistentes = useMemo(() => [...new Set(perguntasIniciais.map((p) => p.categoria))].sort(), [perguntasIniciais]);
+
+  function atualizarPergunta(id: number, campo: keyof PerguntaChecklistAdmin, valor: string | number | boolean) {
+    setPerguntas((atual) => atual.map((p) => (p.id === id ? { ...p, [campo]: valor } : p)));
+  }
+
+  async function salvarPerguntas() {
+    setSalvando(true);
+    setErro(null);
+    setSucesso(null);
+    try {
+      for (const p of perguntas) {
+        const original = perguntasIniciais.find((o) => o.id === p.id);
+        if (!original) continue;
+        if (
+          p.categoria !== original.categoria || p.texto !== original.texto ||
+          p.ordemCategoria !== original.ordemCategoria || p.ordemPergunta !== original.ordemPergunta ||
+          p.ativo !== original.ativo
+        ) {
+          const resposta = await fetch(`/api/admin/checklist-perguntas/${p.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ categoria: p.categoria, texto: p.texto, ordemCategoria: p.ordemCategoria, ordemPergunta: p.ordemPergunta, ativo: p.ativo }),
+          });
+          if (!resposta.ok) {
+            setErro("Erro ao salvar perguntas do checklist.");
+            return;
+          }
+        }
+      }
+      setSucesso("Perguntas do checklist atualizadas com sucesso.");
+      router.refresh();
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function adicionarPergunta() {
+    const categoria = categoriaSelecionada === "— Nova categoria —" ? categoriaNova : categoriaSelecionada;
+    if (!categoria.trim() || !textoNovo.trim()) {
+      setErroNova("Preencha a categoria e o texto da pergunta.");
+      return;
+    }
+    setAdicionando(true);
+    setErroNova(null);
+    try {
+      const resposta = await fetch("/api/admin/checklist-perguntas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoria, texto: textoNovo, ordemCategoria: ordemCategoriaNova, ordemPergunta: ordemPerguntaNova }),
+      });
+      if (!resposta.ok) {
+        setErroNova("Erro ao adicionar pergunta.");
+        return;
+      }
+      setTextoNovo("");
+      router.refresh();
+    } finally {
+      setAdicionando(false);
+    }
+  }
+
+  return (
+    <div>
+      <p className="text-sm font-semibold text-(--color-text)">Checklist de Avaliação — perguntas</p>
+      <p className="mt-1 text-xs text-(--color-text-weak)">
+        Perguntas do checklist de Avaliação (Prestadores e Cessionários), usado no formulário de Avaliação —
+        Checklist. Editar texto/categoria/ordem ou desativar uma pergunta aqui não altera avaliações já
+        registradas — elas continuam mostrando exatamente o que foi respondido/calculado no momento em que foram
+        salvas.
+      </p>
+
+      {perguntas.length === 0 ? (
+        <p className="mt-4 text-sm text-(--color-text-weak)">Nenhuma pergunta cadastrada.</p>
+      ) : (
+        <>
+          <div className="mt-4 overflow-x-auto rounded-2xl border border-(--color-border) bg-(--color-surface-1)">
+            <table className="w-full min-w-[1000px] text-left text-sm">
+              <thead>
+                <tr className="text-xs font-medium text-(--color-text-dim)">
+                  <th className="px-4 py-3">Categoria</th>
+                  <th className="px-4 py-3">Pergunta</th>
+                  <th className="px-4 py-3">Ordem categoria</th>
+                  <th className="px-4 py-3">Ordem pergunta</th>
+                  <th className="px-4 py-3">Ativa</th>
+                </tr>
+              </thead>
+              <tbody>
+                {perguntas.map((p) => (
+                  <tr key={p.id} className="border-t border-(--color-border) first:border-0">
+                    <td className="px-4 py-2.5">
+                      <input value={p.categoria} onChange={(e) => atualizarPergunta(p.id, "categoria", e.target.value)} className="w-32 rounded-lg border border-(--color-border) bg-(--color-bg) px-2 py-1 text-sm text-(--color-text) outline-none focus:border-(--color-navy)" />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <input value={p.texto} onChange={(e) => atualizarPergunta(p.id, "texto", e.target.value)} className="w-full min-w-[320px] rounded-lg border border-(--color-border) bg-(--color-bg) px-2 py-1 text-sm text-(--color-text) outline-none focus:border-(--color-navy)" />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <input type="number" min={1} value={p.ordemCategoria} onChange={(e) => atualizarPergunta(p.id, "ordemCategoria", Number(e.target.value))} className="w-20 rounded-lg border border-(--color-border) bg-(--color-bg) px-2 py-1 text-sm text-(--color-text) outline-none focus:border-(--color-navy)" />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <input type="number" min={1} value={p.ordemPergunta} onChange={(e) => atualizarPergunta(p.id, "ordemPergunta", Number(e.target.value))} className="w-20 rounded-lg border border-(--color-border) bg-(--color-bg) px-2 py-1 text-sm text-(--color-text) outline-none focus:border-(--color-navy)" />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <input type="checkbox" checked={p.ativo} onChange={(e) => atualizarPergunta(p.id, "ativo", e.target.checked)} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {erro && <p className="mt-2 text-sm text-(--color-red)">{erro}</p>}
+          {sucesso && <p className="mt-2 text-sm text-(--color-green)">{sucesso}</p>}
+          <button onClick={salvarPerguntas} disabled={salvando} className="mt-4 rounded-full bg-(--color-navy) px-5 py-2 text-sm font-medium text-white disabled:opacity-60">
+            {salvando ? "Salvando…" : "Salvar perguntas do checklist"}
+          </button>
+        </>
+      )}
+
+      <div className="mt-8 rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-6">
+        <p className="text-sm font-semibold text-(--color-text)">Adicionar nova pergunta</p>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="text-xs text-(--color-text-weak)">
+              Categoria
+              <select value={categoriaSelecionada} onChange={(e) => setCategoriaSelecionada(e.target.value)} className="mt-1 w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none focus:border-(--color-navy)">
+                {categoriasExistentes.map((c) => <option key={c} value={c}>{c}</option>)}
+                <option value="— Nova categoria —">— Nova categoria —</option>
+              </select>
+            </label>
+            {categoriaSelecionada === "— Nova categoria —" && (
+              <input value={categoriaNova} onChange={(e) => setCategoriaNova(e.target.value)} placeholder="Nome da nova categoria" className="mt-2 w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none focus:border-(--color-navy)" />
+            )}
+            <label className="mt-3 block text-xs text-(--color-text-weak)">
+              Texto da pergunta
+              <textarea value={textoNovo} onChange={(e) => setTextoNovo(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none focus:border-(--color-navy)" />
+            </label>
+          </div>
+          <div>
+            <label className="text-xs text-(--color-text-weak)">
+              Ordem da categoria
+              <input type="number" min={1} value={ordemCategoriaNova} onChange={(e) => setOrdemCategoriaNova(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none focus:border-(--color-navy)" />
+            </label>
+            <label className="mt-3 block text-xs text-(--color-text-weak)">
+              Ordem na categoria
+              <input type="number" min={1} value={ordemPerguntaNova} onChange={(e) => setOrdemPerguntaNova(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none focus:border-(--color-navy)" />
+            </label>
+          </div>
+        </div>
+        {erroNova && <p className="mt-2 text-sm text-(--color-red)">{erroNova}</p>}
+        <button onClick={adicionarPergunta} disabled={adicionando} className="mt-3 rounded-full border border-(--color-border) px-4 py-1.5 text-xs font-medium text-(--color-navy) hover:bg-(--color-surface-2) disabled:opacity-60">
+          {adicionando ? "Adicionando…" : "Adicionar pergunta"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const ABAS_LABEL: Record<string, string> = {
+  usuarios: "Usuários",
+  validacao: "Validação de Dados",
+  historico: "Histórico e Auditoria",
+  configuracoes: "Configurações",
+  codificacao: "Central de Codificação",
+  checklist: "Checklist de Avaliação",
+};
+
 export function PainelAdministracao({
-  usuarios, podeAdministrarUsuarios, podeConfigurar, diasAtencaoInicial, diasCriticoInicial, metaRev2Inicial,
+  usuarios, validacao, codigosDisciplina, perguntasChecklist,
+  podeAdministrarUsuarios, podeAuditoria, podeConfigurar,
+  diasAtencaoInicial, diasCriticoInicial, metaRev2Inicial,
 }: {
   usuarios: Usuario[];
+  validacao: { prestadores: DiagnosticoImportacao; cessionarios: DiagnosticoImportacao };
+  codigosDisciplina: CodigoDisciplina[];
+  perguntasChecklist: PerguntaChecklistAdmin[];
   podeAdministrarUsuarios: boolean;
+  podeAuditoria: boolean;
   podeConfigurar: boolean;
   diasAtencaoInicial: number;
   diasCriticoInicial: number;
   metaRev2Inicial: number;
 }) {
   const abasDisponiveis = useMemo(() => {
-    const abas: ("usuarios" | "configuracoes")[] = [];
+    const abas: string[] = [];
     if (podeAdministrarUsuarios) abas.push("usuarios");
-    if (podeConfigurar) abas.push("configuracoes");
+    abas.push("validacao");
+    if (podeAuditoria) abas.push("historico");
+    if (podeConfigurar) abas.push("configuracoes", "codificacao", "checklist");
     return abas;
-  }, [podeAdministrarUsuarios, podeConfigurar]);
+  }, [podeAdministrarUsuarios, podeAuditoria, podeConfigurar]);
 
   const [aba, setAba] = useState(abasDisponiveis[0]);
 
@@ -528,14 +945,14 @@ export function PainelAdministracao({
       <h1 className="text-2xl font-semibold text-(--color-text)">Administração do Sistema</h1>
 
       {abasDisponiveis.length > 1 && (
-        <div className="mt-6 flex gap-1 rounded-full border border-(--color-border) bg-(--color-surface-1) p-1 text-sm font-medium w-fit">
+        <div className="mt-6 flex flex-wrap gap-1 rounded-full border border-(--color-border) bg-(--color-surface-1) p-1 text-sm font-medium w-fit">
           {abasDisponiveis.map((a) => (
             <button
               key={a}
               onClick={() => setAba(a)}
               className={`rounded-full px-4 py-1.5 transition-colors ${aba === a ? "bg-(--color-navy) text-white" : "text-(--color-text-weak) hover:text-(--color-text)"}`}
             >
-              {a === "usuarios" ? "Usuários" : "Configurações"}
+              {ABAS_LABEL[a]}
             </button>
           ))}
         </div>
@@ -543,9 +960,13 @@ export function PainelAdministracao({
 
       <div className="mt-6">
         {aba === "usuarios" && podeAdministrarUsuarios && <SecaoUsuarios usuarios={usuarios} />}
+        {aba === "validacao" && <SecaoValidacaoDados validacao={validacao} />}
+        {aba === "historico" && podeAuditoria && <SecaoHistorico />}
         {aba === "configuracoes" && podeConfigurar && (
           <SecaoConfiguracoes diasAtencaoInicial={diasAtencaoInicial} diasCriticoInicial={diasCriticoInicial} metaRev2Inicial={metaRev2Inicial} />
         )}
+        {aba === "codificacao" && podeConfigurar && <SecaoCentralCodificacao codigosDisciplina={codigosDisciplina} />}
+        {aba === "checklist" && podeConfigurar && <SecaoChecklistPerguntas perguntasIniciais={perguntasChecklist} />}
       </div>
     </div>
   );

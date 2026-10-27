@@ -10,6 +10,22 @@ export const RESPONSAVEIS = [
   "MATHEUS", "MAYRON", "RIOGALEÃO", "THAINÁ NOBRE", "VIRGINIA", "WESLEY",
 ];
 
+export const DISCIPLINAS = [
+  "ELÉTRICA", "TELEMÁTICA", "HIDRÁULICA", "ESGOTO", "ARQUITETURA", "SOM",
+  "AR CONDICIONADO", "HIDROSSANTÁRIO", "ESTRUTURA", "INCÊNDIO", "SDAI",
+  "COMBATE A INCÊNDIO", "ESTRUTURA (MC)", "HIDROSSANITÁRIO",
+  "TELECOM / ESPECIAIS", "SPDA", "ÁGUAS PLUVIAIS", "CERCAMENTO",
+  "TELEFONIA", "TELEMATICA", "PAISAGISMO", "SINALIZAÇÃO VERTICAL",
+  "SINALIZAÇÃO HORIZONTAL", "PAVIMENTAÇÃO", "GEOMÉTRICO", "EXAUSTÃO",
+  "HVAC", "GERAL", "DRENAGEM",
+];
+
+/** Mesma lista de views/administracao.py::_TIPOS_HISTORICO — "reunioes"
+ * e "planos_acao" nunca têm linhas (área cortada do sistema), mas a
+ * opção de filtro continua existindo para não quebrar quem já viu o
+ * Streamlit. */
+export const TIPOS_HISTORICO = ["Todas", "prestadores", "cessionarios", "reunioes", "planos_acao", "seguranca"];
+
 /** Módulos de acesso independente — quando bloqueado, o módulo não
  * aparece no menu, não abre por navegação direta e não fornece dados.
  * Mesma lista de gat/config.py::MODULOS_CONTROLADOS. */
