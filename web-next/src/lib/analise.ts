@@ -46,7 +46,7 @@ export type DadosPrestador = {
   etg: string;
 };
 
-const COLUNAS_PRESTADOR = [
+export const COLUNAS_PRESTADOR = [
   "codigo", "prestador", "disciplina", "disciplina_sla", "peps", "obra_referencia", "revisao", "num_documentos",
   "data_solicitacao", "data_limite", "data_analise", "hold_inicio", "hold_fim", "num_at", "revisao_at",
   "responsavel", "status_analise", "observacoes", "natureza_revisao", "num_erros", "etg",
@@ -127,7 +127,7 @@ export type DadosCessionario = {
   etg: string;
 };
 
-const COLUNAS_CESSIONARIO = [
+export const COLUNAS_CESSIONARIO = [
   "codigo", "cessionario", "disciplina", "disciplina_sla", "revisao", "num_documentos", "data_solicitacao",
   "tipo", "sla_dias", "data_limite", "data_analise", "hold_inicio", "hold_fim", "num_at", "revisao_at",
   "responsavel", "status_analise", "observacoes", "natureza_revisao", "num_erros", "etg",
