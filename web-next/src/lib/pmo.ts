@@ -4,9 +4,19 @@ import {
   KPI_PADRAO_HABILITADO,
   MENSAGEM_LEMBRETE_CRONOGRAMA,
   TITULO_ALERTA_CRONOGRAMA,
+  calcularPercentualExecucao,
+  calcularSaudeProjeto,
+  percentualPlanejadoAte,
   proximoLembreteCronograma,
+  proximoMarco,
   type AlertaPmo,
+  type AtividadeCronograma,
+  type Comunicacao,
+  type Entregavel,
+  type Medicao,
   type ProjetoPmo,
+  type ResumoFinanceiro,
+  type Risco,
 } from "@/lib/pmo-calculo";
 
 const MODULO_ALERTA_PMO = "pmo";
@@ -293,4 +303,208 @@ export async function verificarEGerarLembretesCronograma(): Promise<number> {
     gerados += 1;
   }
   return gerados;
+}
+
+// ---------------------------------------------------------------------------
+// Cronograma — leitura (upload/interpretação automática fica para um
+// próximo incremento; aqui só a leitura, para alimentar Dashboard/Curva
+// S/recálculo de saúde mesmo antes de o Cronograma existir)
+// ---------------------------------------------------------------------------
+
+export async function listarAtividadesCronograma(projetoId: number): Promise<AtividadeCronograma[]> {
+  const pool = obterPool();
+  const { rows: arquivos } = await pool.query<{ id: number }>(
+    "SELECT id FROM pmo_cronograma_arquivos WHERE projeto_id = $1 AND ativo = true AND arquivado_em IS NULL",
+    [projetoId],
+  );
+  if (!arquivos.length) return [];
+  const { rows } = await pool.query<AtividadeCronograma>(
+    "SELECT * FROM pmo_cronograma_atividades WHERE arquivo_id = $1 ORDER BY id",
+    [arquivos[0].id],
+  );
+  return rows;
+}
+
+/** Recalcula saúde/%execução/próximo marco a partir do estado atual do
+ * cronograma e dos riscos, e persiste — chamado a cada carregamento da
+ * página do projeto. Mesma regra de
+ * views/pmo_projeto.py::_recalcular_status. */
+export async function recalcularStatus(projetoId: number): Promise<ProjetoPmo | null> {
+  const atividades = await listarAtividadesCronograma(projetoId);
+  const pctExecucao = calcularPercentualExecucao(atividades);
+  const marco = proximoMarco(atividades);
+
+  const riscos = await listarRiscos(projetoId);
+  const riscosCriticosAbertos = riscos.filter((r) => r.probabilidade * r.impacto >= 15 && r.status === "ABERTO").length;
+
+  const hoje = new Date();
+  const atividadeCriticaAtrasada = atividades.some(
+    (a) => a.caminho_critico === 1 && a.data_fim && new Date(a.data_fim) < hoje && (a.percentual_concluido ?? 0) < 100,
+  );
+  const percentualPlanejadoHoje = atividades.length ? percentualPlanejadoAte(atividades, hoje) : null;
+
+  const alerta = await obterAlertaCronograma(projetoId);
+  const alertaAtivo = alerta?.status === "ATIVO";
+
+  const saude = calcularSaudeProjeto(pctExecucao, percentualPlanejadoHoje, atividadeCriticaAtrasada, riscosCriticosAbertos, alertaAtivo);
+
+  const pool = obterPool();
+  await pool.query(
+    "UPDATE pmo_projetos SET saude = $1, percentual_execucao = $2, proximo_marco = $3, proximo_marco_data = $4 WHERE id = $5",
+    [saude, pctExecucao, marco?.nome ?? null, marco?.dataFim ?? null, projetoId],
+  );
+  return obterProjeto(projetoId);
+}
+
+// ---------------------------------------------------------------------------
+// Financeiro (derivado das Medições)
+// ---------------------------------------------------------------------------
+
+export async function resumoFinanceiro(projetoId: number): Promise<ResumoFinanceiro> {
+  const [projeto, medicoes] = await Promise.all([obterProjeto(projetoId), listarMedicoes(projetoId)]);
+  const contratado = Number(projeto?.valor_contratual ?? 0);
+  const soma = (campo: keyof Medicao) => medicoes.reduce((s, m) => s + Number(m[campo] ?? 0), 0);
+  const medido = soma("valor_medido");
+  const aprovado = soma("valor_aprovado");
+  const pago = soma("valor_pago");
+  const glosado = soma("valor_glosado");
+  return { valor_contratado: contratado, valor_medido: medido, valor_aprovado: aprovado, valor_pago: pago, valor_glosado: glosado, saldo: contratado - pago };
+}
+
+// ---------------------------------------------------------------------------
+// Medições
+// ---------------------------------------------------------------------------
+
+export type DadosMedicao = {
+  competencia_mes: number;
+  competencia_ano: number;
+  percentual: number | null;
+  valor_medido: number | null;
+  situacao: string;
+  valor_aprovado: number | null;
+  valor_pago: number | null;
+  valor_glosado: number;
+};
+
+export async function inserirMedicao(projetoId: number, dados: DadosMedicao, usuario: string): Promise<number> {
+  const pool = obterPool();
+  const agora = new Date().toISOString();
+  const { rows } = await pool.query<{ id: number }>(
+    "INSERT INTO pmo_medicoes (projeto_id, competencia_mes, competencia_ano, percentual, valor_medido, situacao, " +
+      "valor_aprovado, valor_pago, valor_glosado, criado_por, criado_em) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id",
+    [projetoId, dados.competencia_mes, dados.competencia_ano, dados.percentual, dados.valor_medido, dados.situacao, dados.valor_aprovado, dados.valor_pago, dados.valor_glosado, usuario, agora],
+  );
+  const medicaoId = rows[0].id;
+  await registrarHistorico("pmo_medicoes", medicaoId, {}, { ...dados }, usuario);
+  return medicaoId;
+}
+
+export async function listarMedicoes(projetoId: number): Promise<Medicao[]> {
+  const pool = obterPool();
+  const { rows } = await pool.query<Medicao>(
+    "SELECT * FROM pmo_medicoes WHERE projeto_id = $1 ORDER BY competencia_ano DESC, competencia_mes DESC",
+    [projetoId],
+  );
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
+// Entregáveis
+// ---------------------------------------------------------------------------
+
+export type DadosEntregavel = {
+  nome: string;
+  previsto: number;
+  entregue: number;
+  data_prevista: string | null;
+  data_entrega: string | null;
+  percentual_documental: number;
+  observacoes: string | null;
+};
+
+export async function inserirEntregavel(projetoId: number, dados: DadosEntregavel, usuario: string): Promise<number> {
+  const pool = obterPool();
+  const agora = new Date().toISOString();
+  const { rows } = await pool.query<{ id: number }>(
+    "INSERT INTO pmo_entregaveis (projeto_id, nome, previsto, entregue, data_prevista, data_entrega, percentual_documental, observacoes, criado_por, criado_em) " +
+      "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id",
+    [projetoId, dados.nome, dados.previsto, dados.entregue, dados.data_prevista, dados.data_entrega, dados.percentual_documental, dados.observacoes, usuario, agora],
+  );
+  const entregavelId = rows[0].id;
+  await registrarHistorico("pmo_entregaveis", entregavelId, {}, { ...dados }, usuario);
+  return entregavelId;
+}
+
+export async function atualizarEntregavel(entregavelId: number, dados: DadosEntregavel, usuario: string): Promise<void> {
+  const pool = obterPool();
+  const agora = new Date().toISOString();
+  const { rows: antigas } = await pool.query("SELECT * FROM pmo_entregaveis WHERE id = $1", [entregavelId]);
+  await pool.query(
+    "UPDATE pmo_entregaveis SET nome = $1, previsto = $2, entregue = $3, data_prevista = $4, data_entrega = $5, " +
+      "percentual_documental = $6, observacoes = $7, atualizado_em = $8, atualizado_por = $9 WHERE id = $10",
+    [dados.nome, dados.previsto, dados.entregue, dados.data_prevista, dados.data_entrega, dados.percentual_documental, dados.observacoes, agora, usuario, entregavelId],
+  );
+  await registrarHistorico("pmo_entregaveis", entregavelId, antigas[0] ?? {}, { ...dados }, usuario);
+}
+
+export async function listarEntregaveis(projetoId: number): Promise<Entregavel[]> {
+  const pool = obterPool();
+  const { rows } = await pool.query<Entregavel>("SELECT * FROM pmo_entregaveis WHERE projeto_id = $1 ORDER BY id", [projetoId]);
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
+// Riscos
+// ---------------------------------------------------------------------------
+
+export type DadosRisco = {
+  descricao: string;
+  probabilidade: number;
+  impacto: number;
+  status: string;
+  responsavel: string | null;
+  plano_mitigacao: string | null;
+};
+
+export async function inserirRisco(projetoId: number, dados: DadosRisco, usuario: string): Promise<number> {
+  const pool = obterPool();
+  const agora = new Date().toISOString();
+  const { rows } = await pool.query<{ id: number }>(
+    "INSERT INTO pmo_riscos (projeto_id, descricao, probabilidade, impacto, status, responsavel, plano_mitigacao, criado_por, criado_em) " +
+      "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id",
+    [projetoId, dados.descricao, dados.probabilidade, dados.impacto, dados.status, dados.responsavel, dados.plano_mitigacao, usuario, agora],
+  );
+  const riscoId = rows[0].id;
+  await registrarHistorico("pmo_riscos", riscoId, {}, { ...dados }, usuario);
+  return riscoId;
+}
+
+export async function listarRiscos(projetoId: number): Promise<Risco[]> {
+  const pool = obterPool();
+  const { rows } = await pool.query<Risco>("SELECT * FROM pmo_riscos WHERE projeto_id = $1 ORDER BY id", [projetoId]);
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
+// Comunicações
+// ---------------------------------------------------------------------------
+
+export type DadosComunicacao = { data: string; tipo: string; descricao: string; responsavel: string | null };
+
+export async function inserirComunicacao(projetoId: number, dados: DadosComunicacao, usuario: string): Promise<number> {
+  const pool = obterPool();
+  const agora = new Date().toISOString();
+  const { rows } = await pool.query<{ id: number }>(
+    "INSERT INTO pmo_comunicacoes (projeto_id, data, tipo, descricao, responsavel, criado_por, criado_em) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id",
+    [projetoId, dados.data, dados.tipo, dados.descricao, dados.responsavel, usuario, agora],
+  );
+  const comunicacaoId = rows[0].id;
+  await registrarHistorico("pmo_comunicacoes", comunicacaoId, {}, { ...dados }, usuario);
+  return comunicacaoId;
+}
+
+export async function listarComunicacoes(projetoId: number): Promise<Comunicacao[]> {
+  const pool = obterPool();
+  const { rows } = await pool.query<Comunicacao>("SELECT * FROM pmo_comunicacoes WHERE projeto_id = $1 ORDER BY data DESC", [projetoId]);
+  return rows;
 }

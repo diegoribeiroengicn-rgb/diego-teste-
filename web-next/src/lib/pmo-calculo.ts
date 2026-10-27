@@ -195,6 +195,181 @@ export function proximoLembreteCronograma(aPartirDe: Date, intervaloDiasUteis = 
   return data;
 }
 
+// ---------------------------------------------------------------------------
+// Cronograma — % de execução, próximo marco, Curva S, SPI
+// ---------------------------------------------------------------------------
+
+export type AtividadeCronograma = {
+  id: number;
+  arquivo_id: number;
+  projeto_id: number;
+  identificador_origem: string | null;
+  nome: string;
+  data_inicio: string | null;
+  data_fim: string | null;
+  duracao_dias: number | null;
+  percentual_concluido: number;
+  e_marco: number;
+  predecessoras: string | null;
+  caminho_critico: number;
+  folga_dias: number | null;
+};
+
+/** % de execução do projeto: média do percentual concluído das
+ * atividades do cronograma vigente, ponderada pela duração de cada uma
+ * (atividades mais longas pesam mais no avanço global). Retorna 0 quando
+ * não há cronograma anexado. Mesma regra de
+ * gat/pmo_business_rules.py::calcular_percentual_execucao. */
+export function calcularPercentualExecucao(atividades: AtividadeCronograma[]): number {
+  if (!atividades.length) return 0;
+  const pesos = atividades.map((a) => Math.max(a.duracao_dias ?? 1, 0.1));
+  const totalPeso = pesos.reduce((s, p) => s + p, 0);
+  if (totalPeso <= 0) {
+    return Math.round((atividades.reduce((s, a) => s + (a.percentual_concluido ?? 0), 0) / atividades.length) * 10) / 10;
+  }
+  const soma = atividades.reduce((s, a, i) => s + (a.percentual_concluido ?? 0) * pesos[i], 0);
+  return Math.round((soma / totalPeso) * 10) / 10;
+}
+
+/** Marco (atividade com `e_marco`) ainda não concluído com a data de
+ * término mais próxima. Retorna null quando não há cronograma ou todos
+ * os marcos já foram concluídos. Mesma regra de
+ * gat/pmo_business_rules.py::proximo_marco. */
+export function proximoMarco(atividades: AtividadeCronograma[]): { nome: string; dataFim: string | null } | null {
+  const marcos = atividades.filter((a) => a.e_marco === 1 && (a.percentual_concluido ?? 0) < 100 && a.data_fim);
+  if (!marcos.length) return null;
+  const ordenados = [...marcos].sort((a, b) => new Date(a.data_fim!).getTime() - new Date(b.data_fim!).getTime());
+  return { nome: ordenados[0].nome, dataFim: ordenados[0].data_fim };
+}
+
+/** Curva planejada (% acumulado do peso do cronograma concluído até cada
+ * mês, considerando a data de término prevista de cada atividade) — um
+ * ponto por mês entre o início e o término previstos do cronograma.
+ * Mesma regra de gat/pmo_business_rules.py::curva_s_planejada. */
+export function curvaSPlanejada(atividades: AtividadeCronograma[]): { data: Date; pctPlanejado: number }[] {
+  if (!atividades.length) return [];
+  const pesos = atividades.map((a) => Math.max(a.duracao_dias ?? 1, 0.1));
+  const totalPeso = pesos.reduce((s, p) => s + p, 0);
+  if (totalPeso <= 0) return [];
+
+  const datasFim = atividades.map((a) => (a.data_fim ? new Date(a.data_fim) : null));
+  const datasInicio = atividades.map((a) => (a.data_inicio ? new Date(a.data_inicio) : null));
+  const fimValidas = datasFim.filter((d): d is Date => d != null && !Number.isNaN(d.getTime()));
+  const inicioValidas = datasInicio.filter((d): d is Date => d != null && !Number.isNaN(d.getTime()));
+  if (!fimValidas.length || !inicioValidas.length) return [];
+
+  const inicio = new Date(Math.min(...inicioValidas.map((d) => d.getTime())));
+  const fim = new Date(Math.max(...fimValidas.map((d) => d.getTime())));
+  if (inicio >= fim) return [];
+
+  const pontos: Date[] = [];
+  const cursor = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
+  while (cursor <= fim) {
+    pontos.push(new Date(cursor));
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  if (!pontos.length || pontos[pontos.length - 1].getTime() !== fim.getTime()) pontos.push(new Date(fim));
+
+  return pontos.map((ponto) => {
+    const somaAteOPonto = atividades.reduce((s, a, i) => {
+      const df = datasFim[i];
+      return df && df.getTime() <= ponto.getTime() ? s + pesos[i] : s;
+    }, 0);
+    return { data: ponto, pctPlanejado: Math.round((somaAteOPonto / totalPeso) * 1000) / 10 };
+  });
+}
+
+/** % planejado acumulado até uma data de referência (tipicamente hoje) —
+ * usado para calcular o desvio de execução e o SPI. Mesma regra de
+ * gat/pmo_business_rules.py::percentual_planejado_ate. */
+export function percentualPlanejadoAte(atividades: AtividadeCronograma[], dataReferencia: Date): number {
+  if (!atividades.length) return 0;
+  const pesos = atividades.map((a) => Math.max(a.duracao_dias ?? 1, 0.1));
+  const totalPeso = pesos.reduce((s, p) => s + p, 0);
+  if (totalPeso <= 0) return 0;
+  const soma = atividades.reduce((s, a, i) => {
+    if (!a.data_fim) return s;
+    const df = new Date(a.data_fim);
+    return df.getTime() <= dataReferencia.getTime() ? s + pesos[i] : s;
+  }, 0);
+  return Math.round((soma / totalPeso) * 1000) / 10;
+}
+
+/** SPI = EV ÷ PV, aproximado aqui por % realizado ÷ % planejado (a mesma
+ * base usada na Curva S). Retorna null quando ainda não há planejamento
+ * suficiente para o cálculo. Mesma regra de
+ * gat/pmo_business_rules.py::calcular_spi. */
+export function calcularSpi(percentualRealizado: number, percentualPlanejado: number): number | null {
+  if (!percentualPlanejado) return null;
+  return Math.round((percentualRealizado / percentualPlanejado) * 100) / 100;
+}
+
+// ---------------------------------------------------------------------------
+// Medições, Entregáveis, Riscos, Comunicações
+// ---------------------------------------------------------------------------
+
+export const SITUACOES_MEDICAO = ["EM ANÁLISE", "APROVADA", "APROVADA COM RESSALVA", "REPROVADA"];
+export const STATUS_RISCO_OPCOES = ["ABERTO", "EM MITIGAÇÃO", "ENCERRADO"];
+export const TIPOS_COMUNICACAO = ["Reunião", "Ofício", "E-mail", "Ata", "Outro"];
+
+export type Medicao = {
+  id: number;
+  projeto_id: number;
+  competencia_mes: number;
+  competencia_ano: number;
+  percentual: number | null;
+  valor_medido: number | null;
+  situacao: string;
+  valor_aprovado: number | null;
+  data_aprovacao: string | null;
+  valor_pago: number | null;
+  data_pagamento: string | null;
+  valor_glosado: number;
+  criado_por: string;
+  criado_em: string;
+};
+
+export type Entregavel = {
+  id: number;
+  projeto_id: number;
+  nome: string;
+  previsto: number;
+  entregue: number;
+  data_prevista: string | null;
+  data_entrega: string | null;
+  percentual_documental: number;
+  observacoes: string | null;
+};
+
+export type Risco = {
+  id: number;
+  projeto_id: number;
+  descricao: string;
+  probabilidade: number;
+  impacto: number;
+  status: string;
+  responsavel: string | null;
+  plano_mitigacao: string | null;
+};
+
+export type Comunicacao = {
+  id: number;
+  projeto_id: number;
+  data: string;
+  tipo: string | null;
+  descricao: string;
+  responsavel: string | null;
+};
+
+export type ResumoFinanceiro = {
+  valor_contratado: number;
+  valor_medido: number;
+  valor_aprovado: number;
+  valor_pago: number;
+  valor_glosado: number;
+  saldo: number;
+};
+
 export type ProjetoPmo = {
   id: number;
   nome: string;

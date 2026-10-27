@@ -8,6 +8,8 @@ import {
   listarAlertasProjeto,
   obterAlertaCronograma,
   obterProjeto,
+  recalcularStatus,
+  verificarEGerarLembretesCronograma,
   type DadosProjetoPmo,
 } from "@/lib/pmo";
 
@@ -22,10 +24,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const { id } = await params;
   const projetoId = Number(id);
-  const projeto = await obterProjeto(projetoId);
-  if (!projeto) {
+  const existente = await obterProjeto(projetoId);
+  if (!existente) {
     return NextResponse.json({ erro: "Projeto não encontrado." }, { status: 404 });
   }
+
+  await verificarEGerarLembretesCronograma();
+  const projeto = await recalcularStatus(projetoId);
 
   const [kpisHabilitados, alertas, alertaCronograma] = await Promise.all([
     kpisHabilitadosProjeto(projetoId),
