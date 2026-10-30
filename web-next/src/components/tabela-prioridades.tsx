@@ -33,7 +33,105 @@ function Ponto({ cor }: { cor: CorMapaCalor }) {
   return <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: COR_HEX[cor] }} title={ROTULO_COR[cor]} />;
 }
 
-export function TabelaPrioridades({ itens }: { itens: ItemPrioridade[] }) {
+async function baixarRelatorio(url: string, corpo: unknown): Promise<string | null> {
+  const resposta = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
+  if (!resposta.ok) {
+    const erro = await resposta.json().catch(() => ({}));
+    return erro?.erro || "Erro ao gerar o relatório.";
+  }
+  const nomeArquivo = resposta.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] || "relatorio";
+  const blob = await resposta.blob();
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = nomeArquivo;
+  link.click();
+  URL.revokeObjectURL(link.href);
+  return null;
+}
+
+function BotaoRelatorio({ rotulo, url, corpo }: { rotulo: string; url: string; corpo: unknown }) {
+  const [gerando, setGerando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function gerar() {
+    setGerando(true);
+    setErro(null);
+    try {
+      const resultado = await baixarRelatorio(url, corpo);
+      if (resultado) setErro(resultado);
+    } catch {
+      setErro("Não foi possível conectar ao sistema.");
+    } finally {
+      setGerando(false);
+    }
+  }
+
+  return (
+    <div>
+      <button
+        onClick={gerar} disabled={gerando}
+        className="w-full rounded-full border border-(--color-border) px-4 py-2 text-sm font-medium text-(--color-text) hover:bg-(--color-surface-2) disabled:opacity-60"
+      >
+        {gerando ? "Gerando…" : rotulo}
+      </button>
+      {erro && <p className="mt-1 text-xs text-(--color-red)">{erro}</p>}
+    </div>
+  );
+}
+
+/** "Relatórios de Prioridades" — porta da seção de relatórios de
+ * views/lista_prioridades.py::render (coletivo: Excel/Word/PDF a partir
+ * da lista já filtrada na tela; individual: Word/PDF de um projeto). */
+function SecaoRelatoriosPrioridades({ filtrados }: { filtrados: ItemPrioridade[] }) {
+  const [aba, setAba] = useState<"coletivo" | "individual">("coletivo");
+  const [indiceSelecionado, setIndiceSelecionado] = useState(0);
+  const selecionado = filtrados[indiceSelecionado] ?? null;
+
+  return (
+    <div className="mt-6 rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-5">
+      <p className="text-sm font-semibold text-(--color-navy)">Relatórios de Prioridades</p>
+      <div className="mt-3 flex gap-1 rounded-full border border-(--color-border) bg-(--color-bg) p-1 text-xs font-medium w-fit">
+        {(["coletivo", "individual"] as const).map((a) => (
+          <button
+            key={a} onClick={() => setAba(a)}
+            className={`rounded-full px-4 py-1.5 transition-colors ${aba === a ? "bg-(--color-navy) text-white" : "text-(--color-text-weak) hover:text-(--color-text)"}`}
+          >
+            {a === "coletivo" ? "Relatório coletivo" : "Relatório individual"}
+          </button>
+        ))}
+      </div>
+
+      {aba === "coletivo" ? (
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <BotaoRelatorio rotulo="Gerar Excel" url="/api/relatorios/prioridades/excel" corpo={{ itens: filtrados }} />
+          <BotaoRelatorio rotulo="Gerar Word" url="/api/relatorios/prioridades/word" corpo={{ itens: filtrados }} />
+          <BotaoRelatorio rotulo="Gerar PDF" url="/api/relatorios/prioridades/pdf" corpo={{ itens: filtrados }} />
+        </div>
+      ) : filtrados.length === 0 ? (
+        <p className="mt-4 text-xs text-(--color-text-weak)">Nenhum projeto disponível com os filtros atuais.</p>
+      ) : (
+        <div className="mt-4">
+          <select
+            value={indiceSelecionado} onChange={(e) => setIndiceSelecionado(Number(e.target.value))}
+            className="w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none focus:border-(--color-navy)"
+          >
+            {filtrados.map((it, i) => (
+              <option key={`${it.modulo}-${it.id}`} value={i}>{it.tipo} · {it.nome_entidade} · AT {it.num_at || "—"}</option>
+            ))}
+          </select>
+          {selecionado && (
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <BotaoRelatorio rotulo="Gerar Word" url="/api/relatorios/prioridades/word-individual" corpo={{ item: selecionado }} />
+              <BotaoRelatorio rotulo="Gerar PDF" url="/api/relatorios/prioridades/pdf-individual" corpo={{ item: selecionado }} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function TabelaPrioridades({ itens, podeGerarRelatorios = false }: { itens: ItemPrioridade[]; podeGerarRelatorios?: boolean }) {
   const [busca, setBusca] = useState("");
   const [tipo, setTipo] = useState<"TODOS" | "Prestador" | "Cessionário">("TODOS");
   const [cor, setCor] = useState<"TODAS" | CorMapaCalor>("TODAS");
@@ -158,10 +256,7 @@ export function TabelaPrioridades({ itens }: { itens: ItemPrioridade[] }) {
         </table>
       </div>
 
-      <p className="mt-4 text-xs text-(--color-text-dim)">
-        Exportação de relatórios (Excel/Word/PDF) ainda não disponível nesta versão — use o sistema atual enquanto
-        esse recurso não chega por aqui.
-      </p>
+      {podeGerarRelatorios && <SecaoRelatoriosPrioridades filtrados={filtrados} />}
     </div>
   );
 }
