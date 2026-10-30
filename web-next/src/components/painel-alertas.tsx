@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   STATUS_ADIADO,
@@ -18,6 +18,9 @@ import {
   type TipoAlerta,
 } from "@/lib/alertas-engine-calculo";
 import type { AlertaItem } from "@/lib/alertas-engine";
+import { DISCIPLINAS, RESPONSAVEIS } from "@/lib/administracao-calculo";
+import { PRIORIDADE_ALERTA_MANUAL_OPCOES, type DadosAlertaManual } from "@/lib/alerta-manual-calculo";
+import type { AlertaManualCompleto } from "@/lib/alerta-manual";
 
 const COR_TIPO: Record<TipoAlerta, string> = {
   PENDENTE_REUNIAO: "var(--color-purple)",
@@ -219,7 +222,422 @@ function CartaoAlerta({ alerta, onAtualizado }: { alerta: AlertaItem; onAtualiza
   );
 }
 
-export function PainelAlertas({ alertasIniciais }: { alertasIniciais: AlertaItem[] }) {
+const inputClasse = "mt-1 w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none focus:border-(--color-navy)";
+const labelClasse = "text-xs text-(--color-text-weak)";
+
+const ICONE_PRIORIDADE: Record<string, string> = { Baixa: "⚪", Média: "🔵", Alta: "🟠", Urgente: "🔴" };
+
+function dadosVazios(modulo: "prestadores" | "cessionarios"): DadosAlertaManual {
+  return {
+    modulo, projeto_id: null, titulo: "", descricao: null, num_at: null, codigo_projeto: null,
+    nome_entidade: "", disciplina: null, revisao: null, especialista: null, prioridade: "Média",
+    vencimento: null, observacoes: null, destinatarios: null,
+  };
+}
+
+/** Pop-up de criação/edição de um alerta manual — mesmos campos de
+ * gat/ui/modals_alerta_manual.py::dialog_alerta_manual. */
+function FormularioAlertaManual({
+  modulo, registro, usernames, onFechar, onSalvo,
+}: {
+  modulo: "prestadores" | "cessionarios";
+  registro: AlertaManualCompleto | null;
+  usernames: string[];
+  onFechar: () => void;
+  onSalvo: () => void;
+}) {
+  const [dados, setDados] = useState<DadosAlertaManual>(() => (registro ? { ...registro } : dadosVazios(modulo)));
+  const [destinatariosSelecionados, setDestinatariosSelecionados] = useState<string[]>(
+    () => registro?.destinatarios?.split(",").map((d) => d.trim()).filter(Boolean) ?? [],
+  );
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  function campo<K extends keyof DadosAlertaManual>(chave: K, valor: DadosAlertaManual[K]) {
+    setDados((atual) => ({ ...atual, [chave]: valor }));
+  }
+
+  function alternarDestinatario(username: string) {
+    setDestinatariosSelecionados((atual) => (atual.includes(username) ? atual.filter((d) => d !== username) : [...atual, username]));
+  }
+
+  async function salvar() {
+    setErro(null);
+    setSalvando(true);
+    try {
+      const corpo: DadosAlertaManual = { ...dados, destinatarios: destinatariosSelecionados.length ? destinatariosSelecionados.join(",") : null };
+      const url = registro ? `/api/alertas-manuais/${registro.id}` : "/api/alertas-manuais";
+      const resposta = await fetch(url, {
+        method: registro ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(corpo),
+      });
+      const resultado = await resposta.json().catch(() => ({}));
+      if (!resposta.ok) {
+        setErro(resultado?.erro || "Erro ao salvar o alerta manual.");
+        return;
+      }
+      onSalvo();
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  const rotuloEntidade = modulo === "prestadores" ? "Prestador" : "Cessionário";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onFechar}>
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-(--color-surface-1) p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <p className="text-sm font-semibold text-(--color-text)">{registro ? "Editar alerta manual" : "Novo alerta manual"}</p>
+        <p className="mt-1 text-xs text-(--color-text-weak)">
+          Alerta criado manualmente para acompanhamento de um projeto específico — independente dos alertas automáticos
+          de gargalo/atraso. Fica visível na Central de Alertas até ser encerrado.
+        </p>
+
+        <label className={`mt-4 block ${labelClasse}`}>
+          Título *
+          <input value={dados.titulo} onChange={(e) => campo("titulo", e.target.value)} className={inputClasse} />
+        </label>
+        <label className={`mt-3 block ${labelClasse}`}>
+          Descrição
+          <textarea value={dados.descricao ?? ""} onChange={(e) => campo("descricao", e.target.value || null)} rows={2} className={inputClasse} />
+        </label>
+
+        <div className="mt-3 grid grid-cols-3 gap-3">
+          <label className={labelClasse}>
+            N° AT
+            <input value={dados.num_at ?? ""} onChange={(e) => campo("num_at", e.target.value || null)} className={inputClasse} />
+          </label>
+          <label className={labelClasse}>
+            Código do projeto
+            <input value={dados.codigo_projeto ?? ""} onChange={(e) => campo("codigo_projeto", e.target.value || null)} className={inputClasse} />
+          </label>
+          <label className={labelClasse}>
+            {rotuloEntidade} *
+            <input value={dados.nome_entidade} onChange={(e) => campo("nome_entidade", e.target.value)} className={inputClasse} />
+          </label>
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-3">
+          <label className={labelClasse}>
+            Disciplina
+            <select value={dados.disciplina ?? ""} onChange={(e) => campo("disciplina", e.target.value || null)} className={inputClasse}>
+              <option value="">—</option>
+              {DISCIPLINAS.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </label>
+          <label className={labelClasse}>
+            Revisão
+            <input type="number" min={0} value={dados.revisao ?? 0} onChange={(e) => campo("revisao", Number(e.target.value))} className={inputClasse} />
+          </label>
+          <label className={labelClasse}>
+            Especialista responsável
+            <select value={dados.especialista ?? ""} onChange={(e) => campo("especialista", e.target.value || null)} className={inputClasse}>
+              <option value="">—</option>
+              {RESPONSAVEIS.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <label className={labelClasse}>
+            Prioridade
+            <select value={dados.prioridade} onChange={(e) => campo("prioridade", e.target.value as DadosAlertaManual["prioridade"])} className={inputClasse}>
+              {PRIORIDADE_ALERTA_MANUAL_OPCOES.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </label>
+          <label className={labelClasse}>
+            Vencimento
+            <input type="date" value={dados.vencimento ?? ""} onChange={(e) => campo("vencimento", e.target.value || null)} className={inputClasse} />
+          </label>
+        </div>
+
+        <label className={`mt-3 block ${labelClasse}`}>
+          Observações
+          <textarea value={dados.observacoes ?? ""} onChange={(e) => campo("observacoes", e.target.value || null)} rows={2} className={inputClasse} />
+        </label>
+
+        {usernames.length > 0 && (
+          <div className="mt-3">
+            <p className={labelClasse}>Destinatários (notificação/ciência)</p>
+            <div className="mt-1.5 flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-lg border border-(--color-border) p-2">
+              {usernames.map((u) => (
+                <button
+                  key={u} type="button" onClick={() => alternarDestinatario(u)}
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${destinatariosSelecionados.includes(u) ? "bg-(--color-navy) text-white" : "bg-(--color-surface-2) text-(--color-text-weak)"}`}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {erro && <p className="mt-3 text-sm text-(--color-red)">{erro}</p>}
+        <div className="mt-5 flex gap-3">
+          <button onClick={salvar} disabled={salvando} className="rounded-full bg-(--color-navy) px-5 py-2 text-sm font-medium text-white disabled:opacity-60">
+            {salvando ? "Salvando…" : "Salvar"}
+          </button>
+          <button onClick={onFechar} className="rounded-full border border-(--color-border) px-5 py-2 text-sm font-medium text-(--color-text)">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ModalEncerrarAlertaManual({ alerta, onFechar, onEncerrado }: { alerta: AlertaManualCompleto; onFechar: () => void; onEncerrado: () => void }) {
+  const [motivo, setMotivo] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function confirmar() {
+    if (!motivo.trim()) {
+      setErro("O motivo do encerramento é obrigatório.");
+      return;
+    }
+    setErro(null);
+    setSalvando(true);
+    try {
+      const resposta = await fetch(`/api/alertas-manuais/${alerta.id}/encerrar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motivo }),
+      });
+      const resultado = await resposta.json().catch(() => ({}));
+      if (!resposta.ok) {
+        setErro(resultado?.erro || "Erro ao encerrar o alerta.");
+        return;
+      }
+      onEncerrado();
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onFechar}>
+      <div className="w-full max-w-md rounded-2xl bg-(--color-surface-1) p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <p className="text-sm font-semibold text-(--color-text)">Encerrar alerta manual</p>
+        <p className="mt-1 text-xs text-(--color-text-weak)">{alerta.titulo} — {alerta.nome_entidade || "—"}</p>
+        <label className={`mt-4 block ${labelClasse}`}>
+          Motivo do encerramento (obrigatório)
+          <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={3} className={inputClasse} />
+        </label>
+        {erro && <p className="mt-3 text-sm text-(--color-red)">{erro}</p>}
+        <div className="mt-4 flex gap-3">
+          <button onClick={confirmar} disabled={salvando} className="rounded-full bg-(--color-navy) px-5 py-2 text-sm font-medium text-white disabled:opacity-60">
+            {salvando ? "Confirmando…" : "Confirmar encerramento"}
+          </button>
+          <button onClick={onFechar} className="rounded-full border border-(--color-border) px-5 py-2 text-sm font-medium text-(--color-text)">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatarDataHoraBr(valor: string | null): string {
+  if (!valor) return "—";
+  const data = new Date(valor);
+  return Number.isNaN(data.getTime()) ? valor : data.toLocaleString("pt-BR");
+}
+
+function formatarDataBr(valor: string | null): string {
+  if (!valor) return "—";
+  const data = new Date(valor);
+  return Number.isNaN(data.getTime()) ? valor : data.toLocaleDateString("pt-BR");
+}
+
+function CartaoAlertaManual({
+  alerta, podeGerenciar, usernames, onMudou,
+}: {
+  alerta: AlertaManualCompleto;
+  podeGerenciar: boolean;
+  usernames: string[];
+  onMudou: () => void;
+}) {
+  const [editando, setEditando] = useState(false);
+  const [encerrando, setEncerrando] = useState(false);
+  const [reabrindo, setReabrindo] = useState(false);
+
+  async function reabrir() {
+    setReabrindo(true);
+    try {
+      await fetch(`/api/alertas-manuais/${alerta.id}/reabrir`, { method: "POST" });
+      onMudou();
+    } finally {
+      setReabrindo(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) px-5 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-medium text-(--color-text)">{alerta.titulo} — {alerta.nome_entidade || "—"} ({alerta.disciplina || "—"})</p>
+          {alerta.descricao && <p className="mt-1 text-sm text-(--color-text-weak)">{alerta.descricao}</p>}
+          <p className="mt-1 text-xs text-(--color-text-dim)">
+            N° AT {alerta.num_at || "—"} · Código {alerta.codigo_projeto || "—"} · Revisão {alerta.revisao ?? "—"} ·
+            {" "}Especialista: {alerta.especialista || "—"} · Criado por {alerta.criado_por} em {formatarDataHoraBr(alerta.criado_em)}
+          </p>
+          {alerta.destinatarios && <p className="mt-1 text-xs text-(--color-text-dim)">Destinatários: {alerta.destinatarios}</p>}
+          {alerta.observacoes && <p className="mt-1 text-xs text-(--color-text-dim)">Observações: {alerta.observacoes}</p>}
+          {alerta.status === "ENCERRADO" && (
+            <p className="mt-1 text-xs text-(--color-text-dim)">
+              Encerrado em {formatarDataHoraBr(alerta.encerrado_em)} por {alerta.encerrado_por}
+              {alerta.motivo_encerramento ? ` — Motivo: ${alerta.motivo_encerramento}` : ""}
+            </p>
+          )}
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-xs text-(--color-text-weak)">{ICONE_PRIORIDADE[alerta.prioridade] ?? ""} Prioridade: <span className="font-medium text-(--color-text)">{alerta.prioridade}</span></p>
+          {alerta.vencimento && <p className="mt-1 text-xs text-(--color-text-dim)">Vence em {formatarDataBr(alerta.vencimento)}</p>}
+        </div>
+      </div>
+
+      {podeGerenciar && (
+        <div className="mt-3 flex gap-2">
+          {alerta.status === "ABERTO" ? (
+            <>
+              <button onClick={() => setEditando(true)} className="rounded-full border border-(--color-border) px-3 py-1 text-xs font-medium text-(--color-text) hover:bg-(--color-surface-2)">Editar</button>
+              <button onClick={() => setEncerrando(true)} className="rounded-full border border-(--color-border) px-3 py-1 text-xs font-medium text-(--color-text) hover:bg-(--color-surface-2)">Encerrar</button>
+            </>
+          ) : (
+            <button onClick={reabrir} disabled={reabrindo} className="rounded-full border border-(--color-border) px-3 py-1 text-xs font-medium text-(--color-text) hover:bg-(--color-surface-2) disabled:opacity-60">
+              {reabrindo ? "Reabrindo…" : "Reabrir"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {editando && (
+        <FormularioAlertaManual
+          modulo={alerta.modulo} registro={alerta} usernames={usernames}
+          onFechar={() => setEditando(false)}
+          onSalvo={() => { setEditando(false); onMudou(); }}
+        />
+      )}
+      {encerrando && (
+        <ModalEncerrarAlertaManual
+          alerta={alerta}
+          onFechar={() => setEncerrando(false)}
+          onEncerrado={() => { setEncerrando(false); onMudou(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Seção "Alertas manuais" da Central de Alertas — porta de
+ * views/alertas.py::_secao_alertas_manuais. `moduloCriacao` é null no
+ * consolidado (sem módulo único para criar um novo alerta, igual ao
+ * original). */
+function SecaoAlertasManuais({ moduloCriacao, podeGerenciar }: { moduloCriacao: "prestadores" | "cessionarios" | null; podeGerenciar: boolean }) {
+  const [aberto, setAberto] = useState(false);
+  const [alertas, setAlertas] = useState<AlertaManualCompleto[] | null>(null);
+  const [usernames, setUsernames] = useState<string[]>([]);
+  const [criando, setCriando] = useState(false);
+  const [mostrarEncerrados, setMostrarEncerrados] = useState(false);
+  const [filtroDestinatario, setFiltroDestinatario] = useState("");
+
+  const carregar = useCallback(() => {
+    const params = new URLSearchParams();
+    if (moduloCriacao) params.set("modulo", moduloCriacao);
+    else {
+      params.append("modulo", "prestadores");
+      params.append("modulo", "cessionarios");
+    }
+    fetch(`/api/alertas-manuais?${params.toString()}`)
+      .then((r) => r.json())
+      .then((corpo) => setAlertas(corpo.alertas ?? []))
+      .catch(() => setAlertas([]));
+  }, [moduloCriacao]);
+
+  useEffect(() => {
+    carregar();
+    if (podeGerenciar) {
+      fetch("/api/alertas-manuais/usuarios").then((r) => r.json()).then((c) => setUsernames(c.usernames ?? [])).catch(() => {});
+    }
+  }, [carregar, podeGerenciar]);
+
+  const filtrados = (alertas ?? []).filter((a) => !filtroDestinatario || (a.destinatarios || "").split(",").map((d) => d.trim()).includes(filtroDestinatario));
+  const opcoesDestinatario = [...new Set((alertas ?? []).flatMap((a) => (a.destinatarios || "").split(",").map((d) => d.trim()).filter(Boolean)))].sort();
+  const abertosLista = filtrados.filter((a) => a.status === "ABERTO");
+  const encerradosLista = filtrados.filter((a) => a.status === "ENCERRADO");
+
+  return (
+    <div className="mt-6 rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-5">
+      <button onClick={() => setAberto((v) => !v)} className="flex w-full items-center justify-between text-left">
+        <span className="text-sm font-semibold text-(--color-text)">📣 Alertas manuais</span>
+        <span className="text-xs text-(--color-text-weak)">{aberto ? "Recolher" : "Expandir"}</span>
+      </button>
+
+      {aberto && (
+        <div className="mt-4">
+          {podeGerenciar && (
+            moduloCriacao ? (
+              <button onClick={() => setCriando(true)} className="rounded-full bg-(--color-navy) px-4 py-1.5 text-xs font-medium text-white">
+                + Novo alerta manual
+              </button>
+            ) : (
+              <p className="text-xs text-(--color-text-weak)">Para criar um novo alerta manual, acesse a Central de Alertas de Prestadores ou Cessionários.</p>
+            )
+          )}
+
+          {alertas === null ? (
+            <p className="mt-3 text-xs text-(--color-text-dim)">Carregando…</p>
+          ) : alertas.length === 0 ? (
+            <p className="mt-3 text-xs text-(--color-text-weak)">Nenhum alerta manual cadastrado.</p>
+          ) : (
+            <>
+              {opcoesDestinatario.length > 0 && (
+                <select value={filtroDestinatario} onChange={(e) => setFiltroDestinatario(e.target.value)} className="mt-3 rounded-full border border-(--color-border) bg-(--color-bg) px-3 py-1.5 text-xs text-(--color-text)">
+                  <option value="">Todos os destinatários</option>
+                  {opcoesDestinatario.map((d) => <option key={d} value={d}>{d}</option>)}
+                </select>
+              )}
+              <p className="mt-3 text-xs text-(--color-text-dim)">{abertosLista.length} aberto(s) · {encerradosLista.length} encerrado(s)</p>
+
+              <div className="mt-3 space-y-3">
+                {abertosLista.map((a) => (
+                  <CartaoAlertaManual key={a.id} alerta={a} podeGerenciar={podeGerenciar} usernames={usernames} onMudou={carregar} />
+                ))}
+              </div>
+
+              {encerradosLista.length > 0 && (
+                <div className="mt-4">
+                  <button onClick={() => setMostrarEncerrados((v) => !v)} className="text-xs font-medium text-(--color-text-weak) hover:text-(--color-text)">
+                    {mostrarEncerrados ? "Ocultar" : "Mostrar"} encerrados ({encerradosLista.length})
+                  </button>
+                  {mostrarEncerrados && (
+                    <div className="mt-3 space-y-3">
+                      {encerradosLista.map((a) => (
+                        <CartaoAlertaManual key={a.id} alerta={a} podeGerenciar={podeGerenciar} usernames={usernames} onMudou={carregar} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {criando && moduloCriacao && (
+        <FormularioAlertaManual
+          modulo={moduloCriacao} registro={null} usernames={usernames}
+          onFechar={() => setCriando(false)}
+          onSalvo={() => { setCriando(false); carregar(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+export function PainelAlertas({ alertasIniciais, podeGerenciarAlertaManual = false }: { alertasIniciais: AlertaItem[]; podeGerenciarAlertaManual?: boolean }) {
   const [alertas, setAlertas] = useState(alertasIniciais);
   const [modulo, setModulo] = useState<"TODOS" | "prestadores" | "cessionarios">("TODOS");
   const [tipo, setTipo] = useState<"TODOS" | TipoAlerta>("TODOS");
@@ -252,6 +670,8 @@ export function PainelAlertas({ alertasIniciais }: { alertasIniciais: AlertaItem
         e acompanhamento de HOLD. Cada alerta tem seu próprio ciclo de vida: tratar, adiar, retirar do radar ou
         reabrir.
       </p>
+
+      <SecaoAlertasManuais moduloCriacao={modulo === "TODOS" ? null : modulo} podeGerenciar={podeGerenciarAlertaManual} />
 
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) px-5 py-4">
