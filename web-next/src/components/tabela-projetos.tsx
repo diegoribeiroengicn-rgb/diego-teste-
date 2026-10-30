@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BuscaAnalista } from "@/components/busca-analista";
 import { BotaoDarBaixa } from "@/components/dar-baixa";
+import { BotaoTratativaHold } from "@/components/tratativa-hold";
 import type { Projeto } from "@/lib/projetos";
 
 const CORES_STATUS: Record<string, string> = {
@@ -138,6 +139,12 @@ export function TabelaProjetos({
                         >
                           Editar
                         </Link>
+                      )}
+                      {p.status_analise === "EM HOLD" && (
+                        <BotaoTratativaHold
+                          tabela={tabela} projetoId={p.id} nomeEntidade={p.entidade} codigo={p.codigo}
+                          disciplina={p.disciplina} numAt={p.num_at}
+                        />
                       )}
                       <BotaoDarBaixa tabela={tabela} projetoId={p.id} statusAtual={p.status_analise} />
                     </div>
