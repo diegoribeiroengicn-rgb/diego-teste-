@@ -21,6 +21,7 @@ import type { AlertaItem } from "@/lib/alertas-engine";
 import { DISCIPLINAS, RESPONSAVEIS } from "@/lib/administracao-calculo";
 import { PRIORIDADE_ALERTA_MANUAL_OPCOES, type DadosAlertaManual } from "@/lib/alerta-manual-calculo";
 import type { AlertaManualCompleto } from "@/lib/alerta-manual";
+import { gerarMinutaCobranca, type DevolutivaPendente } from "@/lib/devolutiva-calculo";
 
 const COR_TIPO: Record<TipoAlerta, string> = {
   PENDENTE_REUNIAO: "var(--color-purple)",
@@ -637,6 +638,208 @@ function SecaoAlertasManuais({ moduloCriacao, podeGerenciar }: { moduloCriacao: 
   );
 }
 
+const ICONE_SITUACAO_DEVOLUTIVA: Record<string, string> = {
+  AGUARDANDO_PRAZO_INICIAL: "⚪", EM_HOLD: "🔵", COBRANCA_REALIZADA: "🟡",
+  PRIMEIRA_COBRANCA_NECESSARIA: "🟠", NOVA_COBRANCA_NECESSARIA: "🟠",
+};
+
+/** Pop-up "Gerar e-mail de cobrança" — mostra a minuta (assunto + corpo)
+ * para o usuário copiar/enviar por fora do sistema, e só registra a
+ * cobrança após a confirmação explícita. Mesma regra de
+ * gat/ui/modals_devolutiva.py::dialog_cobranca_devolutiva. */
+function ModalCobrancaDevolutiva({ devolutiva, onFechar, onConfirmado }: { devolutiva: DevolutivaPendente; onFechar: () => void; onConfirmado: () => void }) {
+  const numeroCobranca = devolutiva.numeroProximaCobranca ?? devolutiva.numeroCobrancasRealizadas + 1;
+  const minuta = gerarMinutaCobranca(numeroCobranca, devolutiva.codigo, devolutiva.nome, devolutiva.disciplina, devolutiva.numAt, devolutiva.dataUltimaAt, devolutiva.dataPrimeiraCobranca);
+  const [corpo, setCorpo] = useState(minuta.corpo);
+  const [canal, setCanal] = useState("E-mail");
+  const [observacao, setObservacao] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [copiado, setCopiado] = useState(false);
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(`Assunto: ${minuta.assunto}\n\n${corpo}`);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      // seleção manual continua disponível no textarea
+    }
+  }
+
+  async function confirmar() {
+    setErro(null);
+    setSalvando(true);
+    try {
+      const resposta = await fetch(`/api/devolutivas/${devolutiva.modulo}/${devolutiva.projetoId}/cobranca`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ numeroCobranca, canal, observacao: observacao.trim() || null }),
+      });
+      const resultado = await resposta.json().catch(() => ({}));
+      if (!resposta.ok) {
+        setErro(resultado?.erro || "Erro ao registrar a cobrança.");
+        return;
+      }
+      onConfirmado();
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onFechar}>
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-(--color-surface-1) p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <p className="text-sm font-semibold text-(--color-text)">Cobrança de Devolutiva Externa</p>
+        <p className="mt-1 text-xs text-(--color-text-weak)">
+          {devolutiva.nome || "—"} ({devolutiva.codigo || "—"}) — {devolutiva.disciplina || "—"} · N° AT {devolutiva.numAt || "—"} · {numeroCobranca}ª cobrança
+        </p>
+
+        <label className={`mt-4 block ${labelClasse}`}>
+          Assunto
+          <input value={minuta.assunto} disabled className={`${inputClasse} opacity-70`} />
+        </label>
+        <label className={`mt-3 block ${labelClasse}`}>
+          Corpo do e-mail (copie e envie pelo seu canal de e-mail habitual)
+          <textarea value={corpo} onChange={(e) => setCorpo(e.target.value)} rows={10} className={inputClasse} />
+        </label>
+
+        <p className="mt-3 text-xs text-(--color-text-dim)">
+          O sistema não envia este e-mail automaticamente. Após enviá-lo pelo seu canal de e-mail, confirme abaixo
+          para registrar a cobrança e iniciar a contagem dos próximos {numeroCobranca > 1 ? "5" : "5"} dias úteis.
+        </p>
+
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <label className={labelClasse}>
+            Canal utilizado
+            <select value={canal} onChange={(e) => setCanal(e.target.value)} className={inputClasse}>
+              {["E-mail", "Telefone", "Reunião", "Outro"].map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </label>
+          <label className={labelClasse}>
+            Observação (opcional)
+            <input value={observacao} onChange={(e) => setObservacao(e.target.value)} className={inputClasse} />
+          </label>
+        </div>
+
+        {erro && <p className="mt-3 text-sm text-(--color-red)">{erro}</p>}
+        <div className="mt-5 flex gap-3">
+          <button onClick={copiar} className="rounded-full border border-(--color-border) px-4 py-2 text-sm font-medium text-(--color-text) hover:bg-(--color-surface-2)">
+            {copiado ? "Copiado!" : "Copiar e-mail"}
+          </button>
+          <button onClick={confirmar} disabled={salvando} className="rounded-full bg-(--color-navy) px-5 py-2 text-sm font-medium text-white disabled:opacity-60">
+            {salvando ? "Confirmando…" : "Confirmar cobrança realizada"}
+          </button>
+          <button onClick={onFechar} className="rounded-full border border-(--color-border) px-5 py-2 text-sm font-medium text-(--color-text)">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CartaoDevolutiva({ devolutiva, onMudou }: { devolutiva: DevolutivaPendente; onMudou: () => void }) {
+  const [gerando, setGerando] = useState(false);
+  const icone = ICONE_SITUACAO_DEVOLUTIVA[devolutiva.situacao ?? ""] ?? (devolutiva.acaoNecessaria ? "🟠" : "🟡");
+
+  return (
+    <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) px-5 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-medium text-(--color-text)">{devolutiva.nome || "—"} ({devolutiva.codigo || "—"}) — {devolutiva.disciplina || "—"}</p>
+          <p className="mt-1 text-xs text-(--color-text-dim)">
+            N° AT {devolutiva.numAt || "—"} · Revisão {devolutiva.revisao} · Responsável: {devolutiva.responsavel || "—"} ·
+            {" "}Última AT em {formatarDataBr(devolutiva.dataUltimaAt)} · {devolutiva.diasUteisDecorridos} dia(s) útil(eis) sem retorno
+          </p>
+          <p className="mt-1 text-xs text-(--color-text-dim)">
+            Cobranças realizadas: {devolutiva.numeroCobrancasRealizadas}
+            {devolutiva.dataUltimaCobranca && ` · Última cobrança: ${formatarDataBr(devolutiva.dataUltimaCobranca)}`}
+            {devolutiva.dataPrevistaProximaVerificacao && ` · Próxima verificação prevista: ${formatarDataBr(devolutiva.dataPrevistaProximaVerificacao)}`}
+          </p>
+        </div>
+        <p className="shrink-0 text-xs text-(--color-text-weak)">{icone} <span className="font-medium text-(--color-text)">{devolutiva.situacaoLabel}</span></p>
+      </div>
+
+      {devolutiva.acaoNecessaria && (
+        <button onClick={() => setGerando(true)} className="mt-3 rounded-full bg-(--color-navy) px-4 py-1.5 text-xs font-medium text-white">
+          Gerar e-mail de cobrança
+        </button>
+      )}
+
+      {gerando && (
+        <ModalCobrancaDevolutiva devolutiva={devolutiva} onFechar={() => setGerando(false)} onConfirmado={() => { setGerando(false); onMudou(); }} />
+      )}
+    </div>
+  );
+}
+
+/** Central de Alertas > Devolutivas Pendentes — porta de
+ * views/alertas.py::_secao_devolutivas_pendentes. 100% dinâmica (nunca um
+ * alerta persistido): recalculada a cada carregamento a partir da
+ * revisão mais recente de cada projeto e do histórico de cobranças já
+ * confirmadas. */
+function SecaoDevolutivasPendentes({ modulosIncluidos }: { modulosIncluidos: ("prestadores" | "cessionarios")[] }) {
+  const [aberto, setAberto] = useState(false);
+  const [devolutivas, setDevolutivas] = useState<DevolutivaPendente[] | null>(null);
+
+  const carregar = useCallback(() => {
+    const params = new URLSearchParams();
+    for (const m of modulosIncluidos) params.append("modulo", m);
+    fetch(`/api/devolutivas?${params.toString()}`)
+      .then((r) => r.json())
+      .then((corpo) => setDevolutivas(corpo.devolutivas ?? []))
+      .catch(() => setDevolutivas([]));
+  }, [modulosIncluidos]);
+
+  useEffect(() => {
+    if (aberto) carregar();
+  }, [aberto, carregar]);
+
+  const ordenadas = [...(devolutivas ?? [])].sort((a, b) => Number(b.acaoNecessaria) - Number(a.acaoNecessaria));
+  const prestadoresCount = ordenadas.filter((d) => d.modulo === "prestadores").length;
+  const cessionariosCount = ordenadas.filter((d) => d.modulo === "cessionarios").length;
+  const acaoCount = ordenadas.filter((d) => d.acaoNecessaria).length;
+
+  return (
+    <div className="mt-4 rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-5">
+      <button onClick={() => setAberto((v) => !v)} className="flex w-full items-center justify-between text-left">
+        <span className="text-sm font-semibold text-(--color-text)">📧 Devolutivas Pendentes</span>
+        <span className="text-xs text-(--color-text-weak)">{aberto ? "Recolher" : "Expandir"}</span>
+      </button>
+
+      {aberto && (
+        <div className="mt-4">
+          <p className="text-xs text-(--color-text-weak)">
+            Projetos com a última AT emitida, aguardando nova revisão do Prestador/Cessionário. 10 dias úteis sem
+            retorno geram a 1ª cobrança; a partir daí, uma nova cobrança a cada 5 dias úteis sem retorno, sem
+            limite máximo, até o projeto voltar para Em Análise. HOLD sempre pausa a contagem e nunca gera cobrança.
+          </p>
+
+          {devolutivas === null ? (
+            <p className="mt-3 text-xs text-(--color-text-dim)">Carregando…</p>
+          ) : ordenadas.length === 0 ? (
+            <p className="mt-3 rounded-xl border border-(--color-green)/30 bg-(--color-green)/10 px-4 py-3 text-sm text-(--color-green)">
+              Nenhuma devolutiva externa pendente no momento.
+            </p>
+          ) : (
+            <>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full bg-(--color-surface-2) px-3 py-1 font-medium text-(--color-text)">{prestadoresCount} prestador(es) aguardando retorno</span>
+                <span className="rounded-full bg-(--color-surface-2) px-3 py-1 font-medium text-(--color-text)">{cessionariosCount} cessionário(s) aguardando retorno</span>
+                <span className="rounded-full bg-(--color-orange-bg) px-3 py-1 font-medium text-(--color-orange)">{acaoCount} cobrança(s) pendente(s)</span>
+              </div>
+              <div className="mt-3 space-y-3">
+                {ordenadas.map((d) => <CartaoDevolutiva key={`${d.modulo}_${d.projetoId}`} devolutiva={d} onMudou={carregar} />)}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PainelAlertas({ alertasIniciais, podeGerenciarAlertaManual = false }: { alertasIniciais: AlertaItem[]; podeGerenciarAlertaManual?: boolean }) {
   const [alertas, setAlertas] = useState(alertasIniciais);
   const [modulo, setModulo] = useState<"TODOS" | "prestadores" | "cessionarios">("TODOS");
@@ -672,6 +875,7 @@ export function PainelAlertas({ alertasIniciais, podeGerenciarAlertaManual = fal
       </p>
 
       <SecaoAlertasManuais moduloCriacao={modulo === "TODOS" ? null : modulo} podeGerenciar={podeGerenciarAlertaManual} />
+      <SecaoDevolutivasPendentes modulosIncluidos={modulo === "TODOS" ? ["prestadores", "cessionarios"] : [modulo]} />
 
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) px-5 py-4">
