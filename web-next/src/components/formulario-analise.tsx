@@ -1,12 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   DISCIPLINAS_SLA, STATUS_ANALISE_OPCOES, TIPO_CESSIONARIO_OPCOES, ETG_OPCOES, RESPONSAVEIS,
 } from "@/lib/administracao-calculo";
 import { calcularDataLimite } from "@/lib/dias-uteis";
 import { calcularSlaCessionario, SLA_PRESTADORES_DIAS_UTEIS } from "@/lib/analise-validacao-calculo";
+import { nomeExibicaoObra } from "@/lib/obra-calculo";
+import type { ObraPrestador } from "@/lib/obra";
 import type { DadosCessionario, DadosPrestador } from "@/lib/analise";
 
 const classeInput =
@@ -47,6 +49,8 @@ export function FormularioAnalise(
   const [disciplinaSla, setDisciplinaSla] = useState(registro?.disciplina_sla ?? "");
   const [peps, setPeps] = useState((registro as RegistroPrestador | undefined)?.peps ?? "");
   const [obraReferencia, setObraReferencia] = useState((registro as RegistroPrestador | undefined)?.obra_referencia ?? "");
+  const [obraId, setObraId] = useState<number | null>((registro as RegistroPrestador | undefined)?.obra_id ?? null);
+  const [obrasDisponiveis, setObrasDisponiveis] = useState<ObraPrestador[]>([]);
   const [tipoCessionario, setTipoCessionario] = useState((registro as RegistroCessionario | undefined)?.tipo ?? TIPO_CESSIONARIO_OPCOES[0]);
   const [revisao, setRevisao] = useState(registro?.revisao ?? 0);
   const [numDocumentos, setNumDocumentos] = useState(registro?.num_documentos ?? 1);
@@ -71,6 +75,26 @@ export function FormularioAnalise(
     const d = calcularDataLimite(dataSolicitacao || null, slaDiasUteis);
     return d ? d.toISOString().slice(0, 10) : "";
   }, [dataSolicitacao, slaDiasUteis]);
+
+  // Busca as obras do Cadastro de Prestador com este código — vínculo
+  // "leve" por código (não exige um seletor de cadastro próprio, ainda
+  // não construído nesta versão do formulário de análise).
+  useEffect(() => {
+    if (tabela !== "prestadores" || !codigo.trim()) return;
+    const controlador = new AbortController();
+    const temporizador = setTimeout(() => {
+      fetch(`/api/obras-prestador?codigo=${encodeURIComponent(codigo.trim())}`, { signal: controlador.signal })
+        .then((r) => r.json())
+        .then((corpo) => setObrasDisponiveis(corpo.obras ?? []))
+        .catch(() => {});
+    }, 400);
+    return () => {
+      clearTimeout(temporizador);
+      controlador.abort();
+    };
+  }, [tabela, codigo]);
+
+  const obrasExibidas = tabela === "prestadores" && codigo.trim() ? obrasDisponiveis : [];
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
@@ -104,7 +128,7 @@ export function FormularioAnalise(
 
     const dados =
       tabela === "prestadores"
-        ? { ...base, prestador: nomeEntidade.trim(), peps: peps.trim() || null, obra_referencia: obraReferencia.trim() || null }
+        ? { ...base, prestador: nomeEntidade.trim(), peps: peps.trim() || null, obra_referencia: obraReferencia.trim() || null, obra_id: obraId }
         : { ...base, cessionario: nomeEntidade.trim(), tipo: tipoCessionario, sla_dias: slaDiasUteis };
 
     try {
@@ -134,7 +158,7 @@ export function FormularioAnalise(
         {registro ? `Editar análise — ${registro.codigo || nomeEntidade}` : `Nova análise — ${tabela === "prestadores" ? "Prestador" : "Cessionário"}`}
       </h1>
       <p className="mt-1 text-sm text-(--color-text-weak)">
-        Escopo deste primeiro incremento: vínculo a Cadastro, Obra vinculada, nível de prioridade/SLA reduzido e repactuação de prazo ainda não estão disponíveis aqui.
+        Escopo deste primeiro incremento: vínculo completo a Cadastro, nível de prioridade/SLA reduzido e repactuação de prazo ainda não estão disponíveis aqui — a Obra Vinculada já pode ser selecionada pelo código do prestador, cadastrado em Prestadores &gt; Cadastro.
       </p>
 
       <form onSubmit={salvar} className="mt-6 space-y-5">
@@ -160,12 +184,26 @@ export function FormularioAnalise(
         </div>
 
         {tabela === "prestadores" ? (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <Campo label="PEPs">
               <input value={peps} onChange={(e) => setPeps(e.target.value)} className={classeInput} />
             </Campo>
             <Campo label="Obra / Referência">
               <input value={obraReferencia} onChange={(e) => setObraReferencia(e.target.value)} className={classeInput} />
+            </Campo>
+            <Campo label="Obra Vinculada (do Cadastro, por código)">
+              <select
+                value={obraId ?? ""} onChange={(e) => setObraId(e.target.value ? Number(e.target.value) : null)}
+                disabled={!obrasExibidas.length} className={`${classeInput} ${!obrasExibidas.length ? "opacity-60" : ""}`}
+              >
+                <option value="">—</option>
+                {obrasExibidas.map((o) => <option key={o.id} value={o.id}>{nomeExibicaoObra(o)}</option>)}
+              </select>
+              {!obrasExibidas.length && (
+                <span className="mt-1 block text-xs text-(--color-text-dim)">
+                  {codigo.trim() ? "Nenhuma obra cadastrada para este código no Cadastro de Prestadores." : "Informe o Código para ver as obras cadastradas."}
+                </span>
+              )}
             </Campo>
           </div>
         ) : (

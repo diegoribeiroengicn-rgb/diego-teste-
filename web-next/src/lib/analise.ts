@@ -29,6 +29,7 @@ export type DadosPrestador = {
   disciplina_sla: string | null;
   peps: string | null;
   obra_referencia: string | null;
+  obra_id: number | null;
   revisao: number;
   num_documentos: number;
   data_solicitacao: string;
@@ -47,7 +48,7 @@ export type DadosPrestador = {
 };
 
 export const COLUNAS_PRESTADOR = [
-  "codigo", "prestador", "disciplina", "disciplina_sla", "peps", "obra_referencia", "revisao", "num_documentos",
+  "codigo", "prestador", "disciplina", "disciplina_sla", "peps", "obra_referencia", "obra_id", "revisao", "num_documentos",
   "data_solicitacao", "data_limite", "data_analise", "hold_inicio", "hold_fim", "num_at", "revisao_at",
   "responsavel", "status_analise", "observacoes", "natureza_revisao", "num_erros", "etg",
 ] as const;
