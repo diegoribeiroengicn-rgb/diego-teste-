@@ -24,6 +24,17 @@ export type LinhaProdutividade = {
   tempoAnalise: number | null;
 };
 
+export type IndicadoresMensais = {
+  recebidos: number;
+  concluidos: number;
+  emAnalise: number;
+  documentos: number;
+  slaPercentual: number;
+  backlog: number;
+};
+
+export type AcumuladoAno = { recebidos: number; concluidos: number; documentos: number };
+
 export type ProdutividadeAnalista = {
   responsavel: string;
   projetosAnalisados: number;
@@ -51,6 +62,76 @@ function noMes(data: string | null, mes: number | null, ano: number | null): boo
 
 function fimDoMesUTC(mes: number, ano: number): number {
   return Date.UTC(ano, mes, 0, 23, 59, 59);
+}
+
+/** Indicadores de um módulo (Prestadores, Cessionários, ou os dois juntos
+ * para o Consolidado) numa competência — mesma regra de
+ * gat/relatorios_mensais.py::indicadores_mensais_modulo. Observação sobre
+ * "backlog": o esquema não guarda histórico de mudança de status por
+ * data, então o backlog de uma competência passada é uma aproximação
+ * (projetos ainda "EM ANÁLISE" hoje que já haviam sido solicitados até o
+ * fim daquele mês), não uma reconstrução exata do backlog real na época. */
+export function indicadoresMensaisModulo(linhas: LinhaProdutividade[], mes: number, ano: number): IndicadoresMensais {
+  if (linhas.length === 0) {
+    return { recebidos: 0, concluidos: 0, emAnalise: 0, documentos: 0, slaPercentual: 0, backlog: 0 };
+  }
+  const semArt = linhas.filter((l) => !ehArt(l.disciplina));
+
+  const recebidosCompleto = linhas.filter((l) => noMes(l.dataSolicitacao, mes, ano));
+  const documentos = recebidosCompleto.reduce((s, l) => s + l.numDocumentos, 0);
+  const recebidos = recebidosCompleto.filter((l) => !ehArt(l.disciplina));
+
+  const concluidos = semArt.filter((l) => noMes(l.dataAnalise, mes, ano) && STATUS_CONCLUIDOS.has(l.statusAnalise));
+  const emAnalise = recebidos.filter((l) => l.statusAnalise === STATUS_EM_ANALISE);
+
+  const fimMes = fimDoMesUTC(mes, ano);
+  const backlog = semArt.filter((l) => {
+    if (l.statusAnalise !== STATUS_EM_ANALISE) return false;
+    const d = paraData(l.dataSolicitacao);
+    return !!d && d.getTime() <= fimMes;
+  });
+
+  const slaCumprido = concluidos.filter((l) => l.statusEntregaCalc !== "ATRASADO").length;
+  const slaPercentual = concluidos.length ? Math.round((1000 * slaCumprido) / concluidos.length) / 10 : 0;
+
+  return {
+    recebidos: recebidos.length,
+    concluidos: concluidos.length,
+    emAnalise: emAnalise.length,
+    documentos,
+    slaPercentual,
+    backlog: backlog.length,
+  };
+}
+
+export function mesAnterior(mes: number, ano: number): [number, number] {
+  return mes === 1 ? [12, ano - 1] : [mes - 1, ano];
+}
+
+/** [valor atual, texto do delta] para comparação com outra competência —
+ * mesma regra de gat/relatorios_mensais.py::comparativo_mensal. */
+export function comparativoMensal(
+  atual: IndicadoresMensais, anterior: IndicadoresMensais, chave: keyof IndicadoresMensais,
+): [number, string | null] {
+  const valorAtual = atual[chave];
+  const valorAnterior = anterior[chave];
+  if (!valorAnterior) return [valorAtual, null];
+  const delta = valorAtual - valorAnterior;
+  const sinal = delta >= 0 ? "+" : "";
+  return [valorAtual, `${sinal}${delta} vs. mês anterior`];
+}
+
+/** Indicadores acumulados do ano inteiro — mesma regra de
+ * gat/relatorios_mensais.py::acumulado_ano. */
+export function acumuladoAno(linhas: LinhaProdutividade[], ano: number): AcumuladoAno {
+  if (linhas.length === 0) return { recebidos: 0, concluidos: 0, documentos: 0 };
+  const recebidosCompleto = linhas.filter((l) => noMes(l.dataSolicitacao, null, ano));
+  const documentos = recebidosCompleto.reduce((s, l) => s + l.numDocumentos, 0);
+  const recebidos = recebidosCompleto.filter((l) => !ehArt(l.disciplina));
+  const concluidos = linhas
+    .filter((l) => noMes(l.dataAnalise, null, ano) && !ehArt(l.disciplina))
+    .filter((l) => STATUS_CONCLUIDOS.has(l.statusAnalise));
+  return { recebidos: recebidos.length, concluidos: concluidos.length, documentos };
 }
 
 /** Produtividade por analista — mesma regra de

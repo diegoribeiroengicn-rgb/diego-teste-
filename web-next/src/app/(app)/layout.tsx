@@ -50,6 +50,7 @@ const GRUPOS_NAV: GrupoNav[] = [
       { rotulo: "Central de Alertas", href: "/alertas" },
       { rotulo: "Meus Alertas", href: "/meus-alertas" },
       { rotulo: "Painel Consolidado", href: "/consolidado" },
+      { rotulo: "Relatórios Mensais", href: "/relatorios-mensais" },
       { rotulo: "Lista de Prioridades", href: "/prioridades" },
       { rotulo: "Lembretes (Sem PEP)", href: "/lembretes-pep" },
       { rotulo: "Painel de Analistas", href: "/analistas" },
