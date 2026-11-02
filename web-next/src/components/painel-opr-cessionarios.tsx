@@ -5,6 +5,7 @@ import {
   GraficoLiberadoDonut,
   GraficoRevisao,
 } from "@/components/opr-cessionarios-charts";
+import { BotaoRelatorio } from "@/components/baixar-relatorio";
 import type { DadosOprCessionarios } from "@/lib/opr-cessionarios";
 import type { CessionarioAtivo } from "@/lib/cessionarios-ativos";
 import { MESES_PT } from "@/lib/meses";
@@ -25,11 +26,13 @@ export function PainelOprCessionarios({
   ano,
   dados,
   cessionariosAtivos,
+  podeExportar,
 }: {
   mes: number;
   ano: number;
   dados: DadosOprCessionarios;
   cessionariosAtivos: CessionarioAtivo[];
+  podeExportar: boolean;
 }) {
   const { resumo } = dados;
   const tituloMesAno = `${MESES_PT[mes - 1]} ${ano}`;
@@ -103,8 +106,17 @@ export function PainelOprCessionarios({
         </div>
       </div>
 
+      {podeExportar ? (
+        <div className="mt-4 max-w-xs">
+          <BotaoRelatorio
+            rotulo="Gerar PDF"
+            url="/api/relatorios/opr/cessionarios/pdf"
+            corpo={{ mes, ano }}
+          />
+        </div>
+      ) : null}
       <p className="mt-4 text-xs text-(--color-text-dim)">
-        Exportação para PDF/Word/PowerPoint ainda não disponível nesta versão — use o sistema atual
+        Exportação para Word/PowerPoint ainda não disponível nesta versão — use o sistema atual
         enquanto esse recurso não chega por aqui.
       </p>
     </div>

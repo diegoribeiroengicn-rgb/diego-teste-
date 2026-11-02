@@ -1,0 +1,109 @@
+import { SeletorCompetencia } from "@/components/seletor-competencia";
+import {
+  GraficoAcumulado,
+  GraficoDisciplinas,
+  GraficoLiberadoDonut,
+  GraficoRevisao,
+} from "@/components/opr-cessionarios-charts";
+import { BotaoRelatorio } from "@/components/baixar-relatorio";
+import type { DadosOprPrestadores } from "@/lib/opr-prestadores";
+import { MESES_PT } from "@/lib/meses";
+
+function CartaoKpi({ titulo, valor, cor }: { titulo: string; valor: string; cor?: string }) {
+  return (
+    <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) px-4 py-4">
+      <p className="text-xl font-semibold tabular-nums" style={cor ? { color: cor } : undefined}>
+        {valor}
+      </p>
+      <p className="mt-1 text-xs text-(--color-text-weak)">{titulo}</p>
+    </div>
+  );
+}
+
+/** One Page Report — Prestadores: mesmo layout do painel de Cessionários,
+ * reutilizando os mesmos componentes de gráfico (genéricos), mas sem o
+ * bloco "ATIVOS" — Prestadores são empresas de serviço de engenharia, sem
+ * um equivalente ao cadastro manual de "Cessionários Ativos" (espaços
+ * comerciais do terminal). Mostra só o bloco RESUMO. */
+export function PainelOprPrestadores({
+  mes,
+  ano,
+  dados,
+  podeExportar,
+}: {
+  mes: number;
+  ano: number;
+  dados: DadosOprPrestadores;
+  podeExportar: boolean;
+}) {
+  const { resumo } = dados;
+  const tituloMesAno = `${MESES_PT[mes - 1]} ${ano}`;
+
+  return (
+    <div className="mx-auto max-w-6xl px-8 py-10">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-(--color-text)">One Page Report — Prestadores</h1>
+          <p className="mt-1 max-w-2xl text-sm text-(--color-text-weak)">
+            Infográfico mensal no modelo institucional &quot;GAT Prestadores&quot; — {tituloMesAno}.
+          </p>
+        </div>
+        <SeletorCompetencia mes={mes} ano={ano} />
+      </div>
+
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <CartaoKpi titulo="Análises Emitidas" valor={String(resumo.analises_emitidas)} cor="var(--color-navy)" />
+        <CartaoKpi titulo="Docs Analisados" valor={String(resumo.documentos)} cor="var(--color-blue-2)" />
+        <CartaoKpi titulo="Adiantados" valor={`${resumo.adiantados} (${resumo.adiantados_pct}%)`} cor="var(--color-green)" />
+        <CartaoKpi titulo="No Prazo" valor={`${resumo.no_prazo} (${resumo.no_prazo_pct}%)`} cor="var(--color-gold)" />
+        <CartaoKpi titulo="Atrasados" valor={`${resumo.atrasados} (${resumo.atrasados_pct}%)`} cor="var(--color-red)" />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-5">
+          <GraficoDisciplinas dados={dados.disciplinas} />
+        </div>
+        <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-5">
+          <GraficoRevisao dados={dados.porRevisao} />
+        </div>
+        <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-5">
+          <GraficoLiberadoDonut liberados={resumo.liberados} naoLiberados={resumo.nao_liberados} />
+
+          <div className="mt-2 border-t border-(--color-border) pt-3">
+            <p className="text-xs font-semibold text-(--color-navy)">RESUMO</p>
+            <ul className="mt-1 space-y-0.5">
+              <li className="text-xs text-(--color-text-weak)">{resumo.analises_emitidas} análises emitidas</li>
+              <li className="text-xs text-(--color-text-weak)">{resumo.documentos} docs analisados</li>
+              <li className="text-xs text-(--color-text-weak)">{resumo.adiantados} adiantados ({resumo.adiantados_pct}%)</li>
+              <li className="text-xs text-(--color-text-weak)">{resumo.no_prazo} no prazo ({resumo.no_prazo_pct}%)</li>
+              <li className="text-xs text-(--color-text-weak)">{resumo.atrasados} atrasados ({resumo.atrasados_pct}%)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-5">
+          <GraficoAcumulado dados={dados.acumuladoAtual} ano={ano} />
+        </div>
+        <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-5">
+          <GraficoAcumulado dados={dados.acumuladoAnterior} ano={ano - 1} />
+        </div>
+      </div>
+
+      {podeExportar ? (
+        <div className="mt-4 max-w-xs">
+          <BotaoRelatorio
+            rotulo="Gerar PDF"
+            url="/api/relatorios/opr/prestadores/pdf"
+            corpo={{ mes, ano }}
+          />
+        </div>
+      ) : null}
+      <p className="mt-4 text-xs text-(--color-text-dim)">
+        Exportação para Word/PowerPoint ainda não disponível nesta versão — use o sistema atual
+        enquanto esse recurso não chega por aqui.
+      </p>
+    </div>
+  );
+}
