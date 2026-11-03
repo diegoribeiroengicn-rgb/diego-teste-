@@ -6,7 +6,7 @@
  * carga diária/semanal por analista — base do heatmap de paralelismo e
  * sobrecarga, e da projeção de documentos ao longo dos meses.
  *
- * Duas adaptações deliberadas em relação ao protótipo original:
+ * Adaptações deliberadas em relação ao protótipo original:
  * - `normAT` aqui só normaliza (trim + maiúsculas) em vez de validar
  *   contra o padrão antigo "NNNN/AA" — o `num_at` atual do GAT usa o
  *   formato composto (ex.: "AT-0466-26-P221-400-00"), então validar
@@ -14,6 +14,14 @@
  * - Não há mais SLA por prestador fixo no código (`slaPOver`/`slaIOver`
  *   do protótipo traziam uma lista hardcoded de 6 códigos) — o usuário
  *   configura os desvios de SLA na própria tela, sempre vazio por padrão.
+ * - Não porta a camada de detecção de inconsistências de planilha do
+ *   protótipo (`issues`: colunas S/T invertidas, nº de AT com ano
+ *   digitado errado) — é uma checagem de qualidade de dados na hora de
+ *   ler a planilha original, sem equivalente útil aqui, já que este
+ *   sistema lê direto da tabela `prestadores` (já validada na entrada).
+ * - Não porta `Pdays` (campo "P" do protótipo) — não há coluna
+ *   equivalente em `prestadores`; nenhum outro cálculo do motor depende
+ *   dele no protótipo, só é exibido à parte.
  */
 
 import { Calendario, addMonths, dn2iso, dow, fmt, iso2dn } from "./calendario";
@@ -36,8 +44,14 @@ export const S_EA = "EM ANÁLISE";
 export const S_HOLD = "EM HOLD";
 export const S_CANC = "CANCELADO";
 export const S_OBS = "OBSOLETO";
+/** Estado sintético (não existe na planilha/banco): marca um item sem nº
+ * de AT vinculado, parado em NÃO LIBERADO/EM HOLD, cuja pendência já foi
+ * coberta por uma AT liberada depois no mesmo código e disciplina — sem
+ * isso o item ficaria "aberto" indefinidamente no Gantt mesmo já tendo
+ * sido resolvido por outra linha. */
+export const S_SUB = "SUBSTITUÍDA";
 export const LIBS = new Set([S_LIB, S_LIBR]);
-export const CLOSED_NEG = new Set([S_CANC, S_OBS]);
+export const CLOSED_NEG = new Set<string>([S_CANC, S_OBS, S_SUB]);
 const PRECED = [S_HOLD, S_EA, S_NL, S_LIBR, S_LIB];
 
 export type LinhaBrutaGantt = {
@@ -174,6 +188,11 @@ export type ItemGantt = {
   state: string;
   closed?: boolean;
   active?: LinhaPreparada[];
+  /** Preenchido só quando state === S_SUB — descrição da AT liberada
+   * depois que tornou esta linha sem AT dispensável. */
+  substBy?: string;
+  /** Estado original (NÃO LIBERADO/EM HOLD) antes de virar S_SUB. */
+  prevState?: string;
   revAT: number;
   pr: number;
   nDocs: number;
@@ -243,11 +262,19 @@ function summarize(key: string, rows: LinhaPreparada[], canon: Record<string, st
     valid.forEach((r) => { r.effRev = r.rev ?? 0; });
     maxRev = Math.max(...valid.map((r) => r.effRev));
   }
-  const cyc = valid.filter((r) => r.effRev === maxRev);
+  let cyc = valid.filter((r) => r.effRev === maxRev);
+  // mesma REV. AT com linha NÃO LIBERADO e liberação posterior (REV não
+  // incrementada no reenvio): vale a liberação, não o NÃO LIBERADO antigo.
+  const sup = cyc.filter((r) => r.status === S_NL && cyc.some((r2) => LIBS.has(r2.status ?? "") && (r2.Kd ?? -Infinity) > (r.Kd ?? -Infinity) && (r2.Kd ?? -Infinity) >= (r.Md ?? r.Kd ?? -Infinity)));
+  if (sup.length) {
+    cyc = cyc.filter((r) => !sup.includes(r));
+    sup.forEach((r) => { r.flags.push("NÃO LIBERADO superado por liberação posterior na mesma REV. AT"); });
+  }
   const st = worst(cyc.map((r) => r.status));
   const act = cyc.filter((r) => r.status === st);
   it.revAT = maxRev;
   it.state = st || "SEM STATUS";
+  if (sup.length) it.flags.push(`Linhas ${sup.map((r) => r.row).join(", ")} (NÃO LIBERADO) superadas por liberação posterior na mesma REV. AT`);
   it.active = act;
   it.closed = LIBS.has(st ?? "");
   it.pr = act.reduce((s, r) => s + r.pr, 0);
@@ -317,6 +344,25 @@ export function buildItems(prep: { rows: LinhaPreparada[] }, opts: { inferLinks:
     }
   }
   const items = [...g.entries()].map(([k, rs]) => summarize(k, rs, canon));
+
+  // Linha sem nº de AT parada em NÃO LIBERADO/EM HOLD cuja pendência já
+  // foi coberta por uma AT liberada depois no mesmo código e disciplina
+  // — vira SUBSTITUÍDA em vez de ficar "aberta" indefinidamente no Gantt.
+  items.forEach((it) => {
+    if (it.at || (it.state !== S_NL && it.state !== S_HOLD)) return;
+    const r = it.rows[0];
+    const depois = rows.filter(
+      (x) => x !== r && x.code === r.code && x.disc === r.disc && x.atN && LIBS.has(x.status ?? "") && (x.Kd ?? -Infinity) >= (r.Kd ?? -Infinity),
+    );
+    if (!depois.length) return;
+    const ultima = depois.slice().sort((a, b) => (b.Kd ?? -Infinity) - (a.Kd ?? -Infinity))[0];
+    it.substBy = `AT ${ultima.atN} (linha ${ultima.row}, ${ultima.status} em ${fmt(ultima.Md ?? ultima.Kd)})`;
+    it.flags.push(`Linha sem nº de AT considerada substituída pela ${it.substBy} — mesmo código e disciplina, liberada depois`);
+    it.prevState = it.state;
+    it.state = S_SUB;
+    it.closed = false;
+  });
+
   items.forEach((it) => { if (it.inferred) it.flags.push("Reenvio sem nº AT vinculado por inferência"); });
   return { items, canon };
 }
