@@ -83,7 +83,7 @@ export function inteiro(valor: unknown): number | null {
 }
 
 /** Converte célula do Excel (Date, serial numérico ou texto dd/mm/aaaa)
- * para "YYYY-MM-DD" — mesmo parser já usado em pmo-cronograma-import.ts. */
+ * para "YYYY-MM-DD". */
 export function dataIso(valor: unknown): string | null {
   if (vazio(valor)) return null;
   if (valor instanceof Date) return Number.isNaN(valor.getTime()) ? null : valor.toISOString().slice(0, 10);

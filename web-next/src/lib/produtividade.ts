@@ -152,18 +152,14 @@ export type ResumoExecutivoMensal = {
   documentos: number;
   slaPercentual: number;
   backlog: number;
-  semPep: number;
   produtividadeMedia: number;
 };
 
 /** Resumo consolidado (Prestadores + Cessionários) de uma competência,
  * para o One Page Report executivo — mesma regra do bloco de resumo em
- * views/relatorios_mensais.py::render. `semPep` vem de fora (contagem já
- * calculada em lib/lembretes-pep.ts, que opera sobre o cadastro vigente,
- * não sobre uma competência específica — mesmo comportamento do
- * original, que usa `df_prest["tem_pep"]` sem filtrar por mês/ano). */
+ * views/relatorios_mensais.py::render. */
 export function resumoExecutivoMensal(
-  linhasPrest: LinhaProdutividade[], linhasCess: LinhaProdutividade[], mes: number, ano: number, semPep: number,
+  linhasPrest: LinhaProdutividade[], linhasCess: LinhaProdutividade[], mes: number, ano: number,
 ): ResumoExecutivoMensal {
   const indPrest = indicadoresMensaisModulo(linhasPrest, mes, ano);
   const indCess = indicadoresMensaisModulo(linhasCess, mes, ano);
@@ -181,7 +177,6 @@ export function resumoExecutivoMensal(
     documentos: indPrest.documentos + indCess.documentos,
     slaPercentual: Math.round((10 * (indPrest.slaPercentual + indCess.slaPercentual)) / 2) / 10,
     backlog: indPrest.backlog + indCess.backlog,
-    semPep,
     produtividadeMedia,
   };
 }

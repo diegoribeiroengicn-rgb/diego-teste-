@@ -75,8 +75,6 @@ export function PainelConsolidado({ linhas }: { linhas: LinhaConsolidada[] }) {
   const totalAtrasados = atrasadosPrest + atrasadosCess;
   const pctNoPrazo = totalGeral > 0 ? Math.round((1000 * (totalGeral - totalAtrasados)) / totalGeral) / 10 : 0;
 
-  const semPepPrest = prest.filter((l) => l.temPep === false).length;
-
   const hoje = hojeBr();
   const r1 = resumoIndicadoresAtraso(prest, hoje);
   const r2 = resumoIndicadoresAtraso(cess, hoje);
@@ -92,11 +90,10 @@ export function PainelConsolidado({ linhas }: { linhas: LinhaConsolidada[] }) {
       </p>
 
       <p className="mt-6 text-sm font-semibold text-(--color-text)">Panorama Operacional</p>
-      <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <CartaoKpi titulo="Projetos Ativos (Total)" valor={String(totalGeral)} cor="var(--color-navy)" />
         <CartaoKpi titulo="Prestadores Ativos" valor={String(totalPrest)} cor="var(--color-blue-2)" />
         <CartaoKpi titulo="Cessionários Ativos" valor={String(totalCess)} cor="var(--color-sky)" />
-        <CartaoKpi titulo="Projetos sem PEP — Prestadores" valor={String(semPepPrest)} cor="var(--color-gold)" />
       </div>
 
       <p className="mt-6 text-sm font-semibold text-(--color-text)">Produção e Distribuição</p>

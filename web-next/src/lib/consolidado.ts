@@ -20,7 +20,6 @@ type LinhaBanco = {
   hold_fim: string | null;
   sla_dias: number | null;
   tipo: string | null;
-  peps: string | null;
 };
 
 function calcularSlaCessionario(tipo: string | null, revisao: number): number {
@@ -64,7 +63,6 @@ function enriquecerLinha(row: LinhaBanco, origem: Origem): LinhaConsolidada {
     statusEntregaCalc,
     emHold: estaEmHold,
     diasRestantes,
-    temPep: origem === "prestadores" ? !!(row.peps && row.peps.trim()) : null,
   };
 }
 
@@ -78,14 +76,14 @@ export async function buscarLinhasConsolidado(): Promise<LinhaConsolidada[]> {
     pool.query<LinhaBanco>(
       `SELECT id, responsavel, status_analise, disciplina, revisao,
               data_solicitacao, data_analise, data_limite, hold_inicio, hold_fim,
-              sla_dias, NULL AS tipo, peps
+              sla_dias, NULL AS tipo
        FROM prestadores WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),
     pool.query<LinhaBanco>(
       `SELECT id, responsavel, status_analise, disciplina, revisao,
               data_solicitacao, data_analise, data_limite, hold_inicio, hold_fim,
-              sla_dias, tipo, NULL AS peps
+              sla_dias, tipo
        FROM cessionarios WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),

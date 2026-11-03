@@ -23,7 +23,6 @@ export type LinhaConsolidada = {
   statusEntregaCalc: StatusEntrega | null;
   emHold: boolean;
   diasRestantes: number | null;
-  temPep: boolean | null;
 };
 
 export function ehArt(disciplina: string): boolean {

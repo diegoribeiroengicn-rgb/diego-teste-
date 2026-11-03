@@ -1,8 +1,7 @@
 /** Alertas Manuais (Central de Alertas) — alertas criados livremente por
  * um usuário para um projeto de Prestador ou Cessionário, independentes
  * dos alertas automáticos do motor de gargalo/atraso. Mesma regra de
- * gat/database.py::criar_alerta_manual (tabela `alertas_manuais`,
- * também já usada pelo PMO em lib/pmo.ts com `modulo = "pmo"`). */
+ * gat/database.py::criar_alerta_manual (tabela `alertas_manuais`). */
 
 export const PRIORIDADE_ALERTA_MANUAL_OPCOES = ["Baixa", "Média", "Alta", "Urgente"] as const;
 export type PrioridadeAlertaManual = (typeof PRIORIDADE_ALERTA_MANUAL_OPCOES)[number];

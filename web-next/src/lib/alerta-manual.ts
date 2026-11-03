@@ -2,8 +2,7 @@ import { obterPool } from "@/lib/db";
 import { CAMPOS_ALERTA_MANUAL, type DadosAlertaManual } from "@/lib/alerta-manual-calculo";
 
 /** Grava uma linha de histórico por campo alterado — mesmo padrão já
- * usado em lib/analise.ts/lib/pmo.ts (porta de
- * gat/database.py::_registrar_historico). */
+ * usado em lib/analise.ts (porta de gat/database.py::_registrar_historico). */
 async function registrarHistorico(
   tabela: string, registroId: number, antigo: Record<string, unknown>, novo: Record<string, unknown>, usuario: string,
 ): Promise<void> {
@@ -96,8 +95,7 @@ export async function reabrirAlertaManual(id: number, usuario: string): Promise<
 
 /** Só alertas ativos (não arquivados) — mesma regra de
  * gat/database.py::listar_alertas_manuais, aqui já filtrando pelos
- * módulos informados (Prestadores/Cessionários; o PMO usa seu próprio
- * listarAlertasPmo em lib/pmo.ts). */
+ * módulos informados (Prestadores/Cessionários). */
 export async function listarAlertasManuais(modulos: ("prestadores" | "cessionarios")[]): Promise<AlertaManualCompleto[]> {
   if (!modulos.length) return [];
   const pool = obterPool();

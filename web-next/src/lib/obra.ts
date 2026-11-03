@@ -3,8 +3,8 @@ import { type DadosObraPrestador } from "@/lib/obra-calculo";
 
 const COLUNAS_OBRA = ["prestador_id", "nome_obra", "codigo_referencia", "status", "e_canteiro", "observacoes"] as const;
 
-/** Mesmo padrão de registrarHistorico já usado em lib/analise.ts,
- * lib/pmo.ts etc. (porta de gat/database.py::_registrar_historico). */
+/** Mesmo padrão de registrarHistorico já usado em lib/analise.ts
+ * (porta de gat/database.py::_registrar_historico). */
 async function registrarHistorico(
   tabela: string, registroId: number, antigo: Record<string, unknown>, novo: Record<string, unknown>, usuario: string,
 ): Promise<void> {

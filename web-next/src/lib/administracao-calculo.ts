@@ -81,7 +81,6 @@ export const AREAS_PERMISSAO: Record<string, string> = {
   "prioridades.definir": "Prioridades e SLA — Definir Nível de Prioridade / SLA reduzido",
   "manual_sistema": "Manual do Sistema — Consultar",
   "manual_sistema.administrar": "Manual do Sistema — Editar/publicar/administrar",
-  "lembretes": "Acessar Lembretes (Sem PEP)",
   "reunioes": "Acessar Reuniões e Planos de Ação",
   "analistas": "Analistas — Visualizar módulo e estatísticas",
   "analistas.notas": "Analistas — Visualizar notas/avaliações",
@@ -102,8 +101,6 @@ export const AREAS_PERMISSAO: Record<string, string> = {
   "auditoria": "Acessar Auditoria",
   "administrar_usuarios": "Administrar usuários",
   "visao_gestor": "Visão do Gestor — Painel executivo diário da equipe (Gestor/Administrador)",
-  "pmo": "PMO — Acessar Portfólio de Projetos e páginas de projeto",
-  "pmo.cadastrar": "PMO — Cadastrar novo projeto",
   "arquivo": "Arquivo — Acessar o módulo de arquivamento/restauração de registros",
   "localizacao_ats": "Localização de ATs — Consultar",
 };
@@ -117,10 +114,10 @@ const AREAS_ANALISTA: Record<string, boolean> = {
   "cessionarios.cadastro_mestre": true, "consolidado.exportar": false, "consolidado.exportar_completo": false,
   documentos: true, relatorios: false, "avaliacoes.visualizar": true, "avaliacoes.cadastrar": true,
   alertas: true, "alertas.manual": true, lista_prioridades: true, "lista_prioridades.relatorios": true,
-  "prioridades.definir": true, manual_sistema: true, "manual_sistema.administrar": false, lembretes: true,
+  "prioridades.definir": true, manual_sistema: true, "manual_sistema.administrar": false,
   reunioes: true, analistas: true, "analistas.notas": false, "analistas.avaliar": false, "analistas.relatorios": false,
-  "analistas.kpis_prazo": true, "analistas.kpis_prazo.consolidado": false, visao_gestor: false, pmo: false,
-  "pmo.cadastrar": false, arquivo: true, "avaliacoes.editar": false, "avaliacoes.relatorios": false,
+  "analistas.kpis_prazo": true, "analistas.kpis_prazo.consolidado": false, visao_gestor: false,
+  arquivo: true, "avaliacoes.editar": false, "avaliacoes.relatorios": false,
   "opr.prestadores": true, "opr.cessionarios": true, "opr.consolidado": true, "opr.exportar": false,
   linha_tempo: true, historico_atividades: false, "alertas.consolidado": false, configuracoes: false,
   auditoria: false, administrar_usuarios: false, localizacao_ats: true,
@@ -133,10 +130,10 @@ const AREAS_CONSULTA: Record<string, boolean> = {
   "cessionarios.cadastro_mestre": false, "consolidado.exportar": false, "consolidado.exportar_completo": false,
   documentos: true, relatorios: false, "avaliacoes.visualizar": true, "avaliacoes.cadastrar": false,
   alertas: true, "alertas.manual": false, lista_prioridades: true, "lista_prioridades.relatorios": false,
-  "prioridades.definir": false, manual_sistema: true, "manual_sistema.administrar": false, lembretes: true,
+  "prioridades.definir": false, manual_sistema: true, "manual_sistema.administrar": false,
   reunioes: true, analistas: true, "analistas.notas": false, "analistas.avaliar": false, "analistas.relatorios": false,
-  "analistas.kpis_prazo": false, "analistas.kpis_prazo.consolidado": false, visao_gestor: false, pmo: false,
-  "pmo.cadastrar": false, arquivo: false, "avaliacoes.editar": false, "avaliacoes.relatorios": false,
+  "analistas.kpis_prazo": false, "analistas.kpis_prazo.consolidado": false, visao_gestor: false,
+  arquivo: false, "avaliacoes.editar": false, "avaliacoes.relatorios": false,
   "opr.prestadores": true, "opr.cessionarios": true, "opr.consolidado": true, "opr.exportar": false,
   linha_tempo: true, historico_atividades: false, "alertas.consolidado": false, configuracoes: false,
   auditoria: false, administrar_usuarios: false, localizacao_ats: true,
@@ -167,7 +164,7 @@ export const PERFIS_PADRAO: Record<string, PermissoesTemplate> = {
 /** Agrupamento de áreas exibidas no editor de permissões — mesma
  * curadoria (deliberadamente parcial) de gat/ui/modals_usuarios.py::
  * _GRUPOS_AREA; áreas mais novas/restritas (ex.: analistas.notas,
- * visao_gestor, pmo, arquivo) não aparecem aqui no Python original —
+ * visao_gestor, arquivo) não aparecem aqui no Python original —
  * seu valor de origem vem só do template do perfil na criação do
  * usuário, editável apenas por alteração direta no banco. */
 export const GRUPOS_AREA: [string, string[]][] = [
@@ -175,6 +172,6 @@ export const GRUPOS_AREA: [string, string[]][] = [
   ["Cessionários", ["cessionarios.cadastrar", "cessionarios.editar", "cessionarios.exportar"]],
   ["Consolidado", ["consolidado.exportar"]],
   ["Geral", ["dashboard", "documentos", "relatorios", "avaliacoes.visualizar", "avaliacoes.cadastrar", "analistas"]],
-  ["Gestão", ["alertas", "lembretes", "reunioes"]],
+  ["Gestão", ["alertas", "reunioes"]],
   ["Sistema", ["configuracoes", "auditoria", "administrar_usuarios"]],
 ];

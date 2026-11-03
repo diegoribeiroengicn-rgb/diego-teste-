@@ -3,7 +3,6 @@ import { obterSessao } from "@/lib/session";
 import { areaPermitida } from "@/lib/permissoes";
 import { registrarAtividade } from "@/lib/atividades";
 import { buscarLinhasProdutividade } from "@/lib/relatorios-mensais";
-import { buscarLembretesPep } from "@/lib/lembretes-pep";
 import { comparativoResumoExecutivo, mesAnterior, resumoExecutivoMensal } from "@/lib/produtividade";
 import { obterObservacaoMensal } from "@/lib/observacao-mensal";
 import { rotuloCompetencia } from "@/lib/meses";
@@ -23,17 +22,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ erro: "Mês e ano são obrigatórios." }, { status: 400 });
   }
 
-  const [todas, lembretesPep, observacoes] = await Promise.all([
+  const [todas, observacoes] = await Promise.all([
     buscarLinhasProdutividade(["prestadores", "cessionarios"]),
-    buscarLembretesPep(),
     obterObservacaoMensal(mes, ano),
   ]);
   const linhasPrest = todas.filter((l) => l.origem === "prestadores");
   const linhasCess = todas.filter((l) => l.origem === "cessionarios");
 
-  const resumo = resumoExecutivoMensal(linhasPrest, linhasCess, mes, ano, lembretesPep.length);
+  const resumo = resumoExecutivoMensal(linhasPrest, linhasCess, mes, ano);
   const [mesAnt, anoAnt] = mesAnterior(mes, ano);
-  const resumoAnterior = resumoExecutivoMensal(linhasPrest, linhasCess, mesAnt, anoAnt, lembretesPep.length);
+  const resumoAnterior = resumoExecutivoMensal(linhasPrest, linhasCess, mesAnt, anoAnt);
   const comparativo = comparativoResumoExecutivo(resumo, resumoAnterior);
 
   const competenciaLabel = rotuloCompetencia(mes, ano);

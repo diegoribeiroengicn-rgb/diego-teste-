@@ -8,14 +8,12 @@ function validarTabela(tabela: string): void {
 }
 
 const COLUNAS_DESCRICAO: Record<string, string[]> = {
-  pmo_projetos: ["nome", "cliente", "contratada"],
   prestadores: ["codigo", "prestador", "num_at", "revisao_at"],
   cessionarios: ["codigo", "cessionario", "num_at", "revisao_at"],
   cadastro_prestadores: ["codigo", "nome_empresa"],
   cadastro_cessionarios: ["codigo", "nome_empresa"],
   usuarios: ["username", "nome_completo"],
   alertas_manuais: ["titulo", "codigo_projeto"],
-  pmo_cronograma_arquivos: ["nome_arquivo", "formato"],
 };
 
 function descricaoRegistro(tabela: string, registro: Record<string, unknown>): string {

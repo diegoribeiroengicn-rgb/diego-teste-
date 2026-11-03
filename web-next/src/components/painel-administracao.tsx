@@ -421,41 +421,11 @@ function SecaoUsuarios({ usuarios }: { usuarios: Usuario[] }) {
 }
 
 function SecaoConfiguracoes({
-  diasAtencaoInicial, diasCriticoInicial, metaRev2Inicial,
-}: { diasAtencaoInicial: number; diasCriticoInicial: number; metaRev2Inicial: number }) {
-  const [diasAtencao, setDiasAtencao] = useState(diasAtencaoInicial);
-  const [diasCritico, setDiasCritico] = useState(diasCriticoInicial);
-  const [salvandoPep, setSalvandoPep] = useState(false);
-  const [erroPep, setErroPep] = useState<string | null>(null);
-  const [sucessoPep, setSucessoPep] = useState<string | null>(null);
-
+  metaRev2Inicial,
+}: { metaRev2Inicial: number }) {
   const [metaRev2, setMetaRev2] = useState(metaRev2Inicial);
   const [salvandoMeta, setSalvandoMeta] = useState(false);
   const [sucessoMeta, setSucessoMeta] = useState<string | null>(null);
-
-  async function salvarPep() {
-    if (diasCritico <= diasAtencao) {
-      setErroPep("O limiar de 'Crítico' deve ser maior que o de 'Atenção'.");
-      return;
-    }
-    setSalvandoPep(true);
-    setErroPep(null);
-    setSucessoPep(null);
-    try {
-      const resposta = await fetch("/api/admin/configuracoes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ diasAtencao, diasCritico }),
-      });
-      if (!resposta.ok) {
-        setErroPep("Erro ao salvar limiares.");
-        return;
-      }
-      setSucessoPep("Limiares atualizados com sucesso.");
-    } finally {
-      setSalvandoPep(false);
-    }
-  }
 
   async function salvarMeta() {
     setSalvandoMeta(true);
@@ -475,29 +445,6 @@ function SecaoConfiguracoes({
   return (
     <div>
       <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-6">
-        <p className="text-sm font-semibold text-(--color-text)">Criticidade de projetos sem PEP</p>
-        <p className="mt-1 text-xs text-(--color-text-weak)">
-          Define, em dias corridos desde a Data de Solicitação, quando um projeto sem PEP passa a ser classificado
-          como Atenção ou Crítico nos Lembretes e nos KPIs dos dashboards.
-        </p>
-        <div className="mt-3 grid grid-cols-2 gap-3 max-w-sm">
-          <label className="text-xs text-(--color-text-weak)">
-            Dias para &quot;Atenção&quot;
-            <input type="number" min={1} value={diasAtencao} onChange={(e) => setDiasAtencao(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none focus:border-(--color-navy)" />
-          </label>
-          <label className="text-xs text-(--color-text-weak)">
-            Dias para &quot;Crítico&quot;
-            <input type="number" min={1} value={diasCritico} onChange={(e) => setDiasCritico(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none focus:border-(--color-navy)" />
-          </label>
-        </div>
-        {erroPep && <p className="mt-2 text-sm text-(--color-red)">{erroPep}</p>}
-        {sucessoPep && <p className="mt-2 text-sm text-(--color-green)">{sucessoPep}</p>}
-        <button onClick={salvarPep} disabled={salvandoPep} className="mt-3 rounded-full bg-(--color-navy) px-4 py-1.5 text-xs font-medium text-white disabled:opacity-60">
-          {salvandoPep ? "Salvando…" : "Salvar limiares"}
-        </button>
-      </div>
-
-      <div className="mt-6 rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-6">
         <p className="text-sm font-semibold text-(--color-text)">Meta de aprovação até a REV2</p>
         <p className="mt-1 text-xs text-(--color-text-weak)">
           Percentual de projetos aprovados (LIBERADO/LIBERADO C/ REST.) que devem estar aprovados até a Revisão 2,
@@ -1080,7 +1027,7 @@ const ABAS_LABEL: Record<string, string> = {
 export function PainelAdministracao({
   usuarios, validacao, perguntasChecklist,
   podeAdministrarUsuarios, podeAuditoria, podeConfigurar,
-  diasAtencaoInicial, diasCriticoInicial, metaRev2Inicial,
+  metaRev2Inicial,
 }: {
   usuarios: Usuario[];
   validacao: { prestadores: DiagnosticoImportacao; cessionarios: DiagnosticoImportacao };
@@ -1088,8 +1035,6 @@ export function PainelAdministracao({
   podeAdministrarUsuarios: boolean;
   podeAuditoria: boolean;
   podeConfigurar: boolean;
-  diasAtencaoInicial: number;
-  diasCriticoInicial: number;
   metaRev2Inicial: number;
 }) {
   const abasDisponiveis = useMemo(() => {
@@ -1126,7 +1071,7 @@ export function PainelAdministracao({
         {aba === "validacao" && <SecaoValidacaoDados validacao={validacao} />}
         {aba === "historico" && podeAuditoria && <SecaoHistorico />}
         {aba === "configuracoes" && podeConfigurar && (
-          <SecaoConfiguracoes diasAtencaoInicial={diasAtencaoInicial} diasCriticoInicial={diasCriticoInicial} metaRev2Inicial={metaRev2Inicial} />
+          <SecaoConfiguracoes metaRev2Inicial={metaRev2Inicial} />
         )}
         {aba === "planilha" && podeConfigurar && <SecaoAtualizacaoPlanilha />}
         {aba === "checklist" && podeConfigurar && <SecaoChecklistPerguntas perguntasIniciais={perguntasChecklist} />}

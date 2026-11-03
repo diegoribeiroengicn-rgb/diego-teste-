@@ -52,16 +52,9 @@ const GRUPOS_NAV: GrupoNav[] = [
       { rotulo: "Painel Consolidado", href: "/consolidado" },
       { rotulo: "Relatórios Mensais", href: "/relatorios-mensais" },
       { rotulo: "Lista de Prioridades", href: "/prioridades" },
-      { rotulo: "Lembretes (Sem PEP)", href: "/lembretes-pep" },
       { rotulo: "Painel de Analistas", href: "/analistas" },
       { rotulo: "KPIs de Prazo dos Analistas", href: "/analistas/prazo" },
       { rotulo: "Histórico de Atividades", href: "/atividades" },
-    ],
-  },
-  {
-    titulo: "PMO",
-    itens: [
-      { rotulo: "Portfólio de Projetos", href: "/pmo" },
     ],
   },
   {

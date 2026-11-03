@@ -5,7 +5,6 @@ export const TIPO_RESTAURACAO = "RESTAURACAO";
 export const TIPO_EXCLUSAO = "EXCLUSAO_DEFINITIVA";
 
 export const ORIGEM_GAT = "GAT";
-export const ORIGEM_PMO = "PMO";
 
 export type Granularidade = "registro" | "projeto_codigo";
 
@@ -22,12 +21,10 @@ export type CategoriaArquivo = {
 /** Mesma lista de gat/arquivo_business_rules.py::CATEGORIAS — "Reuniões
  * Arquivadas" e "Planos de Ação Arquivadas" ficam de fora: toda a área
  * de Reuniões/Planos de Ação foi retirada do sistema (decisão já
- * aplicada em todo o restante da migração). As categorias de PMO
- * (pmo_projetos, documentos) continuam na lista — as tabelas já
- * existem no banco compartilhado — mas ficam sempre vazias até o
- * módulo PMO ser portado para o Next.js. */
+ * aplicada em todo o restante da migração). O módulo PMO também foi
+ * retirado do sistema — suas categorias de arquivo (pmo_projetos,
+ * documentos) saíram desta lista junto. */
 export const CATEGORIAS: CategoriaArquivo[] = [
-  { chave: "pmo_projetos", rotulo: "Projetos PMO Arquivados", tabela: "pmo_projetos", origem: ORIGEM_PMO, granularidade: "registro", reservada: false, mensagemReservada: "" },
   { chave: "projetos_gat", rotulo: "Projetos GAT Arquivados", tabela: null, origem: ORIGEM_GAT, granularidade: "projeto_codigo", reservada: false, mensagemReservada: "" },
   { chave: "analises", rotulo: "Análises Arquivadas", tabela: null, origem: ORIGEM_GAT, granularidade: "registro", reservada: false, mensagemReservada: "" },
   { chave: "analistas", rotulo: "Analistas Arquivados", tabela: "usuarios", origem: null, granularidade: "registro", reservada: false, mensagemReservada: "" },
@@ -40,15 +37,14 @@ export const CATEGORIAS: CategoriaArquivo[] = [
   { chave: "alertas", rotulo: "Alertas Arquivados", tabela: "alertas_manuais", origem: null, granularidade: "registro", reservada: false, mensagemReservada: "" },
   {
     chave: "relatorios", rotulo: "Relatórios Arquivados", tabela: null, origem: null, granularidade: "registro", reservada: true,
-    mensagemReservada: "Os relatórios do GAT e do PMO são gerados sob demanda (Word/Excel) e não ficam salvos no banco de dados — não há, portanto, um registro persistente para arquivar. Esta categoria ficará disponível caso o sistema passe a guardar relatórios gerados.",
+    mensagemReservada: "Os relatórios do GAT são gerados sob demanda (Word/Excel) e não ficam salvos no banco de dados — não há, portanto, um registro persistente para arquivar. Esta categoria ficará disponível caso o sistema passe a guardar relatórios gerados.",
   },
-  { chave: "documentos", rotulo: "Documentos Arquivados", tabela: "pmo_cronograma_arquivos", origem: ORIGEM_PMO, granularidade: "registro", reservada: false, mensagemReservada: "" },
   { chave: "outros", rotulo: "Outros Registros Arquivados", tabela: null, origem: null, granularidade: "registro", reservada: true, mensagemReservada: "Reservado para uso futuro." },
 ];
 
 export const TABELAS_ARQUIVAVEIS = [
-  "pmo_projetos", "prestadores", "cessionarios", "cadastro_prestadores",
-  "cadastro_cessionarios", "usuarios", "alertas_manuais", "pmo_cronograma_arquivos",
+  "prestadores", "cessionarios", "cadastro_prestadores",
+  "cadastro_cessionarios", "usuarios", "alertas_manuais",
 ];
 
 /** Todo perfil operacional acessa o módulo Arquivo, exceto Consulta.
@@ -67,14 +63,12 @@ export function perfilPodeExcluirDefinitivamente(perfil: string): boolean {
 }
 
 const COLUNAS_EXIBICAO: Record<string, string[]> = {
-  pmo_projetos: ["nome", "cliente", "contratada"],
   prestadores: ["codigo", "prestador", "num_at", "revisao_at"],
   cessionarios: ["codigo", "cessionario", "num_at", "revisao_at"],
   cadastro_prestadores: ["codigo", "nome_empresa"],
   cadastro_cessionarios: ["codigo", "nome_empresa"],
   usuarios: ["username", "nome_completo", "perfil"],
   alertas_manuais: ["titulo", "codigo_projeto"],
-  pmo_cronograma_arquivos: ["nome_arquivo", "formato"],
 };
 
 /** Descrição legível de um registro arquivado a partir dos campos mais

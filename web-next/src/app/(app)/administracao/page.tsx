@@ -18,11 +18,9 @@ export default async function PaginaAdministracao() {
     areaPermitida(sessao.id, sessao.perfil, "configuracoes"),
   ]);
 
-  const [usuarios, validacao, diasAtencao, diasCritico, metaRev2, perguntasChecklist] = await Promise.all([
+  const [usuarios, validacao, metaRev2, perguntasChecklist] = await Promise.all([
     podeAdministrarUsuarios ? listarUsuarios() : Promise.resolve([]),
     relatorioValidacaoImportacao(),
-    podeConfigurar ? obterConfiguracao("pep_dias_atencao", "3") : Promise.resolve("3"),
-    podeConfigurar ? obterConfiguracao("pep_dias_critico", "6") : Promise.resolve("6"),
     podeConfigurar ? obterConfiguracao("meta_aprovacao_rev2", "80") : Promise.resolve("80"),
     podeConfigurar ? listarPerguntasChecklistAdmin(false) : Promise.resolve([]),
   ]);
@@ -35,8 +33,6 @@ export default async function PaginaAdministracao() {
       podeAdministrarUsuarios={podeAdministrarUsuarios}
       podeAuditoria={podeAuditoria}
       podeConfigurar={podeConfigurar}
-      diasAtencaoInicial={Number(diasAtencao)}
-      diasCriticoInicial={Number(diasCritico)}
       metaRev2Inicial={Number(metaRev2)}
     />
   );

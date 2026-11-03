@@ -136,7 +136,6 @@ export async function gerarOnePageReportPdf(
   const linha2: [string, string][] = [
     ["% SLA Cumprido", `${resumo.slaPercentual}%`],
     ["Backlog do Período", String(resumo.backlog)],
-    ["Projetos sem PEP (Prestadores)", String(resumo.semPep)],
     ["Produtividade — Projetos/Analista", String(resumo.produtividadeMedia)],
   ];
 
