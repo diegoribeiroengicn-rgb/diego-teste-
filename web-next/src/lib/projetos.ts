@@ -9,6 +9,7 @@ export type Projeto = {
   revisao: number;
   status_analise: string;
   num_at: string | null;
+  num_documentos: number | null;
   data_limite: string | null;
   responsavel: string | null;
 };
@@ -47,12 +48,12 @@ export async function buscarProjetos(
 
   let ordem = "data_limite ASC NULLS LAST";
   if (opcoes.analistaProprio) {
-    parametros.push(opcoes.analistaProprio);
-    ordem = `(UPPER(responsavel) = UPPER($${parametros.length})) DESC, data_limite ASC NULLS LAST`;
+    parametros.push(opcoes.analistaProprio.trim());
+    ordem = `(UPPER(TRIM(responsavel)) = UPPER($${parametros.length})) DESC, data_limite ASC NULLS LAST`;
   }
 
   const { rows } = await pool.query<Omit<Projeto, "entidade"> & Record<string, unknown>>(
-    `SELECT id, item, codigo, "${colunaEntidade}" AS entidade, disciplina, revisao, status_analise, num_at, data_limite, responsavel
+    `SELECT id, item, codigo, "${colunaEntidade}" AS entidade, disciplina, revisao, status_analise, num_at, num_documentos, data_limite, responsavel
      FROM ${tabela}
      WHERE ${condicoes.join(" AND ")}
      ORDER BY ${ordem}

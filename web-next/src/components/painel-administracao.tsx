@@ -7,7 +7,6 @@ import {
   GRUPOS_AREA,
   MODULOS_CONTROLADOS,
   MODULOS_LABELS,
-  PERFIL_ANALISTA,
   PERFIS_OPCOES,
   RESPONSAVEIS,
   TIPOS_HISTORICO,
@@ -65,7 +64,7 @@ function FormularioNovoUsuario({ onCriado }: { onCriado: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username: username.trim(), senha, nomeCompleto: nome, perfil,
-          analistaVinculado: perfil === PERFIL_ANALISTA && analistaVinculado !== "— Nenhum —" ? analistaVinculado : null,
+          analistaVinculado: analistaVinculado !== "— Nenhum —" ? analistaVinculado : null,
         }),
       });
       if (!resposta.ok) {
@@ -106,15 +105,13 @@ function FormularioNovoUsuario({ onCriado }: { onCriado: () => void }) {
         Nome completo
         <input value={nome} onChange={(e) => setNome(e.target.value)} className="mt-1 w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none focus:border-(--color-navy)" />
       </label>
-      {perfil === PERFIL_ANALISTA && (
-        <label className="mt-3 block text-xs text-(--color-text-weak)">
-          Analista vinculado (necessário para o usuário ver seus próprios KPIs de prazo)
-          <select value={analistaVinculado} onChange={(e) => setAnalistaVinculado(e.target.value)} className="mt-1 w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none focus:border-(--color-navy)">
-            <option value="— Nenhum —">— Nenhum —</option>
-            {RESPONSAVEIS.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-        </label>
-      )}
+      <label className="mt-3 block text-xs text-(--color-text-weak)">
+        Analista vinculado (opcional — além dos KPIs de prazo, define a ordenação &ldquo;minhas análises primeiro&rdquo; em Em Análise/Em HOLD para qualquer perfil, não só Analista)
+        <select value={analistaVinculado} onChange={(e) => setAnalistaVinculado(e.target.value)} className="mt-1 w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none focus:border-(--color-navy)">
+          <option value="— Nenhum —">— Nenhum —</option>
+          {RESPONSAVEIS.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+      </label>
 
       {erro && <p className="mt-3 text-sm text-(--color-red)">{erro}</p>}
       {sucesso && <p className="mt-3 text-sm text-(--color-green)">{sucesso}</p>}
@@ -233,7 +230,7 @@ function EditorUsuario({ usuario, onFechar, onAtualizado }: { usuario: Usuario; 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nomeCompleto: nome, perfil, ativo,
-          analistaVinculado: perfil === PERFIL_ANALISTA && analistaVinculado !== "— Nenhum —" ? analistaVinculado : null,
+          analistaVinculado: analistaVinculado !== "— Nenhum —" ? analistaVinculado : null,
         }),
       });
       if (!resposta.ok) {
@@ -316,15 +313,13 @@ function EditorUsuario({ usuario, onFechar, onAtualizado }: { usuario: Usuario; 
           <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} />
           Usuário ativo
         </label>
-        {perfil === PERFIL_ANALISTA && (
-          <label className="mt-3 block text-xs text-(--color-text-weak)">
-            Analista vinculado (RESPONSAVEIS)
-            <select value={analistaVinculado} onChange={(e) => setAnalistaVinculado(e.target.value)} className="mt-1 w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none focus:border-(--color-navy)">
-              <option value="— Nenhum —">— Nenhum —</option>
-              {RESPONSAVEIS.map((r) => <option key={r} value={r}>{r}</option>)}
-            </select>
-          </label>
-        )}
+        <label className="mt-3 block text-xs text-(--color-text-weak)">
+          Analista vinculado (RESPONSAVEIS) — opcional para qualquer perfil
+          <select value={analistaVinculado} onChange={(e) => setAnalistaVinculado(e.target.value)} className="mt-1 w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none focus:border-(--color-navy)">
+            <option value="— Nenhum —">— Nenhum —</option>
+            {RESPONSAVEIS.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </label>
         {erroBasico && <p className="mt-3 text-sm text-(--color-red)">{erroBasico}</p>}
         {sucessoBasico && <p className="mt-3 text-sm text-(--color-green)">{sucessoBasico}</p>}
         <button onClick={salvarBasico} disabled={salvandoBasico} className="mt-3 rounded-full bg-(--color-navy) px-4 py-1.5 text-xs font-medium text-white disabled:opacity-60">
