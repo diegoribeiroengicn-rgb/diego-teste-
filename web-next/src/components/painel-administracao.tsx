@@ -723,7 +723,7 @@ function UploadPlanilha({ tabela, titulo, nomeAba }: { tabela: TabelaPlanilha; t
       {!plano && !relatorio && (
         <>
           <input
-            type="file" accept=".xlsx,.xls"
+            type="file" accept=".xlsx,.xls,.xlsm"
             onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
             className="mt-3 block w-full text-sm text-(--color-text)"
           />

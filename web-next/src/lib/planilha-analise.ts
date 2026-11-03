@@ -27,6 +27,28 @@ const CAMPO_NOME_ENTIDADE: Record<TabelaPlanilha, string> = { prestadores: "pres
 const CAMPO_NOME_OBRA: Record<TabelaPlanilha, string | null> = { prestadores: "obra_referencia", cessionarios: null };
 const COLUNAS_TABELA: Record<TabelaPlanilha, readonly string[]> = { prestadores: COLUNAS_PRESTADOR, cessionarios: COLUNAS_CESSIONARIO };
 
+/** `célula.value` de uma célula com fórmula vem como objeto
+ * `{formula, result, ...}` em vez do valor calculado — sem isso, uma
+ * coluna mapeada que seja fórmula na planilha (ex.: ETG, calculado via
+ * IF) grava o texto "[object Object]" no banco em vez do resultado real.
+ * Mesmo problema não existe no original em Python (openpyxl, com
+ * `data_only=True`, já devolve só o valor calculado). */
+function valorCelula(valor: unknown): unknown {
+  if (valor && typeof valor === "object" && !(valor instanceof Date)) {
+    if ("result" in valor) {
+      const resultado = (valor as { result: unknown }).result;
+      // Resultado em cache também pode ser objeto (ex.: erro de fórmula,
+      // #N/A) — nesse caso não há valor real aproveitável.
+      return resultado && typeof resultado === "object" && !(resultado instanceof Date) ? null : resultado;
+    }
+    // Fórmula (própria ou de um grupo compartilhado) sem resultado em
+    // cache no arquivo — Excel não recalculou/salvou essa célula; tratar
+    // como vazio é mais seguro do que gravar o objeto bruto no banco.
+    if ("formula" in valor || "sharedFormula" in valor) return null;
+  }
+  return valor;
+}
+
 /** Lê a aba PROJ_PREST/PROJ_CESS a partir da linha de cabeçalho real
  * (linha 5) e devolve as linhas já normalizadas, mais as colunas da
  * planilha sem correspondência conhecida (nunca descartadas em
@@ -58,16 +80,23 @@ export async function lerPlanilha(conteudo: Buffer, tabela: TabelaPlanilha): Pro
     else colunasNaoMapeadas.push(nome);
   });
 
+  const campoNomeEntidade = CAMPO_NOME_ENTIDADE[tabela];
   const linhas: LinhaPlanilha[] = [];
   const ultimaLinha = planilha.lastRow?.number ?? LINHA_CABECALHO;
   for (let numeroLinha = LINHA_CABECALHO + 1; numeroLinha <= ultimaLinha; numeroLinha++) {
     const linha = planilha.getRow(numeroLinha);
     const candidata: Record<string, unknown> = {};
     for (const [campo, coluna] of colunaRealPorCampo) {
-      candidata[campo] = linha.getCell(coluna).value;
+      candidata[campo] = valorCelula(linha.getCell(coluna).value);
     }
-    const temConteudo = Object.entries(candidata).some(([campo, v]) => campo !== "item" && !vazio(v));
-    if (!temConteudo) continue;
+    // Linha real exige código ou nome do prestador/cessionário — colunas
+    // sempre digitadas à mão, nunca fórmula. Sem isso, linhas "molde"
+    // bem além do fim dos dados reais (comuns nesta planilha, com
+    // fórmulas pré-preenchidas em milhares de linhas vazias) entrariam
+    // como centenas de itens "inconsistente" na prévia, afogando as
+    // inconsistências de verdade que o usuário precisa revisar.
+    const temIdentificacao = !vazio(candidata.codigo) || !vazio(candidata[campoNomeEntidade]);
+    if (!temIdentificacao) continue;
     candidata._linha_excel = numeroLinha;
     linhas.push(normalizarLinha(candidata));
   }

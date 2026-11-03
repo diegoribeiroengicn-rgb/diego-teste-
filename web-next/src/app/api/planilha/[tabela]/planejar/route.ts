@@ -26,7 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tab
   const form = await req.formData();
   const arquivo = form.get("arquivo");
   if (!(arquivo instanceof File)) {
-    return NextResponse.json({ erro: "Envie o arquivo da planilha (.xlsx)." }, { status: 400 });
+    return NextResponse.json({ erro: "Envie o arquivo da planilha (.xlsx ou .xlsm)." }, { status: 400 });
   }
 
   try {
