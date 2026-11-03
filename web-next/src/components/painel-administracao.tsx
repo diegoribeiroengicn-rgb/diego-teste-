@@ -725,7 +725,7 @@ function UploadPlanilha({ tabela, titulo, nomeAba }: { tabela: TabelaPlanilha; t
           <input
             type="file" accept=".xlsx,.xls,.xlsm"
             onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
-            className="mt-3 block w-full text-sm text-(--color-text)"
+            className="mt-3 block w-full cursor-pointer text-sm text-(--color-text-weak) file:mr-3 file:cursor-pointer file:rounded-full file:border-0 file:bg-(--color-navy) file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:opacity-90"
           />
           {erro && <p className="mt-2 text-sm text-(--color-red)">{erro}</p>}
           <button onClick={enviarEPrever} disabled={!arquivo || carregando} className={`mt-3 ${botaoPrimario}`}>
