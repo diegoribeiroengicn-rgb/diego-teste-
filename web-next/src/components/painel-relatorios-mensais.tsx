@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { SeletorCompetencia } from "@/components/seletor-competencia";
+import { BotaoRelatorio } from "@/components/baixar-relatorio";
+import { SecaoOprInstitucional } from "@/components/secao-opr-institucional";
 import {
   acumuladoAno,
   comparativoMensal,
@@ -10,7 +12,7 @@ import {
   type LinhaProdutividade,
   type ModuloProdutividade,
 } from "@/lib/produtividade";
-import { MESES_PT } from "@/lib/meses";
+import { MESES_PT, rotuloCompetencia } from "@/lib/meses";
 
 function CartaoKpi({ titulo, valor, cor }: { titulo: string; valor: string; cor?: string }) {
   return (
@@ -31,6 +33,71 @@ function Metrica({ titulo, valor, delta }: { titulo: string; valor: number; delt
   );
 }
 
+/** "One Page Report — Resumo Executivo Mensal": observações gerenciais
+ * (persistidas por competência) + geração do PDF consolidado — mesma
+ * regra de views/relatorios_mensais.py (bloco "One Page Report — Resumo
+ * Executivo Mensal"). */
+function SecaoOprExecutivo({ mes, ano, observacaoInicial }: { mes: number; ano: number; observacaoInicial: string }) {
+  const [texto, setTexto] = useState(observacaoInicial);
+  const [salvando, setSalvando] = useState(false);
+  const [salvo, setSalvo] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function salvar() {
+    setSalvando(true);
+    setErro(null);
+    setSalvo(false);
+    try {
+      const resposta = await fetch("/api/relatorios/observacao-mensal", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mes, ano, texto }),
+      });
+      if (!resposta.ok) {
+        const corpo = await resposta.json().catch(() => ({}));
+        setErro(corpo?.erro || "Erro ao salvar observações.");
+      } else {
+        setSalvo(true);
+      }
+    } catch {
+      setErro("Não foi possível conectar ao sistema.");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div>
+      <h2 className="text-sm font-semibold text-(--color-navy)">One Page Report — Resumo Executivo Mensal</h2>
+      <p className="mt-1 text-xs text-(--color-text-weak)">
+        Consolida Prestadores + Cessionários do mês selecionado, independentemente do módulo escolhido acima.
+      </p>
+
+      <div className="mt-3 rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-4">
+        <label className="text-xs font-semibold text-(--color-text-dim)">Observações gerenciais desta competência</label>
+        <textarea
+          value={texto}
+          onChange={(e) => { setTexto(e.target.value); setSalvo(false); }}
+          rows={4}
+          className="mt-2 w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none focus:border-(--color-navy)"
+        />
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <button
+            onClick={salvar} disabled={salvando}
+            className="rounded-full border border-(--color-border) px-4 py-1.5 text-xs font-medium text-(--color-text) hover:bg-(--color-surface-2) disabled:opacity-60"
+          >
+            {salvando ? "Salvando…" : "Salvar observações"}
+          </button>
+          {salvo && <span className="text-xs text-(--color-green)">Observações salvas.</span>}
+          {erro && <span className="text-xs text-(--color-red)">{erro}</span>}
+        </div>
+      </div>
+
+      <div className="mt-3 max-w-xs">
+        <BotaoRelatorio rotulo="Gerar One Page Report (PDF)" url="/api/relatorios/opr-executivo/pdf" corpo={{ mes, ano }} />
+      </div>
+    </div>
+  );
+}
+
 /** Painel on-screen de "Relatórios Mensais" — indicadores por competência
  * (Mês/Ano) e comparativos, para Prestadores/Cessionários/Consolidado —
  * mesma regra de views/relatorios_mensais.py (ramo não-Analistas; a
@@ -39,10 +106,12 @@ export function PainelRelatoriosMensais({
   linhas,
   mes,
   ano,
+  observacaoInicial,
 }: {
   linhas: LinhaProdutividade[];
   mes: number;
   ano: number;
+  observacaoInicial: string;
 }) {
   const [modulo, setModulo] = useState<ModuloProdutividade | "consolidado">("consolidado");
 
@@ -54,7 +123,7 @@ export function PainelRelatoriosMensais({
   const indicadoresAnoPassado = useMemo(() => indicadoresMensaisModulo(base, mes, ano - 1), [base, mes, ano]);
   const acumulado = useMemo(() => acumuladoAno(base, ano), [base, ano]);
 
-  const competenciaLabel = `${MESES_PT[mes - 1].charAt(0)}${MESES_PT[mes - 1].slice(1).toLowerCase()} de ${ano}`;
+  const competenciaLabel = rotuloCompetencia(mes, ano);
 
   return (
     <div className="mx-auto max-w-6xl px-8 py-10">
@@ -119,11 +188,23 @@ export function PainelRelatoriosMensais({
         </div>
       </div>
 
+      <h2 className="mt-6 text-sm font-semibold text-(--color-navy)">Exportação</h2>
+      <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:max-w-md">
+        <BotaoRelatorio rotulo="Exportar Excel" url="/api/relatorios/mensal/excel" corpo={{ modulo, mes, ano }} />
+        <BotaoRelatorio rotulo="Exportar PDF" url="/api/relatorios/mensal/pdf" corpo={{ modulo, mes, ano }} />
+      </div>
+
       <p className="mt-4 text-xs text-(--color-text-dim)">
-        Exportação (Excel/PDF) e o One Page Report institucional (Word) deste relatório ainda não
-        disponíveis nesta versão — use o sistema atual enquanto esse recurso não chega por aqui.
-        Produtividade por analista: veja o Painel de Analistas.
+        Produtividade por analista em detalhe: veja o Painel de Analistas.
       </p>
+
+      <div className="mt-8 border-t border-(--color-border) pt-6">
+        <SecaoOprExecutivo key={`${mes}-${ano}`} mes={mes} ano={ano} observacaoInicial={observacaoInicial} />
+      </div>
+
+      <div className="mt-8 border-t border-(--color-border) pt-6">
+        <SecaoOprInstitucional key={`${mes}-${ano}-institucional`} mes={mes} ano={ano} observacaoAtual={observacaoInicial} />
+      </div>
     </div>
   );
 }

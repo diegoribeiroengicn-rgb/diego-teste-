@@ -104,6 +104,15 @@ export function indicadoresMensaisModulo(linhas: LinhaProdutividade[], mes: numb
   };
 }
 
+/** Linhas cuja `coluna` de data cai na competência informada — mesmo
+ * filtro usado internamente por `indicadoresMensaisModulo`, exportado à
+ * parte para montar a lista de projetos da exportação (Excel/PDF). */
+export function linhasDaCompetencia(
+  linhas: LinhaProdutividade[], coluna: "dataSolicitacao" | "dataAnalise", mes: number, ano: number,
+): LinhaProdutividade[] {
+  return linhas.filter((l) => noMes(l[coluna], mes, ano));
+}
+
 export function mesAnterior(mes: number, ano: number): [number, number] {
   return mes === 1 ? [12, ano - 1] : [mes - 1, ano];
 }
@@ -132,6 +141,66 @@ export function acumuladoAno(linhas: LinhaProdutividade[], ano: number): Acumula
     .filter((l) => noMes(l.dataAnalise, null, ano) && !ehArt(l.disciplina))
     .filter((l) => STATUS_CONCLUIDOS.has(l.statusAnalise));
   return { recebidos: recebidos.length, concluidos: concluidos.length, documentos };
+}
+
+export type ResumoExecutivoMensal = {
+  totalProjetos: number;
+  totalPrestadores: number;
+  totalCessionarios: number;
+  concluidos: number;
+  emAnalise: number;
+  documentos: number;
+  slaPercentual: number;
+  backlog: number;
+  semPep: number;
+  produtividadeMedia: number;
+};
+
+/** Resumo consolidado (Prestadores + Cessionários) de uma competência,
+ * para o One Page Report executivo — mesma regra do bloco de resumo em
+ * views/relatorios_mensais.py::render. `semPep` vem de fora (contagem já
+ * calculada em lib/lembretes-pep.ts, que opera sobre o cadastro vigente,
+ * não sobre uma competência específica — mesmo comportamento do
+ * original, que usa `df_prest["tem_pep"]` sem filtrar por mês/ano). */
+export function resumoExecutivoMensal(
+  linhasPrest: LinhaProdutividade[], linhasCess: LinhaProdutividade[], mes: number, ano: number, semPep: number,
+): ResumoExecutivoMensal {
+  const indPrest = indicadoresMensaisModulo(linhasPrest, mes, ano);
+  const indCess = indicadoresMensaisModulo(linhasCess, mes, ano);
+  const prod = calcularProdutividadeAnalistas([...linhasPrest, ...linhasCess], mes, ano);
+  const produtividadeMedia = prod.length
+    ? Math.round((10 * prod.reduce((s, p) => s + p.projetosAnalisados, 0)) / prod.length) / 10
+    : 0;
+
+  return {
+    totalProjetos: indPrest.recebidos + indCess.recebidos,
+    totalPrestadores: indPrest.recebidos,
+    totalCessionarios: indCess.recebidos,
+    concluidos: indPrest.concluidos + indCess.concluidos,
+    emAnalise: indPrest.emAnalise + indCess.emAnalise,
+    documentos: indPrest.documentos + indCess.documentos,
+    slaPercentual: Math.round((10 * (indPrest.slaPercentual + indCess.slaPercentual)) / 2) / 10,
+    backlog: indPrest.backlog + indCess.backlog,
+    semPep,
+    produtividadeMedia,
+  };
+}
+
+/** [texto do comparativo "Total de Projetos", texto do comparativo
+ * "Concluídos"] entre o resumo atual e o do mês anterior — mesma regra
+ * de `comparativo_opr` em views/relatorios_mensais.py::render. */
+export function comparativoResumoExecutivo(
+  atual: ResumoExecutivoMensal, anterior: ResumoExecutivoMensal,
+): { totalProjetos: string; concluidos: string } {
+  function delta(valorAtual: number, valorAnterior: number): string {
+    if (!valorAnterior) return "sem variação relevante";
+    const d = valorAtual - valorAnterior;
+    return `${d >= 0 ? "+" : ""}${d} vs. mês anterior`;
+  }
+  return {
+    totalProjetos: delta(atual.totalProjetos, anterior.totalProjetos),
+    concluidos: delta(atual.concluidos, anterior.concluidos),
+  };
 }
 
 /** Produtividade por analista — mesma regra de

@@ -1,6 +1,7 @@
 import { obterSessao } from "@/lib/session";
 import { areaPermitida } from "@/lib/permissoes";
 import { buscarLinhasProdutividade } from "@/lib/relatorios-mensais";
+import { obterObservacaoMensal } from "@/lib/observacao-mensal";
 import { hojeBr } from "@/lib/dias-uteis";
 import { PainelRelatoriosMensais } from "@/components/painel-relatorios-mensais";
 
@@ -29,7 +30,10 @@ export default async function PaginaRelatoriosMensais({
   const mes = Number(mesParam) || hoje.getUTCMonth() + 1;
   const ano = Number(anoParam) || hoje.getUTCFullYear();
 
-  const linhas = await buscarLinhasProdutividade(["prestadores", "cessionarios"]);
+  const [linhas, observacaoInicial] = await Promise.all([
+    buscarLinhasProdutividade(["prestadores", "cessionarios"]),
+    obterObservacaoMensal(mes, ano),
+  ]);
 
-  return <PainelRelatoriosMensais linhas={linhas} mes={mes} ano={ano} />;
+  return <PainelRelatoriosMensais linhas={linhas} mes={mes} ano={ano} observacaoInicial={observacaoInicial} />;
 }
