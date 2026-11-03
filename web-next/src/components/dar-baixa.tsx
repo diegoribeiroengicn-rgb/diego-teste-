@@ -111,7 +111,8 @@ export function BotaoDarBaixa({ tabela, projetoId, statusAtual }: { tabela: "pre
         {registro && !textoGerado && (
           <>
             <p className="mt-1 text-xs text-(--color-text-weak)">
-              {registro.nome_entidade} · {registro.disciplina || "—"} · Rev. {registro.revisao ?? "—"} · N° AT: {registro.num_at || "—"}
+              {registro.nome_entidade} · {registro.disciplina || "—"} · Rev. {registro.revisao ?? "—"} · N° AT: {registro.num_at || "—"} ·
+              Documentos: {registro.num_documentos ?? "—"} · Status atual: {registro.status_analise}
             </p>
 
             <label className={`mt-4 block ${labelClasse}`}>

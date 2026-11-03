@@ -30,7 +30,7 @@ export async function obterRegistroParaBaixa(tabela: TabelaBaixa, id: number): P
   const colunaNome = tabela === "prestadores" ? "prestador" : "cessionario";
   const colunaObra = tabela === "prestadores" ? "obra_referencia" : "tipo";
   const { rows } = await pool.query<RegistroBaixa>(
-    `SELECT id, codigo, revisao, num_at, disciplina, status_analise, data_analise,
+    `SELECT id, codigo, revisao, num_at, disciplina, num_documentos, status_analise, data_analise,
             "${colunaNome}" AS nome_entidade, "${colunaObra}" AS obra_referencia,
             resumo_mfiles, resumo_drive, resumo_email, resumo_qtd_geracoes
      FROM ${tabela} WHERE id = $1 AND arquivado_em IS NULL`,

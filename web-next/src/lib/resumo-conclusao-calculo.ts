@@ -70,6 +70,7 @@ export type DadosBaixa = {
   nome_entidade: string | null;
   obra_referencia: string | null;
   disciplina: string | null;
+  num_documentos: number | null;
 };
 
 /** Monta o texto final da baixa — pronto para copiar e colar, nessa
