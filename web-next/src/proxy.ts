@@ -35,6 +35,15 @@ export async function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
+// manifest.webmanifest, sw.js e os ícones precisam ficar fora do gate de
+// sessão: o navegador busca esses arquivos (e registra o service worker)
+// já na própria tela de login, antes de qualquer autenticação, para
+// decidir se oferece a instalação do GAT Mobile como PWA. Redirecionar
+// essas requisições para "/" faz o manifest chegar como HTML em vez de
+// JSON, e o Chrome nunca considera o site instalável — foi exatamente
+// isso que impediu o prompt nativo de instalação de aparecer.
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|tecnoplano_logo.png|api/auth).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|tecnoplano_logo.png|manifest.webmanifest|sw.js|icon-192.png|icon-512.png|icon-maskable-512.png|apple-touch-icon.png|api/auth).*)",
+  ],
 };
