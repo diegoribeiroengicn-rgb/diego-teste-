@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { connection } from "next/server";
 import { LoginForm } from "@/components/login-form";
+import { InstalarAppMobile } from "@/components/instalar-app-mobile";
 import { mensagemAleatoria } from "@/lib/mensagens-motivacionais";
 
 // Página de entrada — sempre renderizada por requisição (login não é
@@ -58,6 +59,8 @@ export default async function PaginaLogin() {
           <div className="mt-8">
             <LoginForm />
           </div>
+
+          <InstalarAppMobile />
         </div>
       </div>
     </div>

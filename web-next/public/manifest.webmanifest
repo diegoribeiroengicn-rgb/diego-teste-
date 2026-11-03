@@ -1,9 +1,9 @@
 {
   "name": "GAT 2026 · Tecnoplano",
   "short_name": "GAT Mobile",
-  "description": "Consulta de ATs, prestadores e baixa de análises — Tecnoplano",
-  "start_url": "/m/analises",
-  "id": "/m/analises",
+  "description": "Consulta de ATs (prestadores e cessionários) e baixa de análises — Tecnoplano",
+  "start_url": "/m/baixa",
+  "id": "/m/baixa",
   "scope": "/",
   "display": "standalone",
   "background_color": "#F8FAFC",

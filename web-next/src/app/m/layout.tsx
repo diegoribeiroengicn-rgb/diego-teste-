@@ -6,14 +6,14 @@ export const instant = false;
 
 const ITENS_NAV = [
   { href: "/m/ats", rotulo: "ATs", icone: "🔎" },
-  { href: "/m/prestadores", rotulo: "Prestadores", icone: "🏢" },
-  { href: "/m/analises", rotulo: "Análises", icone: "📋" },
   { href: "/m/baixa", rotulo: "Baixa", icone: "✅" },
 ];
 
-/** Layout do GAT Mobile — propositalmente enxuto (só estas 4 telas, sem
+/** Layout do GAT Mobile — propositalmente enxuto (só estas 2 telas, sem
  * os grupos/menus da área desktop) para funcionar bem como PWA instalada
- * na tela inicial do celular. A sessão já é exigida globalmente por
+ * na tela inicial do celular: busca de ATs (por cessionário, prestador,
+ * código ou número) e Dar Baixa (que já abre direto nas análises em
+ * andamento, em evidência). A sessão já é exigida globalmente por
  * src/proxy.ts; o redirect aqui é só a tela de boas-vindas quando alguém
  * abre o link sem estar logado em outra aba. */
 export default async function LayoutMobile({ children }: { children: React.ReactNode }) {
