@@ -22,6 +22,7 @@ export function BotaoDarBaixa({ tabela, projetoId, statusAtual }: { tabela: "pre
   const [erro, setErro] = useState<string | null>(null);
 
   const [status, setStatus] = useState<string>(STATUS_FINAIS_BAIXA[0]);
+  const [numAt, setNumAt] = useState("");
   const [codigoDisciplina, setCodigoDisciplina] = useState("");
   const [mfiles, setMfiles] = useState(false);
   const [drive, setDrive] = useState(false);
@@ -42,6 +43,7 @@ export function BotaoDarBaixa({ tabela, projetoId, statusAtual }: { tabela: "pre
       .then((corpo: { registro: Registro }) => {
         setRegistro(corpo.registro);
         setStatus(STATUS_FINAIS_BAIXA.includes(corpo.registro.status_analise as (typeof STATUS_FINAIS_BAIXA)[number]) ? corpo.registro.status_analise : STATUS_FINAIS_BAIXA[0]);
+        setNumAt(corpo.registro.num_at || "");
         setMfiles(corpo.registro.resumo_mfiles);
         setDrive(corpo.registro.resumo_drive);
         setEmail(corpo.registro.resumo_email);
@@ -55,6 +57,10 @@ export function BotaoDarBaixa({ tabela, projetoId, statusAtual }: { tabela: "pre
   }
 
   async function confirmar() {
+    if (!numAt.trim()) {
+      setErro("Informe o número da AT.");
+      return;
+    }
     if (!codigoDisciplina.trim()) {
       setErro("Informe o código da disciplina.");
       return;
@@ -65,7 +71,7 @@ export function BotaoDarBaixa({ tabela, projetoId, statusAtual }: { tabela: "pre
       const resposta = await fetch(`/api/analises/${tabela}/${projetoId}/baixa`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, codigoDisciplina: codigoDisciplina.trim(), mfiles, drive, email }),
+        body: JSON.stringify({ status, numAt: numAt.trim(), codigoDisciplina: codigoDisciplina.trim(), mfiles, drive, email }),
       });
       const corpo = await resposta.json().catch(() => null);
       if (!resposta.ok) {
@@ -111,7 +117,7 @@ export function BotaoDarBaixa({ tabela, projetoId, statusAtual }: { tabela: "pre
         {registro && !textoGerado && (
           <>
             <p className="mt-1 text-xs text-(--color-text-weak)">
-              {registro.nome_entidade} · {registro.disciplina || "—"} · Rev. {registro.revisao ?? "—"} · N° AT: {registro.num_at || "—"} ·
+              {registro.nome_entidade} · {registro.disciplina || "—"} · Rev. {registro.revisao ?? "—"} ·
               Documentos: {registro.num_documentos ?? "—"} · Status atual: {registro.status_analise}
             </p>
 
@@ -120,6 +126,14 @@ export function BotaoDarBaixa({ tabela, projetoId, statusAtual }: { tabela: "pre
               <select value={status} onChange={(e) => setStatus(e.target.value)} className={inputClasse}>
                 {STATUS_FINAIS_BAIXA.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
+            </label>
+
+            <label className={`mt-3 block ${labelClasse}`}>
+              Número da AT
+              <input
+                value={numAt} onChange={(e) => setNumAt(e.target.value)}
+                placeholder="Ex.: 0303/26" className={inputClasse}
+              />
             </label>
 
             <label className={`mt-3 block ${labelClasse}`}>

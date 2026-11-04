@@ -39,7 +39,7 @@ export async function obterRegistroParaBaixa(tabela: TabelaBaixa, id: number): P
   return rows[0] ?? null;
 }
 
-export type DadosDarBaixa = { status: string; codigoDisciplina: string; mfiles: boolean; drive: boolean; email: boolean };
+export type DadosDarBaixa = { status: string; numAt: string; codigoDisciplina: string; mfiles: boolean; drive: boolean; email: boolean };
 
 /** Dá baixa na análise: grava o status final escolhido (marcando a data
  * de conclusão quando ainda não havia uma, ou quando o status muda),
@@ -59,11 +59,11 @@ export async function darBaixaAnalise(tabela: TabelaBaixa, id: number, dados: Da
   const novaDataAnalise = atual.data_analise && !mudouStatus ? atual.data_analise : hojeBr().toISOString().slice(0, 10);
 
   await pool.query(
-    `UPDATE ${tabela} SET status_analise = $1, data_analise = $2, resumo_mfiles = $3, resumo_drive = $4, resumo_email = $5,
-       resumo_ultima_geracao_em = $6, resumo_gerado_por = $7, resumo_qtd_geracoes = resumo_qtd_geracoes + 1,
-       atualizado_em = $6, atualizado_por = $7
-     WHERE id = $8`,
-    [dados.status, novaDataAnalise, dados.mfiles, dados.drive, dados.email, agora, usuario, id],
+    `UPDATE ${tabela} SET status_analise = $1, data_analise = $2, num_at = $3, resumo_mfiles = $4, resumo_drive = $5, resumo_email = $6,
+       resumo_ultima_geracao_em = $7, resumo_gerado_por = $8, resumo_qtd_geracoes = resumo_qtd_geracoes + 1,
+       atualizado_em = $7, atualizado_por = $8
+     WHERE id = $9`,
+    [dados.status, novaDataAnalise, dados.numAt.trim(), dados.mfiles, dados.drive, dados.email, agora, usuario, id],
   );
 
   const jaGeradoAntes = atual.resumo_qtd_geracoes > 0;
@@ -78,7 +78,7 @@ export async function darBaixaAnalise(tabela: TabelaBaixa, id: number, dados: Da
     ],
   );
 
-  return { ...atual, status_analise: dados.status, data_analise: novaDataAnalise };
+  return { ...atual, status_analise: dados.status, data_analise: novaDataAnalise, num_at: dados.numAt.trim() };
 }
 
 function rotulosCanaisSelecionados(mfiles: boolean, drive: boolean, email: boolean): string | null {

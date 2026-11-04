@@ -41,9 +41,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tab
     return NextResponse.json({ erro: "Tabela inválida." }, { status: 400 });
   }
 
-  const corpo = (await req.json()) as { status: string; codigoDisciplina: string; mfiles: boolean; drive: boolean; email: boolean };
+  const corpo = (await req.json()) as { status: string; numAt: string; codigoDisciplina: string; mfiles: boolean; drive: boolean; email: boolean };
   if (!STATUS_FINAIS_BAIXA.includes(corpo.status as (typeof STATUS_FINAIS_BAIXA)[number])) {
     return NextResponse.json({ erro: "Status inválido para baixa." }, { status: 400 });
+  }
+  if (!corpo.numAt?.trim()) {
+    return NextResponse.json({ erro: "Informe o número da AT." }, { status: 400 });
   }
   if (!corpo.codigoDisciplina?.trim()) {
     return NextResponse.json({ erro: "Informe o código da disciplina." }, { status: 400 });
@@ -52,7 +55,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tab
   try {
     const registro = await darBaixaAnalise(
       tabela, Number(id),
-      { status: corpo.status, codigoDisciplina: corpo.codigoDisciplina.trim(), mfiles: !!corpo.mfiles, drive: !!corpo.drive, email: !!corpo.email },
+      {
+        status: corpo.status, numAt: corpo.numAt.trim(), codigoDisciplina: corpo.codigoDisciplina.trim(),
+        mfiles: !!corpo.mfiles, drive: !!corpo.drive, email: !!corpo.email,
+      },
       sessao.username,
     );
     void registrarAtividade(sessao.username, sessao.perfil, "ANALISE_BAIXA", tabela, `#${id} -> ${corpo.status}`);
