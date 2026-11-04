@@ -40,11 +40,12 @@ export function PainelAnalisesMobile({
                   {p.status_analise}
                 </span>
               </div>
+              <p className="mt-1 text-sm font-semibold text-(--color-navy)">{p.responsavel || "Sem responsável"}</p>
               <p className="mt-1 text-xs text-(--color-text-weak)">
                 {p.codigo} · {p.disciplina} · Rev. {String(p.revisao).padStart(2, "0")} · {p.num_at || "Sem N° AT"} · {p.num_documentos ?? "—"} doc(s)
               </p>
               <p className="mt-1 text-[0.7rem] text-(--color-text-dim)">
-                {p.origem === "prestadores" ? "Prestador" : "Cessionário"} · Limite: {formatarData(p.data_limite)} · {p.responsavel || "—"}
+                {p.origem === "prestadores" ? "Prestador" : "Cessionário"} · Limite: {formatarData(p.data_limite)}
               </p>
               {mostrarBaixa && (
                 <div className="mt-2">

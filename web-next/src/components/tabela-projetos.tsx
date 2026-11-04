@@ -114,13 +114,16 @@ export function TabelaProjetos({
                 </span>
               </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs text-(--color-text-weak)">
+              <p className="mt-2 text-sm font-semibold text-(--color-navy)">
+                {p.responsavel || "Sem responsável"}
+              </p>
+
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs text-(--color-text-weak)">
                 <p>Item: <span className="tabular-nums text-(--color-text)">{p.item ?? "—"}</span></p>
                 <p>Rev.: <span className="text-(--color-text)">R{String(p.revisao).padStart(2, "0")}</span></p>
                 <p>Disciplina: <span className="text-(--color-text)">{p.disciplina}</span></p>
                 <p>N° AT: <span className="text-(--color-text)">{p.num_at || "—"}</span></p>
                 <p>Limite: <span className="text-(--color-text)">{formatarData(p.data_limite)}</span></p>
-                <p>Resp.: <span className="text-(--color-text)">{p.responsavel || "—"}</span></p>
               </div>
 
               <div className="mt-4 flex items-center gap-2">
