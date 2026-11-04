@@ -48,9 +48,9 @@ export function TabelaProjetos({
   temAnalistaProprio: boolean;
   podeCadastrar?: boolean;
   podeEditar?: boolean;
-  /** Em Análise usa cartões em vez de tabela — mais fácil de escanear
-   * quando o volume de análises em aberto é grande. Em HOLD e Projetos
-   * continuam em tabela. */
+  /** Em Análise e Em HOLD usam cartões em vez de tabela — mais fácil de
+   * escanear quando o volume de análises em aberto é grande. Projetos
+   * (lista completa, todos os status) continua em tabela. */
   comoCartoes?: boolean;
 }) {
   const porStatus = contagemPorStatus(projetos);

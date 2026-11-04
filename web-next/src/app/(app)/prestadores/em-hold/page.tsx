@@ -28,6 +28,7 @@ export default async function PaginaEmHoldPrestadores({
       temAnalistaProprio={!!analistaProprio}
       podeCadastrar={podeCadastrar}
       podeEditar={podeEditar}
+      comoCartoes
     />
   );
 }

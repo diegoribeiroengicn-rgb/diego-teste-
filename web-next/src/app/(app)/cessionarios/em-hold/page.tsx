@@ -28,6 +28,7 @@ export default async function PaginaEmHoldCessionarios({
       temAnalistaProprio={!!analistaProprio}
       podeCadastrar={podeCadastrar}
       podeEditar={podeEditar}
+      comoCartoes
     />
   );
 }
