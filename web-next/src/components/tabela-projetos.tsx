@@ -37,6 +37,7 @@ export function TabelaProjetos({
   temAnalistaProprio,
   podeCadastrar,
   podeEditar,
+  comoCartoes,
 }: {
   titulo: string;
   colunaEntidade: string;
@@ -47,6 +48,10 @@ export function TabelaProjetos({
   temAnalistaProprio: boolean;
   podeCadastrar?: boolean;
   podeEditar?: boolean;
+  /** Em Análise usa cartões em vez de tabela — mais fácil de escanear
+   * quando o volume de análises em aberto é grande. Em HOLD e Projetos
+   * continuam em tabela. */
+  comoCartoes?: boolean;
 }) {
   const porStatus = contagemPorStatus(projetos);
 
@@ -91,31 +96,72 @@ export function TabelaProjetos({
         ))}
       </div>
 
-      <div className="mt-6 overflow-x-auto rounded-2xl border border-(--color-border) bg-(--color-surface-1)">
-        <table className="w-full min-w-[920px] text-left text-sm">
-          <thead>
-            <tr className="text-xs font-medium text-(--color-text-dim)">
-              <th className="px-5 py-3">Item</th>
-              <th className="px-5 py-3">Código</th>
-              <th className="px-5 py-3">{colunaEntidade}</th>
-              <th className="px-5 py-3">Disciplina</th>
-              <th className="px-5 py-3">Rev.</th>
-              <th className="px-5 py-3">N° AT</th>
-              <th className="px-5 py-3">Status</th>
-              <th className="px-5 py-3">Data Limite</th>
-              <th className="px-5 py-3">Responsável</th>
-              <th className="px-5 py-3">Ação</th>
-            </tr>
-          </thead>
-          <tbody>
-            {projetos.length === 0 ? (
-              <tr>
-                <td colSpan={10} className="px-5 py-16 text-center text-(--color-text-weak)">
-                  Nenhum projeto encontrado.
-                </td>
+      {projetos.length === 0 ? (
+        <div className="mt-6 rounded-2xl border border-(--color-border) bg-(--color-surface-1) px-5 py-16 text-center text-sm text-(--color-text-weak)">
+          Nenhum projeto encontrado.
+        </div>
+      ) : comoCartoes ? (
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {projetos.map((p) => (
+            <div key={p.id} className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-medium text-(--color-text)">{p.codigo}</p>
+                  <p className="text-sm text-(--color-text-weak)">{p.entidade}</p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${CORES_STATUS[p.status_analise] ?? "bg-(--color-surface-2) text-(--color-text-weak)"}`}>
+                  {p.status_analise}
+                </span>
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs text-(--color-text-weak)">
+                <p>Item: <span className="tabular-nums text-(--color-text)">{p.item ?? "—"}</span></p>
+                <p>Rev.: <span className="text-(--color-text)">R{String(p.revisao).padStart(2, "0")}</span></p>
+                <p>Disciplina: <span className="text-(--color-text)">{p.disciplina}</span></p>
+                <p>N° AT: <span className="text-(--color-text)">{p.num_at || "—"}</span></p>
+                <p>Limite: <span className="text-(--color-text)">{formatarData(p.data_limite)}</span></p>
+                <p>Resp.: <span className="text-(--color-text)">{p.responsavel || "—"}</span></p>
+              </div>
+
+              <div className="mt-4 flex items-center gap-2">
+                {podeEditar && (
+                  <Link
+                    href={`/${tabela}/analise/${p.id}`}
+                    className="rounded-full border border-(--color-border) px-3 py-1 text-xs font-medium text-(--color-text) hover:bg-(--color-surface-2)"
+                  >
+                    Editar
+                  </Link>
+                )}
+                {p.status_analise === "EM HOLD" && (
+                  <BotaoTratativaHold
+                    tabela={tabela} projetoId={p.id} nomeEntidade={p.entidade} codigo={p.codigo}
+                    disciplina={p.disciplina} numAt={p.num_at}
+                  />
+                )}
+                <BotaoDarBaixa tabela={tabela} projetoId={p.id} statusAtual={p.status_analise} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-6 overflow-x-auto rounded-2xl border border-(--color-border) bg-(--color-surface-1)">
+          <table className="w-full min-w-[920px] text-left text-sm">
+            <thead>
+              <tr className="text-xs font-medium text-(--color-text-dim)">
+                <th className="px-5 py-3">Item</th>
+                <th className="px-5 py-3">Código</th>
+                <th className="px-5 py-3">{colunaEntidade}</th>
+                <th className="px-5 py-3">Disciplina</th>
+                <th className="px-5 py-3">Rev.</th>
+                <th className="px-5 py-3">N° AT</th>
+                <th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3">Data Limite</th>
+                <th className="px-5 py-3">Responsável</th>
+                <th className="px-5 py-3">Ação</th>
               </tr>
-            ) : (
-              projetos.map((p) => (
+            </thead>
+            <tbody>
+              {projetos.map((p) => (
                 <tr key={p.id} className="border-t border-(--color-border) first:border-0 hover:bg-(--color-surface-2)/60">
                   <td className="px-5 py-3.5 tabular-nums text-(--color-text-weak)">{p.item ?? "—"}</td>
                   <td className="px-5 py-3.5 font-medium text-(--color-text)">{p.codigo}</td>
@@ -150,11 +196,11 @@ export function TabelaProjetos({
                     </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {projetos.length >= 200 && (
         <p className="mt-3 text-xs text-(--color-text-dim)">Mostrando os 200 primeiros (paginação ainda não construída).</p>
       )}

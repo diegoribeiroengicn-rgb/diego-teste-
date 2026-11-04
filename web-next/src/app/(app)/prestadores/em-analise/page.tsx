@@ -28,6 +28,7 @@ export default async function PaginaEmAnalisePrestadores({
       temAnalistaProprio={!!analistaProprio}
       podeCadastrar={podeCadastrar}
       podeEditar={podeEditar}
+      comoCartoes
     />
   );
 }
