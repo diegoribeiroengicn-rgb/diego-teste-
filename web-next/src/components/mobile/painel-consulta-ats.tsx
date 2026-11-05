@@ -11,6 +11,16 @@ const CORES_STATUS: Record<string, string> = {
   "NÃO LIBERADO": "bg-(--color-red-bg) text-(--color-red)",
 };
 
+/** Azul para Prestador, roxo para Cessionário — a busca de ATs mistura
+ * os dois tipos num resultado só, então cada card precisa deixar claro
+ * de cara qual é qual (chip + barra lateral), sem depender só do texto
+ * corrido. Mesma paleta usada no popup de Dar Baixa (dar-baixa.tsx) e
+ * nas telas de análise do app (painel-analises-mobile.tsx). */
+const CORES_ORIGEM: Record<"prestadores" | "cessionarios", { rotulo: string; chip: string; barra: string }> = {
+  prestadores: { rotulo: "Prestador", chip: "bg-(--color-blue-3) text-(--color-blue-2)", barra: "border-l-(--color-blue-2)" },
+  cessionarios: { rotulo: "Cessionário", chip: "bg-(--color-purple-bg) text-(--color-purple)", barra: "border-l-(--color-purple)" },
+};
+
 function formatarData(valor: string | null): string {
   if (!valor) return "—";
   const data = new Date(valor);
@@ -100,9 +110,17 @@ export function PainelConsultaAts() {
             <p className="text-sm text-(--color-text-weak)">Nenhum resultado encontrado.</p>
           ) : (
             resultados.map((r) => (
-              <div key={`${r.origem}-${r.id}`} className="min-w-0 rounded-xl border border-(--color-border) bg-(--color-surface-1) px-4 py-3">
+              <div
+                key={`${r.origem}-${r.id}`}
+                className={`min-w-0 rounded-xl border border-(--color-border) border-l-4 bg-(--color-surface-1) px-4 py-3 ${CORES_ORIGEM[r.origem].barra}`}
+              >
                 <div className="flex min-w-0 items-start justify-between gap-2">
-                  <p className="min-w-0 truncate text-sm font-medium text-(--color-text)">{r.num_at || "Sem N° AT"}</p>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[0.7rem] font-medium ${CORES_ORIGEM[r.origem].chip}`}>
+                      {CORES_ORIGEM[r.origem].rotulo}
+                    </span>
+                    <p className="min-w-0 truncate text-sm font-medium text-(--color-text)">{r.num_at || "Sem N° AT"}</p>
+                  </div>
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[0.7rem] font-medium ${CORES_STATUS[r.status_analise] ?? "bg-(--color-surface-2) text-(--color-text-weak)"}`}>
                     {r.status_analise}
                   </span>
@@ -111,7 +129,7 @@ export function PainelConsultaAts() {
                   {r.codigo} · {r.entidade} · {r.disciplina || "—"} · Rev. {String(r.revisao).padStart(2, "0")}
                 </p>
                 <p className="mt-1 text-[0.7rem] text-(--color-text-dim)">
-                  {r.origem === "prestadores" ? "Prestador" : "Cessionário"} · Envio: {formatarData(r.data_solicitacao)} · Resp.: {r.responsavel || "—"}
+                  Envio: {formatarData(r.data_solicitacao)} · Resp.: {r.responsavel || "—"}
                 </p>
               </div>
             ))

@@ -11,6 +11,13 @@ const CORES_STATUS: Record<string, string> = {
   "NÃO LIBERADO": "bg-(--color-red-bg) text-(--color-red)",
 };
 
+/** Mesma paleta de painel-consulta-ats.tsx e dar-baixa.tsx — azul para
+ * Prestador, roxo para Cessionário. */
+const CORES_ORIGEM: Record<"prestadores" | "cessionarios", { rotulo: string; chip: string; barra: string }> = {
+  prestadores: { rotulo: "Prestador", chip: "bg-(--color-blue-3) text-(--color-blue-2)", barra: "border-l-(--color-blue-2)" },
+  cessionarios: { rotulo: "Cessionário", chip: "bg-(--color-purple-bg) text-(--color-purple)", barra: "border-l-(--color-purple)" },
+};
+
 function formatarData(valor: string | null): string {
   if (!valor) return "—";
   const data = new Date(valor);
@@ -33,9 +40,17 @@ export function PainelAnalisesMobile({
           <p className="text-sm text-(--color-text-weak)">Nenhuma análise encontrada.</p>
         ) : (
           projetos.map((p) => (
-            <div key={`${p.origem}-${p.id}`} className="min-w-0 rounded-xl border border-(--color-border) bg-(--color-surface-1) px-4 py-3">
+            <div
+              key={`${p.origem}-${p.id}`}
+              className={`min-w-0 rounded-xl border border-(--color-border) border-l-4 bg-(--color-surface-1) px-4 py-3 ${CORES_ORIGEM[p.origem].barra}`}
+            >
               <div className="flex min-w-0 items-start justify-between gap-2">
-                <p className="min-w-0 truncate text-sm font-medium text-(--color-text)">{p.entidade}</p>
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[0.7rem] font-medium ${CORES_ORIGEM[p.origem].chip}`}>
+                    {CORES_ORIGEM[p.origem].rotulo}
+                  </span>
+                  <p className="min-w-0 truncate text-sm font-medium text-(--color-text)">{p.entidade}</p>
+                </div>
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-[0.7rem] font-medium ${CORES_STATUS[p.status_analise] ?? "bg-(--color-surface-2) text-(--color-text-weak)"}`}>
                   {p.status_analise}
                 </span>
@@ -45,7 +60,7 @@ export function PainelAnalisesMobile({
                 {p.codigo} · {p.disciplina} · Rev. {String(p.revisao).padStart(2, "0")} · {p.num_at || "Sem N° AT"} · {p.num_documentos ?? "—"} doc(s)
               </p>
               <p className="mt-1 text-[0.7rem] text-(--color-text-dim)">
-                {p.origem === "prestadores" ? "Prestador" : "Cessionário"} · Limite: {formatarData(p.data_limite)}
+                Limite: {formatarData(p.data_limite)}
               </p>
               {mostrarBaixa && (
                 <div className="mt-2">

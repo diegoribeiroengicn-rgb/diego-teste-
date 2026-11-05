@@ -7,6 +7,15 @@ import { STATUS_FINAIS_BAIXA, montarTextoBaixa, type DadosBaixa } from "@/lib/re
 const inputClasse = "mt-1 w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none focus:border-(--color-navy)";
 const labelClasse = "text-xs text-(--color-text-weak)";
 
+/** Mesma paleta usada na busca de ATs (painel-consulta-ats.tsx) e nas
+ * telas de análise do GAT Mobile (painel-analises-mobile.tsx) — azul
+ * para Prestador, roxo para Cessionário — para que o tipo do registro
+ * fique claro já no título do popup de baixa, não só no texto corrido. */
+const CORES_ORIGEM: Record<"prestadores" | "cessionarios", { rotulo: string; cor: string }> = {
+  prestadores: { rotulo: "Prestador", cor: "bg-(--color-blue-3) text-(--color-blue-2)" },
+  cessionarios: { rotulo: "Cessionário", cor: "bg-(--color-purple-bg) text-(--color-purple)" },
+};
+
 type Registro = DadosBaixa & {
   id: number;
   status_analise: string;
@@ -109,7 +118,12 @@ export function BotaoDarBaixa({ tabela, projetoId, statusAtual }: { tabela: "pre
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={fechar}>
       <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-(--color-surface-1) p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <p className="text-sm font-semibold text-(--color-text)">Baixa da Análise</p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold text-(--color-text)">Baixa da Análise</p>
+          <span className={`rounded-full px-2.5 py-0.5 text-[0.7rem] font-medium ${CORES_ORIGEM[tabela].cor}`}>
+            {CORES_ORIGEM[tabela].rotulo}
+          </span>
+        </div>
 
         {!registro && !erro && <p className="mt-4 text-sm text-(--color-text-weak)">Carregando…</p>}
         {erro && !registro && <p className="mt-4 text-sm text-(--color-red)">{erro}</p>}
