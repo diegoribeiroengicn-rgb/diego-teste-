@@ -73,7 +73,8 @@ async function buscarLinhasModulo(pool: ReturnType<typeof obterPool>, modulo: Or
   const colunaNome = modulo === "prestadores" ? "prestador" : "cessionario";
   const { rows } = await pool.query<LinhaBanco>(
     `SELECT id, item, codigo, ${colunaNome} AS nome_entidade, disciplina, num_at, revisao, responsavel, status_analise,
-            data_solicitacao, data_analise, hold_inicio, hold_fim, sla_dias, sla_reduzido, nivel_prioridade,
+            data_solicitacao, data_analise, hold_inicio, hold_fim, sla_dias, sla_reduzido,
+            ${modulo === "prestadores" ? "nivel_prioridade" : "NULL::int AS nivel_prioridade"},
             ${modulo === "cessionarios" ? "tipo" : "NULL AS tipo"}
      FROM ${tabela} WHERE status_analise != $1 AND arquivado_em IS NULL`,
     [STATUS_CANCELADO],
