@@ -22,6 +22,17 @@
  * - Não porta `Pdays` (campo "P" do protótipo) — não há coluna
  *   equivalente em `prestadores`; nenhum outro cálculo do motor depende
  *   dele no protótipo, só é exibido à parte.
+ * - Prioridade (★): o protótipo mantinha sua própria lista editável de
+ *   códigos prioritários (`P.prio`, aba "★ Prioridades" das premissas).
+ *   Aqui a classificação vem de `prestadores.nivel_prioridade` — a mesma
+ *   coluna administrada centralmente e usada por `lista-prioridades.ts`,
+ *   `visao-gestor.ts`, `alertas-engine.ts` etc. — para não existir uma
+ *   classificação de prioridade própria do Gantt.
+ * - Não porta a aba "📈 Previsão" (novas ATs pelo ritmo histórico) nem a
+ *   simulação de Pipeline/LD/Casais Brasil — são premissas estatísticas
+ *   de planejamento, não dados reais, e não têm tabela equivalente em
+ *   `prestadores`; por isso a legenda não lista "Novas ATs previstas
+ *   (ritmo)", a única cor do protótipo sem uso aqui.
  */
 
 import { Calendario, addMonths, dn2iso, dow, fmt, iso2dn } from "./calendario";
@@ -74,6 +85,9 @@ export type LinhaBrutaGantt = {
   revAT: number | null;
   resp: string | null;
   status: string | null;
+  /** `prestadores.nivel_prioridade` (1, 2, 3 ou null) — fonte única de
+   * prioridade, administrada centralmente (ver nota no topo do arquivo). */
+  nivelPrioridade: number | null;
 };
 
 type LinhaPreparada = {
@@ -98,6 +112,7 @@ type LinhaPreparada = {
   inferredFrom: string | null;
   inferRev: number | null;
   effRev: number;
+  nivelPrioridade: number | null;
 };
 
 export function prepRows(raw: LinhaBrutaGantt[]): { rows: LinhaPreparada[] } {
@@ -123,6 +138,7 @@ export function prepRows(raw: LinhaBrutaGantt[]): { rows: LinhaPreparada[] } {
     inferredFrom: null,
     inferRev: null,
     effRev: 0,
+    nivelPrioridade: r0.nivelPrioridade,
   }));
   return { rows };
 }
@@ -197,6 +213,9 @@ export type ItemGantt = {
   pr: number;
   nDocs: number;
   analyst: string;
+  /** Prioridade administrada centralmente (`prestadores.nivel_prioridade`),
+   * 1 = mais crítica. `null` = fora da lista de prioridades. */
+  nivelPrioridade?: number | null;
   K0?: number | null;
   M?: number | null;
   Lreg?: number | null;
@@ -255,6 +274,7 @@ function summarize(key: string, rows: LinhaPreparada[], canon: Record<string, st
     it.pr = 0;
     it.nDocs = 0;
     it.analyst = rows[rows.length - 1].resp;
+    it.nivelPrioridade = rows.find((r) => r.nivelPrioridade != null)?.nivelPrioridade ?? null;
     return it;
   }
   let maxRev = Math.max(...valid.map((r) => r.effRev));
@@ -280,7 +300,11 @@ function summarize(key: string, rows: LinhaPreparada[], canon: Record<string, st
   it.pr = act.reduce((s, r) => s + r.pr, 0);
   it.nDocs = act.length;
   it.analyst = act[act.length - 1].resp;
-  it.K0 = Math.min(...act.map((r) => r.Kd ?? Infinity));
+  // Mesmo padrão de it.M/it.Lreg logo abaixo — nunca `Infinity`: um K0
+  // "infinito" passava pelo `it.K0 == null` de project() sem ser pego,
+  // e cascateava num laço sem fim em cal.net(Infinity, Infinity).
+  const k0s = act.map((r) => r.Kd).filter((v): v is number => v != null);
+  it.K0 = k0s.length ? Math.min(...k0s) : null;
   const ms = act.map((r) => r.Md).filter((x): x is number => x != null);
   it.M = ms.length ? Math.max(...ms) : null;
   const ls = act.map((r) => r.Ld).filter((x): x is number => x != null);
@@ -291,7 +315,14 @@ function summarize(key: string, rows: LinhaPreparada[], canon: Record<string, st
   it.O = hr ? hr.Od : null;
   it.discAct = [...new Set(act.map((r) => r.disc))];
   it.inferred = rows.some((r) => r.inferredFrom);
+  it.nivelPrioridade = act.find((r) => r.nivelPrioridade != null)?.nivelPrioridade ?? null;
   return it;
+}
+
+/** Mesmo critério de "está na lista de prioridades" usado em
+ * lista-prioridades.ts: nível 1/2/3 não nulo. Sem classificação própria. */
+export function ehPrioritario(it: ItemGantt): boolean {
+  return it.nivelPrioridade != null;
 }
 
 export type ModeloGantt = { items: ItemGantt[]; canon: Record<string, string> };

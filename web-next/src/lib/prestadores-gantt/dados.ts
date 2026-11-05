@@ -21,6 +21,7 @@ type LinhaPrestadorBanco = {
   revisao_at: number | null;
   responsavel: string | null;
   status_analise: string | null;
+  nivel_prioridade: number | null;
 };
 
 /** Todas as linhas de `prestadores` (sem filtro por responsável nem por
@@ -32,7 +33,8 @@ export async function buscarLinhasGantt(): Promise<LinhaBrutaGantt[]> {
   const { rows } = await pool.query<LinhaPrestadorBanco>(
     `SELECT id, item, codigo, prestador, disciplina, disciplina_sla, obra_referencia,
             revisao, num_documentos, data_solicitacao, data_limite, data_limite_ajustada_manualmente,
-            data_analise, hold_inicio, hold_fim, num_at, revisao_at, responsavel, status_analise
+            data_analise, hold_inicio, hold_fim, num_at, revisao_at, responsavel, status_analise,
+            nivel_prioridade
      FROM prestadores WHERE arquivado_em IS NULL`,
   );
   return rows.map((r) => ({
@@ -55,5 +57,9 @@ export async function buscarLinhasGantt(): Promise<LinhaBrutaGantt[]> {
     revAT: r.revisao_at,
     resp: r.responsavel,
     status: r.status_analise,
+    // Mesma coluna administrada centralmente e já usada por
+    // lista-prioridades.ts/visao-gestor.ts/alertas-engine.ts — o Gantt
+    // não mantém uma classificação própria de prioridade.
+    nivelPrioridade: r.nivel_prioridade,
   }));
 }

@@ -5,6 +5,7 @@ import {
   aggregate,
   buildItems,
   defaultParams,
+  ehPrioritario,
   histLib,
   prepRows,
   project,
@@ -104,6 +105,7 @@ export function PainelGanttPrestadores({ linhasBrutas }: { linhasBrutas: LinhaBr
     if (filtros.analistas.length) out = out.filter((it) => filtros.analistas.includes(it.analyst));
     if (filtros.apenasCriticas) out = out.filter((it) => it.crit);
     if (filtros.apenasVencidas) out = out.filter((it) => it.prazo === "Vencido");
+    if (filtros.apenasPrioritarios) out = out.filter(ehPrioritario);
     return out;
   }, [resultado, filtros]);
 
@@ -169,6 +171,26 @@ export function PainelGanttPrestadores({ linhasBrutas }: { linhasBrutas: LinhaBr
         </label>
 
         <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-(--color-text-dim)">Mostrar</span>
+          <div className="flex rounded-lg border border-(--color-border) p-0.5 text-sm">
+            <button
+              type="button"
+              onClick={() => setFiltros((f) => ({ ...f, apenasPrioritarios: false }))}
+              className={`rounded-md px-3 py-1 ${!filtros.apenasPrioritarios ? "bg-(--color-navy) text-white" : "text-(--color-text)"}`}
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              onClick={() => setFiltros((f) => ({ ...f, apenasPrioritarios: true }))}
+              className={`rounded-md px-3 py-1 ${filtros.apenasPrioritarios ? "bg-(--color-navy) text-white" : "text-(--color-text)"}`}
+            >
+              ★ Só prioritários
+            </button>
+          </div>
+        </label>
+
+        <label className="flex flex-col gap-1">
           <span className="text-[10px] font-semibold uppercase tracking-wide text-(--color-text-dim)">Horizonte (dias)</span>
           <input
             type="number" min={14} max={240} value={ui.horizonte}
@@ -207,9 +229,10 @@ export function PainelGanttPrestadores({ linhasBrutas }: { linhasBrutas: LinhaBr
       </div>
 
       {/* KPIs */}
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
         <CartaoKpi titulo="ATs/itens no Gantt" valor={String(kpis.abertos)} destaque={kpis.simulados ? `+ ${kpis.simulados} simulados` : "pendentes conforme filtros"} />
         <CartaoKpi titulo="ATs críticas" valor={String(kpis.criticas)} destaque={`REV. AT > ${params.critRev}`} cor={kpis.criticas ? "var(--color-red)" : undefined} />
+        <CartaoKpi titulo="★ Prioritários" valor={String(kpis.prioritarios)} destaque="lista de prioridades centralizada" cor={kpis.prioritarios ? "#B8890B" : undefined} />
         <CartaoKpi
           titulo="Vencidos / próximos"
           valor={`${kpis.vencidos} / ${kpis.proximos}`}

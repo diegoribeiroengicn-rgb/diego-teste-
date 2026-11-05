@@ -1,4 +1,4 @@
-import { CLOSED_NEG, type AgregadoGantt, type ItemGantt, weekKey } from "@/lib/prestadores-gantt/motor";
+import { CLOSED_NEG, ehPrioritario, type AgregadoGantt, type ItemGantt, weekKey } from "@/lib/prestadores-gantt/motor";
 
 export function estaAberto(it: ItemGantt): boolean {
   return !it.closed && !CLOSED_NEG.has(it.state);
@@ -8,6 +8,7 @@ export type KpisGantt = {
   abertos: number;
   simulados: number;
   criticas: number;
+  prioritarios: number;
   vencidos: number;
   proximos: number;
   projSimultaneosHoje: number;
@@ -21,6 +22,7 @@ export function calcularKpis(itens: ItemGantt[], agregado: AgregadoGantt): KpisG
   const abertosItens = itens.filter((it) => !it.sim && estaAberto(it));
   const simulados = itens.filter((it) => it.sim).length;
   const criticas = abertosItens.filter((it) => it.crit).length;
+  const prioritarios = abertosItens.filter(ehPrioritario).length;
   const vencidos = abertosItens.filter((it) => it.prazo === "Vencido").length;
   const proximosCount = abertosItens.filter((it) => it.prazo === "Próximo do vencimento").length;
 
@@ -45,6 +47,7 @@ export function calcularKpis(itens: ItemGantt[], agregado: AgregadoGantt): KpisG
     abertos: abertosItens.length,
     simulados,
     criticas,
+    prioritarios,
     vencidos,
     proximos: proximosCount,
     projSimultaneosHoje: agregado.projCount[0] ?? 0,

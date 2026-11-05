@@ -8,6 +8,9 @@ export type FiltrosGanttEstado = {
   analistas: string[];
   apenasCriticas: boolean;
   apenasVencidas: boolean;
+  /** "Mostrar: Todos / ★ Só prioritários" — mesma lista de prioridades
+   * administrada centralmente (prestadores.nivel_prioridade). */
+  apenasPrioritarios: boolean;
 };
 
 export type UiGanttEstado = {
@@ -23,6 +26,7 @@ export const FILTROS_PADRAO: FiltrosGanttEstado = {
   analistas: [],
   apenasCriticas: false,
   apenasVencidas: false,
+  apenasPrioritarios: false,
 };
 
 export const UI_PADRAO: UiGanttEstado = {
