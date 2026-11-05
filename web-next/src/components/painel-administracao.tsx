@@ -421,11 +421,17 @@ function SecaoUsuarios({ usuarios }: { usuarios: Usuario[] }) {
 }
 
 function SecaoConfiguracoes({
-  metaRev2Inicial,
-}: { metaRev2Inicial: number }) {
+  metaRev2Inicial, limiarCargaElevadaInicial, limiarCargaSobrecarregadaInicial,
+}: { metaRev2Inicial: number; limiarCargaElevadaInicial: number; limiarCargaSobrecarregadaInicial: number }) {
   const [metaRev2, setMetaRev2] = useState(metaRev2Inicial);
   const [salvandoMeta, setSalvandoMeta] = useState(false);
   const [sucessoMeta, setSucessoMeta] = useState<string | null>(null);
+
+  const [limiarElevada, setLimiarElevada] = useState(limiarCargaElevadaInicial);
+  const [limiarSobrecarregada, setLimiarSobrecarregada] = useState(limiarCargaSobrecarregadaInicial);
+  const [salvandoCarga, setSalvandoCarga] = useState(false);
+  const [erroCarga, setErroCarga] = useState<string | null>(null);
+  const [sucessoCarga, setSucessoCarga] = useState<string | null>(null);
 
   async function salvarMeta() {
     setSalvandoMeta(true);
@@ -439,6 +445,31 @@ function SecaoConfiguracoes({
       if (resposta.ok) setSucessoMeta("Meta atualizada com sucesso.");
     } finally {
       setSalvandoMeta(false);
+    }
+  }
+
+  async function salvarCarga() {
+    if (limiarSobrecarregada <= limiarElevada) {
+      setErroCarga("O limiar de 'Sobrecarregada' deve ser maior que o de 'Elevada'.");
+      return;
+    }
+    setErroCarga(null);
+    setSalvandoCarga(true);
+    setSucessoCarga(null);
+    try {
+      const resposta = await fetch("/api/admin/configuracoes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limiarCargaElevada: limiarElevada, limiarCargaSobrecarregada: limiarSobrecarregada }),
+      });
+      const corpo = await resposta.json().catch(() => null);
+      if (!resposta.ok) {
+        setErroCarga(corpo?.erro || "Erro ao salvar os limiares.");
+        return;
+      }
+      setSucessoCarga("Limiares atualizados com sucesso.");
+    } finally {
+      setSalvandoCarga(false);
     }
   }
 
@@ -457,6 +488,30 @@ function SecaoConfiguracoes({
         {sucessoMeta && <p className="mt-2 text-sm text-(--color-green)">{sucessoMeta}</p>}
         <button onClick={salvarMeta} disabled={salvandoMeta} className="mt-3 rounded-full bg-(--color-navy) px-4 py-1.5 text-xs font-medium text-white disabled:opacity-60">
           {salvandoMeta ? "Salvando…" : "Salvar meta"}
+        </button>
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-6">
+        <p className="text-sm font-semibold text-(--color-text)">Limiares de carga dos analistas</p>
+        <p className="mt-1 text-xs text-(--color-text-weak)">
+          Pontuação de carga de um analista (módulo Analistas): cada pendência vale 1 ponto, uma pendência vencida
+          soma +2 e uma próxima do vencimento ou prioritária soma +1. Abaixo do limiar de &quot;Elevada&quot; a carga é
+          Normal; a partir dele é Elevada; a partir do limiar de &quot;Sobrecarregada&quot; é Sobrecarregada.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-3 max-w-sm">
+          <label className="text-xs text-(--color-text-weak)">
+            Pontuação para &quot;Elevada&quot;
+            <input type="number" min={1} value={limiarElevada} onChange={(e) => setLimiarElevada(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none focus:border-(--color-navy)" />
+          </label>
+          <label className="text-xs text-(--color-text-weak)">
+            Pontuação para &quot;Sobrecarregada&quot;
+            <input type="number" min={1} value={limiarSobrecarregada} onChange={(e) => setLimiarSobrecarregada(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none focus:border-(--color-navy)" />
+          </label>
+        </div>
+        {erroCarga && <p className="mt-2 text-sm text-(--color-red)">{erroCarga}</p>}
+        {sucessoCarga && <p className="mt-2 text-sm text-(--color-green)">{sucessoCarga}</p>}
+        <button onClick={salvarCarga} disabled={salvandoCarga} className="mt-3 rounded-full bg-(--color-navy) px-4 py-1.5 text-xs font-medium text-white disabled:opacity-60">
+          {salvandoCarga ? "Salvando…" : "Salvar limiares"}
         </button>
       </div>
     </div>
@@ -1027,7 +1082,7 @@ const ABAS_LABEL: Record<string, string> = {
 export function PainelAdministracao({
   usuarios, validacao, perguntasChecklist,
   podeAdministrarUsuarios, podeAuditoria, podeConfigurar,
-  metaRev2Inicial,
+  metaRev2Inicial, limiarCargaElevadaInicial, limiarCargaSobrecarregadaInicial,
 }: {
   usuarios: Usuario[];
   validacao: { prestadores: DiagnosticoImportacao; cessionarios: DiagnosticoImportacao };
@@ -1036,6 +1091,8 @@ export function PainelAdministracao({
   podeAuditoria: boolean;
   podeConfigurar: boolean;
   metaRev2Inicial: number;
+  limiarCargaElevadaInicial: number;
+  limiarCargaSobrecarregadaInicial: number;
 }) {
   const abasDisponiveis = useMemo(() => {
     const abas: string[] = [];
@@ -1071,7 +1128,11 @@ export function PainelAdministracao({
         {aba === "validacao" && <SecaoValidacaoDados validacao={validacao} />}
         {aba === "historico" && podeAuditoria && <SecaoHistorico />}
         {aba === "configuracoes" && podeConfigurar && (
-          <SecaoConfiguracoes metaRev2Inicial={metaRev2Inicial} />
+          <SecaoConfiguracoes
+            metaRev2Inicial={metaRev2Inicial}
+            limiarCargaElevadaInicial={limiarCargaElevadaInicial}
+            limiarCargaSobrecarregadaInicial={limiarCargaSobrecarregadaInicial}
+          />
         )}
         {aba === "planilha" && podeConfigurar && <SecaoAtualizacaoPlanilha />}
         {aba === "checklist" && podeConfigurar && <SecaoChecklistPerguntas perguntasIniciais={perguntasChecklist} />}
