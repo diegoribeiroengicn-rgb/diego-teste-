@@ -7,6 +7,11 @@ export type LinhaLocalizacao = LinhaRevisao & {
   resumoMfiles: boolean;
   resumoDrive: boolean;
   resumoEmail: boolean;
+  /** Nível da Lista de Prioridades (1/2/3) — só existe hoje na tabela
+   * `prestadores`; cessionários sempre chega `null` aqui. Mesmos níveis de
+   * `lista-prioridades.ts` (não duplica os rótulos, só o valor cru). */
+  nivelPrioridade: number | null;
+  slaReduzido: boolean;
 };
 
 export type LinhaLocalizacaoMarcada = LinhaLocalizacao & { chaveProjeto: string; maisRecente: boolean };

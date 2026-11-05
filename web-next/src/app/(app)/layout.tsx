@@ -46,7 +46,7 @@ const GRUPOS_NAV: GrupoNav[] = [
     itens: [
       { rotulo: "Visão do Gestor", href: "/visao-gestor" },
       { rotulo: "Linha do Tempo", href: "/linha-tempo" },
-      { rotulo: "Localização de ATs", href: "/localizacao-ats" },
+      { rotulo: "Projetos (Busca Avançada)", href: "/projetos" },
       { rotulo: "Central de Alertas", href: "/alertas" },
       { rotulo: "Meus Alertas", href: "/meus-alertas" },
       { rotulo: "Painel Consolidado", href: "/consolidado" },

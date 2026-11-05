@@ -31,6 +31,8 @@ type LinhaBanco = {
   resumo_mfiles: number | null;
   resumo_drive: number | null;
   resumo_email: number | null;
+  nivel_prioridade: number | null;
+  sla_reduzido: number | null;
 };
 
 function calcularSlaCessionario(tipo: string | null, revisao: number): number {
@@ -86,27 +88,34 @@ function enriquecerLinha(row: LinhaBanco, origem: Origem): LinhaLocalizacao {
     resumoMfiles: !!row.resumo_mfiles,
     resumoDrive: !!row.resumo_drive,
     resumoEmail: !!row.resumo_email,
+    nivelPrioridade: row.nivel_prioridade,
+    slaReduzido: !!row.sla_reduzido,
   };
 }
 
-/** Base da Localização de ATs — Prestadores e Cessionários combinados,
- * só análises ativas (CANCELADO excluído; arquivadas continuam
- * exclusivas do módulo Arquivo, ainda não portado). Mesma base de
- * views/localizacao_ats.py::_construir_base. */
+/** Base combinada de Prestadores e Cessionários — só análises ativas
+ * (CANCELADO excluído; arquivadas continuam exclusivas do módulo
+ * Arquivo, ainda não portado). Mesma base de
+ * views/localizacao_ats.py::_construir_base. Reaproveitada como fonte de
+ * dados da busca avançada do módulo Projetos (ver `/projetos`), que
+ * incorporou a finalidade do antigo módulo independente "Localização de
+ * ATs" (hoje só um redirecionamento, ver `/localizacao-ats`). */
 export async function buscarLinhasLocalizacao(): Promise<LinhaLocalizacao[]> {
   const pool = obterPool();
   const [prestadores, cessionarios] = await Promise.all([
     pool.query<LinhaBanco>(
       `SELECT id, item, codigo, prestador AS nome_entidade, disciplina, num_at, revisao, responsavel, status_analise,
               data_solicitacao, data_analise, data_limite, hold_inicio, hold_fim, observacoes, sla_dias, NULL AS tipo,
-              obra_referencia AS obra, atualizado_em, resumo_mfiles, resumo_drive, resumo_email
+              obra_referencia AS obra, atualizado_em, resumo_mfiles, resumo_drive, resumo_email,
+              nivel_prioridade, sla_reduzido
        FROM prestadores WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),
     pool.query<LinhaBanco>(
       `SELECT id, item, codigo, cessionario AS nome_entidade, disciplina, num_at, revisao, responsavel, status_analise,
               data_solicitacao, data_analise, data_limite, hold_inicio, hold_fim, observacoes, sla_dias, tipo,
-              tipo AS obra, atualizado_em, resumo_mfiles, resumo_drive, resumo_email
+              tipo AS obra, atualizado_em, resumo_mfiles, resumo_drive, resumo_email,
+              NULL::int AS nivel_prioridade, sla_reduzido
        FROM cessionarios WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),
