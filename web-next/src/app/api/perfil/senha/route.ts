@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { obterSessao } from "@/lib/session";
+import { criarSessao, obterSessao } from "@/lib/session";
 import { alterarSenhaUsuario } from "@/lib/perfil";
 
 export async function POST(req: NextRequest) {
@@ -23,6 +23,10 @@ export async function POST(req: NextRequest) {
   if (!ok) {
     return NextResponse.json({ erro: "Senha atual incorreta." }, { status: 400 });
   }
+
+  // Sem isso, o token da sessão continuaria com deveTrocarSenha = true e o
+  // proxy mandaria de volta para /primeiro-acesso mesmo após a troca.
+  await criarSessao({ ...sessao, deveTrocarSenha: false });
 
   return NextResponse.json({ ok: true });
 }

@@ -4,15 +4,15 @@ import type { NextRequest } from "next/server";
 
 const NOME_COOKIE = "gat_sessao";
 
-async function sessaoValida(request: NextRequest): Promise<boolean> {
+async function lerSessao(request: NextRequest): Promise<{ deveTrocarSenha?: boolean } | null> {
   const token = request.cookies.get(NOME_COOKIE)?.value;
   const segredo = process.env.SESSION_SECRET;
-  if (!token || !segredo) return false;
+  if (!token || !segredo) return null;
   try {
-    await jwtVerify(token, new TextEncoder().encode(segredo));
-    return true;
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(segredo));
+    return (payload as { usuario?: { deveTrocarSenha?: boolean } }).usuario ?? null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -21,16 +21,27 @@ async function sessaoValida(request: NextRequest): Promise<boolean> {
 // até autenticação válida). "/" é a própria página de login: só ela
 // verifica o sentido inverso (usuário já logado é mandado para /inicio,
 // em vez de ver o formulário de novo).
+//
+// Usuário com senha temporária (deve_trocar_senha) é mandado direto para
+// /primeiro-acesso e não consegue navegar para mais nada até trocar a
+// senha — as chamadas de API continuam liberadas (exceção /api/) porque
+// a própria tela de troca depende de uma delas (/api/perfil/senha).
 export async function proxy(request: NextRequest) {
-  const logado = await sessaoValida(request);
+  const sessao = await lerSessao(request);
   const { pathname } = request.nextUrl;
 
-  if (pathname === "/") {
-    return logado ? NextResponse.redirect(new URL("/inicio", request.url)) : NextResponse.next();
+  if (!sessao) {
+    return pathname === "/" ? NextResponse.next() : NextResponse.redirect(new URL("/", request.url));
   }
 
-  if (!logado) {
-    return NextResponse.redirect(new URL("/", request.url));
+  if (sessao.deveTrocarSenha && pathname !== "/primeiro-acesso" && !pathname.startsWith("/api/")) {
+    return NextResponse.redirect(new URL("/primeiro-acesso", request.url));
+  }
+  if (!sessao.deveTrocarSenha && pathname === "/primeiro-acesso") {
+    return NextResponse.redirect(new URL("/inicio", request.url));
+  }
+  if (pathname === "/") {
+    return NextResponse.redirect(new URL("/inicio", request.url));
   }
   return NextResponse.next();
 }

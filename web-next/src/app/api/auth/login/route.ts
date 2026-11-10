@@ -28,13 +28,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ erro: "Usuário ou senha incorretos." }, { status: 401 });
   }
 
-  if (Number(linha.deve_trocar_senha) === 1) {
-    return NextResponse.json(
-      { erro: "Primeiro acesso — troque sua senha no sistema atual antes de usar esta versão." },
-      { status: 403 },
-    );
-  }
-
   const usuarioSessao = {
     id: linha.id,
     username: linha.username,
@@ -42,6 +35,7 @@ export async function POST(req: NextRequest) {
     perfil: linha.perfil,
     analistaVinculado: linha.analista_vinculado,
     temaPreferido: linha.tema_preferido,
+    deveTrocarSenha: Number(linha.deve_trocar_senha) === 1,
   };
 
   try {

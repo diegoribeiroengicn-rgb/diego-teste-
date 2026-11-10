@@ -11,6 +11,7 @@ export type SessaoUsuario = {
   perfil: string;
   analistaVinculado: string | null;
   temaPreferido: string;
+  deveTrocarSenha: boolean;
 };
 
 function segredo(): Uint8Array {

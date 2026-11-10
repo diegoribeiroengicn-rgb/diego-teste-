@@ -5,7 +5,13 @@ import { useState } from "react";
 const classeInput =
   "w-full rounded-lg border border-(--color-border) bg-(--color-surface-1) px-3.5 py-2.5 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-navy) focus:ring-2 focus:ring-(--color-navy)/20";
 
-export function FormularioSenha() {
+export function FormularioSenha({
+  rotuloSenhaAtual = "Senha atual",
+  aoSucesso,
+}: {
+  rotuloSenhaAtual?: string;
+  aoSucesso?: () => void;
+}) {
   const [senhaAtual, setSenhaAtual] = useState("");
   const [novaSenha, setNovaSenha] = useState("");
   const [confirmacao, setConfirmacao] = useState("");
@@ -33,6 +39,7 @@ export function FormularioSenha() {
       setSenhaAtual("");
       setNovaSenha("");
       setConfirmacao("");
+      aoSucesso?.();
     } catch {
       setErro("Não foi possível conectar ao sistema.");
     } finally {
@@ -43,7 +50,7 @@ export function FormularioSenha() {
   return (
     <form onSubmit={salvar} className="mt-4 max-w-sm space-y-4">
       <label className="block space-y-1.5">
-        <span className="text-sm font-medium text-(--color-text)">Senha atual</span>
+        <span className="text-sm font-medium text-(--color-text)">{rotuloSenhaAtual}</span>
         <input type="password" required value={senhaAtual} onChange={(e) => setSenhaAtual(e.target.value)} className={classeInput} />
       </label>
       <label className="block space-y-1.5">
