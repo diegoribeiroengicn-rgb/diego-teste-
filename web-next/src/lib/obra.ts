@@ -40,7 +40,7 @@ export async function inserirObraPrestador(dados: DadosObraPrestador, usuario: s
   const { rows } = await pool.query<{ id: number }>(
     `INSERT INTO obras_prestador (${COLUNAS_OBRA.join(", ")}, criado_em, criado_por, atualizado_em, atualizado_por)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$7,$8) RETURNING id`,
-    [campos.prestador_id, campos.nome_obra, campos.codigo_referencia, campos.status, campos.e_canteiro, campos.observacoes, agora, usuario],
+    [campos.prestador_id, campos.nome_obra, campos.codigo_referencia, campos.status, campos.e_canteiro ? 1 : 0, campos.observacoes, agora, usuario],
   );
   const id = rows[0].id;
   await registrarHistorico("obras_prestador", id, {}, campos, usuario);
@@ -61,7 +61,7 @@ export async function atualizarObraPrestador(id: number, dados: DadosObraPrestad
   await pool.query(
     `UPDATE obras_prestador SET prestador_id=$1, nome_obra=$2, codigo_referencia=$3, status=$4, e_canteiro=$5, observacoes=$6,
        atualizado_em=$7, atualizado_por=$8 WHERE id=$9`,
-    [campos.prestador_id, campos.nome_obra, campos.codigo_referencia, campos.status, campos.e_canteiro, campos.observacoes, agora, usuario, id],
+    [campos.prestador_id, campos.nome_obra, campos.codigo_referencia, campos.status, campos.e_canteiro ? 1 : 0, campos.observacoes, agora, usuario, id],
   );
   await registrarHistorico("obras_prestador", id, antigo, campos, usuario);
 }

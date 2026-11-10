@@ -63,7 +63,7 @@ export async function darBaixaAnalise(tabela: TabelaBaixa, id: number, dados: Da
        resumo_ultima_geracao_em = $7, resumo_gerado_por = $8, resumo_qtd_geracoes = resumo_qtd_geracoes + 1,
        atualizado_em = $7, atualizado_por = $8
      WHERE id = $9`,
-    [dados.status, novaDataAnalise, dados.numAt.trim(), dados.mfiles, dados.drive, dados.email, agora, usuario, id],
+    [dados.status, novaDataAnalise, dados.numAt.trim(), dados.mfiles ? 1 : 0, dados.drive ? 1 : 0, dados.email ? 1 : 0, agora, usuario, id],
   );
 
   const jaGeradoAntes = atual.resumo_qtd_geracoes > 0;
@@ -72,7 +72,7 @@ export async function darBaixaAnalise(tabela: TabelaBaixa, id: number, dados: Da
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
     [
       tabela, id, jaGeradoAntes ? "EDICAO_CANAIS" : "GERACAO_INICIAL",
-      dados.mfiles, dados.drive, dados.email,
+      dados.mfiles ? 1 : 0, dados.drive ? 1 : 0, dados.email ? 1 : 0,
       jaGeradoAntes ? rotulosCanaisSelecionados(atual.resumo_mfiles, atual.resumo_drive, atual.resumo_email) : null,
       usuario, agora,
     ],

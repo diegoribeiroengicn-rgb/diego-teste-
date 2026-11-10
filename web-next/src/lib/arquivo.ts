@@ -51,7 +51,7 @@ export async function arquivarRegistro(tabela: string, registroId: number, usuar
   if (registro.arquivado_em) return;
 
   await pool.query(
-    `UPDATE ${tabela} SET arquivado_em = $1, arquivado_por = $2, motivo_arquivamento = $3, arquivado_teste = false WHERE id = $4`,
+    `UPDATE ${tabela} SET arquivado_em = $1, arquivado_por = $2, motivo_arquivamento = $3, arquivado_teste = 0 WHERE id = $4`,
     [new Date().toISOString(), usuario, motivo, registroId],
   );
   await registrarAuditoriaArquivo(pool, tabela, registroId, TIPO_ARQUIVAMENTO, usuario, motivo, descricaoRegistro(tabela, registro));
@@ -66,7 +66,7 @@ export async function restaurarRegistro(tabela: string, registroId: number, usua
   if (!registro) throw new Error("Registro não encontrado.");
 
   await pool.query(
-    `UPDATE ${tabela} SET arquivado_em = NULL, arquivado_por = NULL, motivo_arquivamento = NULL, arquivado_teste = false WHERE id = $1`,
+    `UPDATE ${tabela} SET arquivado_em = NULL, arquivado_por = NULL, motivo_arquivamento = NULL, arquivado_teste = 0 WHERE id = $1`,
     [registroId],
   );
   await registrarAuditoriaArquivo(pool, tabela, registroId, TIPO_RESTAURACAO, usuario, justificativa, descricaoRegistro(tabela, registro));
@@ -141,7 +141,7 @@ export async function restaurarProjetoGat(codigo: string, usuario: string): Prom
     const { rows } = await pool.query<{ id: number }>(`SELECT id FROM ${tabela} WHERE codigo = $1 AND arquivado_em IS NOT NULL`, [codigo]);
     for (const linha of rows) {
       await pool.query(
-        `UPDATE ${tabela} SET arquivado_em = NULL, arquivado_por = NULL, motivo_arquivamento = NULL, arquivado_teste = false WHERE id = $1`,
+        `UPDATE ${tabela} SET arquivado_em = NULL, arquivado_por = NULL, motivo_arquivamento = NULL, arquivado_teste = 0 WHERE id = $1`,
         [linha.id],
       );
       total++;

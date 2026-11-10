@@ -61,7 +61,7 @@ export async function criarUsuario(
   const senhaHash = await bcrypt.hash(senha, 10);
   const { rows } = await pool.query<{ id: number }>(
     `INSERT INTO usuarios (username, senha_hash, nome_completo, perfil, ativo, deve_trocar_senha, criado_em, analista_vinculado)
-     VALUES ($1,$2,$3,$4,true,true,$5,$6) RETURNING id`,
+     VALUES ($1,$2,$3,$4,1,1,$5,$6) RETURNING id`,
     [username, senhaHash, nomeCompleto, perfil, new Date().toISOString(), analistaVinculado],
   );
   const id = rows[0].id;
@@ -84,7 +84,7 @@ export async function atualizarUsuario(
 
 export async function definirUsuarioAtivo(username: string, ativo: boolean): Promise<void> {
   const pool = obterPool();
-  await pool.query(`UPDATE usuarios SET ativo = $1 WHERE username = $2`, [ativo, username]);
+  await pool.query(`UPDATE usuarios SET ativo = $1 WHERE username = $2`, [ativo ? 1 : 0, username]);
 }
 
 /** Administrador redefine a senha de um usuário — força troca no
@@ -93,12 +93,12 @@ export async function definirUsuarioAtivo(username: string, ativo: boolean): Pro
 export async function redefinirSenhaAdmin(username: string, novaSenha: string): Promise<void> {
   const pool = obterPool();
   const senhaHash = await bcrypt.hash(novaSenha, 10);
-  await pool.query(`UPDATE usuarios SET senha_hash = $1, deve_trocar_senha = true WHERE username = $2`, [senhaHash, username]);
+  await pool.query(`UPDATE usuarios SET senha_hash = $1, deve_trocar_senha = 1 WHERE username = $2`, [senhaHash, username]);
 }
 
 export async function exigirTrocaSenhaProximoLogin(username: string): Promise<void> {
   const pool = obterPool();
-  await pool.query(`UPDATE usuarios SET deve_trocar_senha = true WHERE username = $1`, [username]);
+  await pool.query(`UPDATE usuarios SET deve_trocar_senha = 1 WHERE username = $1`, [username]);
 }
 
 export async function obterConfiguracao(chave: string, padrao: string): Promise<string> {
@@ -210,7 +210,7 @@ export async function listarPerguntasChecklistAdmin(apenasAtivas: boolean): Prom
   const pool = obterPool();
   const { rows } = await pool.query<LinhaPerguntaBanco>(
     `SELECT id, categoria, texto, ordem_categoria, ordem_pergunta, ativo FROM avaliacao_checklist_perguntas
-     ${apenasAtivas ? "WHERE ativo = true" : ""} ORDER BY ordem_categoria, ordem_pergunta`,
+     ${apenasAtivas ? "WHERE ativo = 1" : ""} ORDER BY ordem_categoria, ordem_pergunta`,
   );
   return rows.map((r) => ({
     id: r.id, categoria: r.categoria, texto: r.texto, ordemCategoria: r.ordem_categoria,
@@ -222,7 +222,7 @@ export async function inserirPerguntaChecklist(categoria: string, texto: string,
   const pool = obterPool();
   const { rows } = await pool.query<{ id: number }>(
     `INSERT INTO avaliacao_checklist_perguntas (categoria, texto, ordem_categoria, ordem_pergunta, ativo, criado_em, criado_por)
-     VALUES ($1,$2,$3,$4,true,$5,$6) RETURNING id`,
+     VALUES ($1,$2,$3,$4,1,$5,$6) RETURNING id`,
     [categoria.trim().toUpperCase(), texto.trim(), ordemCategoria, ordemPergunta, new Date().toISOString(), usuario],
   );
   return rows[0].id;
@@ -246,6 +246,6 @@ export async function definirAtivaPerguntaChecklist(perguntaId: number, ativo: b
   const pool = obterPool();
   await pool.query(
     `UPDATE avaliacao_checklist_perguntas SET ativo = $1, atualizado_em = $2, atualizado_por = $3 WHERE id = $4`,
-    [ativo, new Date().toISOString(), usuario, perguntaId],
+    [ativo ? 1 : 0, new Date().toISOString(), usuario, perguntaId],
   );
 }

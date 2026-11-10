@@ -45,7 +45,7 @@ export async function definirPermissaoModulo(usuarioId: number, modulo: string, 
   await pool.query(
     "INSERT INTO permissoes_modulo (usuario_id, modulo, permitido) VALUES ($1,$2,$3) " +
       "ON CONFLICT (usuario_id, modulo) DO UPDATE SET permitido = excluded.permitido",
-    [usuarioId, modulo, permitido],
+    [usuarioId, modulo, permitido ? 1 : 0],
   );
 }
 
@@ -54,7 +54,7 @@ export async function definirPermissaoArea(usuarioId: number, area: string, perm
   await pool.query(
     "INSERT INTO permissoes_area (usuario_id, area, permitido) VALUES ($1,$2,$3) " +
       "ON CONFLICT (usuario_id, area) DO UPDATE SET permitido = excluded.permitido",
-    [usuarioId, area, permitido],
+    [usuarioId, area, permitido ? 1 : 0],
   );
 }
 
