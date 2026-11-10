@@ -83,16 +83,30 @@ export function inteiro(valor: unknown): number | null {
 }
 
 /** Converte célula do Excel (Date, serial numérico ou texto dd/mm/aaaa)
- * para "YYYY-MM-DD". */
+ * para "YYYY-MM-DD". Sempre via `Date.UTC` — nunca o construtor local
+ * `new Date(ano, mes, dia)` — mesma garantia de dias-uteis.ts::paraData
+ * (datas são sempre UTC-meia-noite internamente); usar o construtor local
+ * deslocaria o dia conforme o fuso do servidor que rodar a importação. */
 export function dataIso(valor: unknown): string | null {
   if (vazio(valor)) return null;
   if (valor instanceof Date) return Number.isNaN(valor.getTime()) ? null : valor.toISOString().slice(0, 10);
+  if (typeof valor === "number") {
+    // Serial de data do Excel (dias desde 1899-12-30, já compensando o bug
+    // do ano bissexto de 1900) — ocorre quando a célula tem valor numérico
+    // sem o formato de data devidamente aplicado, e o exceljs devolve o
+    // número bruto em vez de um Date. Sem isso, a data vira null (perdida)
+    // em vez do valor que o Excel efetivamente mostra para o usuário.
+    if (!Number.isFinite(valor)) return null;
+    const ms = Math.round((valor - 25569) * 86400 * 1000);
+    const data = new Date(ms);
+    return Number.isNaN(data.getTime()) ? null : data.toISOString().slice(0, 10);
+  }
   const texto = String(valor).trim();
   const match = texto.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
   if (match) {
     const [, d, m, a] = match;
     const ano = a.length === 2 ? `20${a}` : a;
-    const data = new Date(Number(ano), Number(m) - 1, Number(d));
+    const data = new Date(Date.UTC(Number(ano), Number(m) - 1, Number(d)));
     return Number.isNaN(data.getTime()) ? null : data.toISOString().slice(0, 10);
   }
   const data = new Date(texto);

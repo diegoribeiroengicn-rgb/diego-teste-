@@ -23,6 +23,21 @@ const NOME_ABA: Record<TabelaPlanilha, string> = { prestadores: "PROJ_PREST", ce
 const MAPA_COLUNAS: Record<TabelaPlanilha, Record<string, string>> = {
   prestadores: MAPA_COLUNAS_PRESTADORES, cessionarios: MAPA_COLUNAS_CESSIONARIOS,
 };
+/** Sem pelo menos um nome de coluna mapeado para cada um destes campos no
+ * cabeçalho, nenhuma linha da planilha teria identificação (código ou
+ * nome da entidade) nem disciplina — a importação processaria "0 linhas"
+ * sem nenhuma explicação do motivo, quase sempre porque o arquivo não é a
+ * planilha oficial ou é uma versão com colunas renomeadas. */
+const CAMPOS_ESSENCIAIS: Record<TabelaPlanilha, { campo: string; rotulo: string }[]> = {
+  prestadores: [
+    { campo: "codigo", rotulo: "Código" }, { campo: "prestador", rotulo: "Prestador de Serviço" },
+    { campo: "disciplina", rotulo: "Disciplina" },
+  ],
+  cessionarios: [
+    { campo: "codigo", rotulo: "Código" }, { campo: "cessionario", rotulo: "Cessionário" },
+    { campo: "disciplina", rotulo: "Disciplina" },
+  ],
+};
 const CAMPO_NOME_ENTIDADE: Record<TabelaPlanilha, string> = { prestadores: "prestador", cessionarios: "cessionario" };
 const CAMPO_NOME_OBRA: Record<TabelaPlanilha, string | null> = { prestadores: "obra_referencia", cessionarios: null };
 const COLUNAS_TABELA: Record<TabelaPlanilha, readonly string[]> = { prestadores: COLUNAS_PRESTADOR, cessionarios: COLUNAS_CESSIONARIO };
@@ -79,6 +94,14 @@ export async function lerPlanilha(conteudo: Buffer, tabela: TabelaPlanilha): Pro
     if (campo) colunaRealPorCampo.set(campo, numeroColuna);
     else colunasNaoMapeadas.push(nome);
   });
+
+  const faltando = CAMPOS_ESSENCIAIS[tabela].filter((c) => !colunaRealPorCampo.has(c.campo));
+  if (faltando.length) {
+    throw new Error(
+      `Coluna(s) obrigatória(s) não encontrada(s) no cabeçalho da aba "${nomeEsperado}" (linha ${LINHA_CABECALHO}): ` +
+        `${faltando.map((c) => c.rotulo).join(", ")}. Confira se este é o arquivo oficial "Controle GAT Projetos" e se nenhuma coluna foi renomeada.`,
+    );
+  }
 
   const campoNomeEntidade = CAMPO_NOME_ENTIDADE[tabela];
   const linhas: LinhaPlanilha[] = [];
