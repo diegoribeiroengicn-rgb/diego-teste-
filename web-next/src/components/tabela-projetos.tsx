@@ -2,6 +2,8 @@ import Link from "next/link";
 import { BuscaAnalista } from "@/components/busca-analista";
 import { BotaoDarBaixa } from "@/components/dar-baixa";
 import { BotaoTratativaHold } from "@/components/tratativa-hold";
+import { FiltrosProjetos, type ValoresFiltrosProjetos } from "@/components/filtros-projetos";
+import { PaginacaoProjetos } from "@/components/paginacao-projetos";
 import type { Projeto } from "@/lib/projetos";
 
 const CORES_STATUS: Record<string, string> = {
@@ -38,12 +40,18 @@ export function TabelaProjetos({
   podeCadastrar,
   podeEditar,
   comoCartoes,
+  total,
+  tamanho,
+  limite,
+  tamanhosPagina,
+  disciplinas,
+  filtros,
 }: {
   titulo: string;
   colunaEntidade: string;
   tabela: "prestadores" | "cessionarios";
   projetos: Projeto[];
-  busca: string;
+  busca?: string;
   analistaProprio: string | null | undefined;
   temAnalistaProprio: boolean;
   podeCadastrar?: boolean;
@@ -52,24 +60,38 @@ export function TabelaProjetos({
    * escanear quando o volume de análises em aberto é grande. Projetos
    * (lista completa, todos os status) continua em tabela. */
   comoCartoes?: boolean;
+  /** Os seis campos abaixo só são passados pela listagem completa de
+   * Projetos (`/prestadores/projetos` e `/cessionarios/projetos`) — ela
+   * usa busca/paginação server-side contra a base inteira em vez da
+   * busca simples por responsável usada em Em Análise/Em HOLD/Dashboard.
+   * Quando ausentes, o componente cai no modo antigo (BuscaAnalista). */
+  total?: number;
+  tamanho?: number;
+  limite?: number;
+  tamanhosPagina?: number[];
+  disciplinas?: string[];
+  filtros?: ValoresFiltrosProjetos;
 }) {
   const porStatus = contagemPorStatus(projetos);
+  const modoCompleto = total != null && tamanho != null && limite != null && tamanhosPagina != null && disciplinas != null && filtros != null;
 
   return (
     <div className="mx-auto max-w-6xl px-8 py-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-(--color-text)">{titulo}</h1>
-          <p className="mt-1 text-sm text-(--color-text-weak)">
-            {busca
-              ? `Responsáveis que contêm "${busca}"`
-              : temAnalistaProprio
-                ? `Todas as análises — as suas (${analistaProprio}) aparecem primeiro, por ordem de vencimento`
-                : "Todas as análises"}
-          </p>
+          {!modoCompleto && (
+            <p className="mt-1 text-sm text-(--color-text-weak)">
+              {busca
+                ? `Responsáveis que contêm "${busca}"`
+                : temAnalistaProprio
+                  ? `Todas as análises — as suas (${analistaProprio}) aparecem primeiro, por ordem de vencimento`
+                  : "Todas as análises"}
+            </p>
+          )}
         </div>
         <div className="flex items-end gap-3">
-          <BuscaAnalista valorInicial={busca} />
+          {!modoCompleto && <BuscaAnalista valorInicial={busca ?? ""} />}
           {podeCadastrar && (
             <Link
               href={`/${tabela}/analise/novo`}
@@ -81,12 +103,20 @@ export function TabelaProjetos({
         </div>
       </div>
 
+      {modoCompleto && (
+        <FiltrosProjetos colunaEntidade={colunaEntidade} valores={filtros} disciplinas={disciplinas} tamanho={tamanho} />
+      )}
+
       <div className="mt-6 flex flex-wrap gap-3">
         <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) px-5 py-4">
-          <p className="text-2xl font-semibold tabular-nums text-(--color-text)">{projetos.length}</p>
+          <p className="text-2xl font-semibold tabular-nums text-(--color-text)">{modoCompleto ? total : projetos.length}</p>
           <p className="text-xs text-(--color-text-weak)">no total</p>
         </div>
-        {porStatus.map(([status, qtd]) => (
+        {/* Em modo completo os chips por status refletiriam só a página
+            carregada (não a base filtrada inteira), o que seria enganoso —
+            por isso só aparecem no modo antigo (sempre com todos os
+            registros carregados de uma vez). */}
+        {!modoCompleto && porStatus.map(([status, qtd]) => (
           <div key={status} className="flex items-center gap-2.5 rounded-2xl border border-(--color-border) bg-(--color-surface-1) px-5 py-4">
             <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${CORES_STATUS[status] ?? "bg-(--color-surface-2) text-(--color-text-weak)"}`}>
               {status}
@@ -204,8 +234,8 @@ export function TabelaProjetos({
           </table>
         </div>
       )}
-      {projetos.length >= 200 && (
-        <p className="mt-3 text-xs text-(--color-text-dim)">Mostrando os 200 primeiros (paginação ainda não construída).</p>
+      {modoCompleto && (
+        <PaginacaoProjetos total={total} carregados={projetos.length} tamanho={tamanho} tamanhosPagina={tamanhosPagina} />
       )}
     </div>
   );

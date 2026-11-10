@@ -64,3 +64,112 @@ export async function buscarProjetos(
 }
 
 export type ProjetoComOrigem = Projeto & { origem: Tabela };
+
+export type FiltroProjetosLista = {
+  termoCodigo?: string;
+  termoEntidade?: string;
+  termoResponsavel?: string;
+  status?: string;
+  disciplina?: string;
+  dataLimiteDe?: string;
+  dataLimiteAte?: string;
+  analistaProprio?: string | null;
+  /** Tamanho da página carregada (30/50/100, crescendo a cada "Carregar
+   * mais") — sempre um LIMIT sobre a base completa no banco, nunca sobre
+   * uma lista já truncada em memória. */
+  limite: number;
+};
+
+export type ResultadoProjetosLista = {
+  projetos: Projeto[];
+  /** Total de registros que atendem aos filtros na base completa — pode
+   * ser maior que `projetos.length` quando ainda há mais para carregar. */
+  total: number;
+};
+
+const STATUS_PENDENTES_SQL = "ARRAY['EM ANÁLISE','EM HOLD','RIOGALEÃO']";
+
+/** Busca paginada e filtrada de projetos para a listagem editável de
+ * Projetos (Editar/Dar Baixa inline) — sempre consulta a base completa
+ * no banco com os filtros aplicados antes do LIMIT, então localizar um
+ * projeto específico nunca depende dele estar entre os primeiros N
+ * registros carregados. Função separada de `buscarProjetos` (usada por
+ * Dashboard/Em Análise/Em HOLD/Mobile) para não alterar o comportamento
+ * dessas telas, que não pediram esta melhoria.
+ *
+ * Ordenação: além do próprio analista aparecer primeiro quando
+ * informado, prioriza projetos aguardando análise (EM ANÁLISE/EM
+ * HOLD/RIOGALEÃO) pela data limite mais próxima, e só depois os já
+ * concluídos (LIBERADO/NÃO LIBERADO/OBSOLETO/CANCELADO) pela data da
+ * atualização mais recente — nunca pela posição da linha na planilha de
+ * origem. */
+export async function buscarProjetosPaginado(tabela: Tabela, filtro: FiltroProjetosLista): Promise<ResultadoProjetosLista> {
+  const colunaEntidade = COLUNA_ENTIDADE[tabela];
+  const pool = obterPool();
+  const condicoes = [`arquivado_em IS NULL`];
+  const parametros: unknown[] = [];
+
+  if (filtro.termoCodigo?.trim()) {
+    parametros.push(filtro.termoCodigo.trim());
+    condicoes.push(`UPPER(codigo) LIKE UPPER('%' || $${parametros.length} || '%')`);
+  }
+  if (filtro.termoEntidade?.trim()) {
+    parametros.push(filtro.termoEntidade.trim());
+    condicoes.push(`UPPER("${colunaEntidade}") LIKE UPPER('%' || $${parametros.length} || '%')`);
+  }
+  if (filtro.termoResponsavel?.trim()) {
+    parametros.push(filtro.termoResponsavel.trim());
+    condicoes.push(`UPPER(responsavel) LIKE UPPER('%' || $${parametros.length} || '%')`);
+  }
+  if (filtro.status?.trim()) {
+    parametros.push(filtro.status.trim());
+    condicoes.push(`status_analise = $${parametros.length}`);
+  }
+  if (filtro.disciplina?.trim()) {
+    parametros.push(filtro.disciplina.trim());
+    condicoes.push(`disciplina = $${parametros.length}`);
+  }
+  if (filtro.dataLimiteDe?.trim()) {
+    parametros.push(filtro.dataLimiteDe.trim());
+    condicoes.push(`data_limite >= $${parametros.length}`);
+  }
+  if (filtro.dataLimiteAte?.trim()) {
+    parametros.push(filtro.dataLimiteAte.trim());
+    condicoes.push(`data_limite <= $${parametros.length}`);
+  }
+
+  let ordem = `
+    CASE WHEN status_analise = ANY(${STATUS_PENDENTES_SQL}) THEN 0 ELSE 1 END ASC,
+    CASE WHEN status_analise = ANY(${STATUS_PENDENTES_SQL}) THEN data_limite END ASC NULLS LAST,
+    CASE WHEN status_analise <> ALL(${STATUS_PENDENTES_SQL}) THEN atualizado_em END DESC NULLS LAST`;
+  if (filtro.analistaProprio?.trim()) {
+    parametros.push(filtro.analistaProprio.trim());
+    ordem = `(UPPER(TRIM(responsavel)) = UPPER($${parametros.length})) DESC, ${ordem}`;
+  }
+
+  parametros.push(filtro.limite);
+  const { rows } = await pool.query<Omit<Projeto, "entidade"> & Record<string, unknown> & { total_geral: string }>(
+    `SELECT id, item, codigo, "${colunaEntidade}" AS entidade, disciplina, revisao, status_analise, num_at, num_documentos, data_limite, responsavel,
+            COUNT(*) OVER() AS total_geral
+     FROM ${tabela}
+     WHERE ${condicoes.join(" AND ")}
+     ORDER BY ${ordem}
+     LIMIT $${parametros.length}`,
+    parametros,
+  );
+
+  const total = rows.length ? Number(rows[0].total_geral) : 0;
+  const projetos = rows as unknown as Projeto[];
+  return { projetos, total };
+}
+
+/** Valores distintos de disciplina já cadastrados em `tabela`, para
+ * popular o filtro da listagem de Projetos sem depender de uma lista
+ * fixa (cada planilha importada pode trazer disciplinas diferentes). */
+export async function listarDisciplinasDistintas(tabela: Tabela): Promise<string[]> {
+  const pool = obterPool();
+  const { rows } = await pool.query<{ disciplina: string }>(
+    `SELECT DISTINCT disciplina FROM ${tabela} WHERE disciplina IS NOT NULL AND disciplina <> '' AND arquivado_em IS NULL ORDER BY disciplina`,
+  );
+  return rows.map((r) => r.disciplina);
+}
