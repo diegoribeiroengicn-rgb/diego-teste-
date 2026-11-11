@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { obterSessao } from "@/lib/session";
 import { registrarAtividade } from "@/lib/atividades";
 import { PERFIL_CONSULTA } from "@/lib/administracao-calculo";
-import { STATUS_FINAIS_BAIXA } from "@/lib/resumo-conclusao-calculo";
+import { STATUS_FINAIS_BAIXA, lerQuantidadeDocumentos } from "@/lib/resumo-conclusao-calculo";
 import { darBaixaAnalise, obterRegistroParaBaixa, type TabelaBaixa } from "@/lib/resumo-conclusao";
 
 function validarTabela(tabela: string): tabela is TabelaBaixa {
@@ -41,7 +41,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tab
     return NextResponse.json({ erro: "Tabela inválida." }, { status: 400 });
   }
 
-  const corpo = (await req.json()) as { status: string; numAt: string; codigoDisciplina: string; mfiles: boolean; drive: boolean; email: boolean };
+  const corpo = (await req.json()) as {
+    status: string; numAt: string; codigoDisciplina: string; mfiles: boolean; drive: boolean; email: boolean;
+    numDocumentosAnalisados: unknown; obraReferencia?: string;
+  };
   if (!STATUS_FINAIS_BAIXA.includes(corpo.status as (typeof STATUS_FINAIS_BAIXA)[number])) {
     return NextResponse.json({ erro: "Status inválido para baixa." }, { status: 400 });
   }
@@ -51,6 +54,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tab
   if (!corpo.codigoDisciplina?.trim()) {
     return NextResponse.json({ erro: "Informe o código da disciplina." }, { status: 400 });
   }
+  const numDocumentosAnalisados = lerQuantidadeDocumentos(corpo.numDocumentosAnalisados);
+  if (numDocumentosAnalisados == null) {
+    return NextResponse.json({ erro: "Informe a quantidade de documentos analisados (número inteiro, zero ou mais)." }, { status: 400 });
+  }
 
   try {
     const registro = await darBaixaAnalise(
@@ -58,10 +65,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tab
       {
         status: corpo.status, numAt: corpo.numAt.trim(), codigoDisciplina: corpo.codigoDisciplina.trim(),
         mfiles: !!corpo.mfiles, drive: !!corpo.drive, email: !!corpo.email,
+        numDocumentosAnalisados, obraReferencia: String(corpo.obraReferencia ?? ""),
       },
       sessao.username,
     );
-    void registrarAtividade(sessao.username, sessao.perfil, "ANALISE_BAIXA", tabela, `#${id} -> ${corpo.status}`);
+    void registrarAtividade(sessao.username, sessao.perfil, "ANALISE_BAIXA", tabela, `#${id} -> ${corpo.status} · ${numDocumentosAnalisados} doc(s) analisado(s)`);
     return NextResponse.json({ ok: true, registro });
   } catch (exc) {
     return NextResponse.json({ erro: exc instanceof Error ? exc.message : "Erro ao dar baixa na análise." }, { status: 400 });

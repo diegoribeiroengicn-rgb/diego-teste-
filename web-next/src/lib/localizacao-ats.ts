@@ -1,5 +1,6 @@
 import { obterPool } from "@/lib/db";
 import { calcularHoldDias, diasUteisDecorridos, emHold, saldoDiasUteis } from "@/lib/dias-uteis";
+import { garantirColunasBaixa } from "@/lib/esquema-baixa";
 import type { LinhaLocalizacao } from "@/lib/localizacao-ats-calculo";
 import type { Origem } from "@/lib/revisoes-calculo";
 
@@ -31,6 +32,7 @@ type LinhaBanco = {
   resumo_mfiles: number | null;
   resumo_drive: number | null;
   resumo_email: number | null;
+  num_documentos_analisados: number | null;
   nivel_prioridade: number | null;
   sla_reduzido: number | null;
 };
@@ -88,6 +90,7 @@ function enriquecerLinha(row: LinhaBanco, origem: Origem): LinhaLocalizacao {
     resumoMfiles: !!row.resumo_mfiles,
     resumoDrive: !!row.resumo_drive,
     resumoEmail: !!row.resumo_email,
+    numDocumentosAnalisados: row.num_documentos_analisados,
     nivelPrioridade: row.nivel_prioridade,
     slaReduzido: !!row.sla_reduzido,
   };
@@ -101,13 +104,14 @@ function enriquecerLinha(row: LinhaBanco, origem: Origem): LinhaLocalizacao {
  * incorporou a finalidade do antigo módulo independente "Localização de
  * ATs" (hoje só um redirecionamento, ver `/localizacao-ats`). */
 export async function buscarLinhasLocalizacao(): Promise<LinhaLocalizacao[]> {
+  await garantirColunasBaixa();
   const pool = obterPool();
   const [prestadores, cessionarios] = await Promise.all([
     pool.query<LinhaBanco>(
       `SELECT id, item, codigo, prestador AS nome_entidade, disciplina, num_at, revisao, responsavel, status_analise,
               data_solicitacao, data_analise, data_limite, hold_inicio, hold_fim, observacoes, sla_dias, NULL AS tipo,
               obra_referencia AS obra, atualizado_em, resumo_mfiles, resumo_drive, resumo_email,
-              nivel_prioridade, sla_reduzido
+              num_documentos_analisados, nivel_prioridade, sla_reduzido
        FROM prestadores WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),
@@ -115,7 +119,7 @@ export async function buscarLinhasLocalizacao(): Promise<LinhaLocalizacao[]> {
       `SELECT id, item, codigo, cessionario AS nome_entidade, disciplina, num_at, revisao, responsavel, status_analise,
               data_solicitacao, data_analise, data_limite, hold_inicio, hold_fim, observacoes, sla_dias, tipo,
               tipo AS obra, atualizado_em, resumo_mfiles, resumo_drive, resumo_email,
-              NULL::int AS nivel_prioridade, sla_reduzido
+              num_documentos_analisados, NULL::int AS nivel_prioridade, sla_reduzido
        FROM cessionarios WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),

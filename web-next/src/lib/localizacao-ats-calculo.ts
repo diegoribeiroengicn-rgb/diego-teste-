@@ -7,6 +7,9 @@ export type LinhaLocalizacao = LinhaRevisao & {
   resumoMfiles: boolean;
   resumoDrive: boolean;
   resumoEmail: boolean;
+  /** Quantidade informada pelo analista na baixa — `null` enquanto a AT
+   * não teve baixa com esse campo. */
+  numDocumentosAnalisados: number | null;
   /** Nível da Lista de Prioridades (1/2/3) — só existe hoje na tabela
    * `prestadores`; cessionários sempre chega `null` aqui. Mesmos níveis de
    * `lista-prioridades.ts` (não duplica os rótulos, só o valor cru). */

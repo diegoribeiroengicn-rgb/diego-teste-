@@ -141,7 +141,9 @@ function PainelDetalhe({ linha, grupo }: { linha: LinhaLocalizacaoMarcada; grupo
         <p>Data de vencimento: {formatarData(linha.dataLimite)}</p>
         <p>Data de conclusão: {formatarData(linha.dataAnalise)}</p>
       </div>
-      <p className="mt-2 text-xs text-(--color-text-weak)">Localização da AT (Resumo de Conclusão): {canais.length ? canais.join(", ") : "—"}</p>
+      <p className="mt-2 text-xs text-(--color-text-weak)">
+        Localização da AT (Resumo de Conclusão): {canais.length ? canais.join(", ") : "—"} · Documentos analisados: {linha.numDocumentosAnalisados ?? "—"}
+      </p>
       {linha.observacoes?.trim() && <p className="mt-1 text-xs text-(--color-text-dim)">Observações: {linha.observacoes}</p>}
 
       <button onClick={() => setHistoricoAberto((v) => !v)} className="mt-4 rounded-full border border-(--color-border) px-3 py-1.5 text-xs font-medium text-(--color-navy) hover:bg-(--color-surface-2)">
