@@ -92,6 +92,15 @@ export function TabelaProjetos({
         </div>
         <div className="flex items-end gap-3">
           {!modoCompleto && <BuscaAnalista valorInicial={busca ?? ""} />}
+          {modoCompleto && (
+            <a
+              href={`/api/projetos/${tabela}/excel`}
+              title="Baixa a planilha completa: azul = preenchido no sistema, preto = vindo da planilha"
+              className="whitespace-nowrap rounded-full border border-(--color-border) px-4 py-2 text-sm font-medium text-(--color-navy) hover:bg-(--color-surface-2)"
+            >
+              Baixar planilha (Excel)
+            </a>
+          )}
           {podeCadastrar && (
             <Link
               href={`/${tabela}/analise/novo`}
