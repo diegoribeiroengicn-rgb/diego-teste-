@@ -257,23 +257,85 @@ export type PlanoImportacao = {
   registrosNaoEncontrados: RegistroNaoEncontrado[];
 };
 
+/** Identifica um item do plano nas escolhas de conflito. A chave de
+ * correspondência sozinha não basta: duas linhas da planilha podem ter a
+ * mesma chave e estar ligadas a registros diferentes. */
+export function chaveResolucao(item: ItemPlanoImportacao): string {
+  return `${serializarChave(item.chave)}#${item.existenteId ?? ""}`;
+}
+
+/** Número do Item da planilha a gravar no registro já cadastrado, quando
+ * os dois diferem — `null` se não há nada a ajustar. */
+export function itemAAjustar(item: ItemPlanoImportacao): number | null {
+  if (item.existenteId == null || typeof item.itemOrigem !== "number") return null;
+  return Number(item.existente.item) === item.itemOrigem ? null : item.itemOrigem;
+}
+
 export function resumoPlano(plano: PlanoImportacao) {
+  const itensAAjustar = plano.itens.filter((i) => itemAAjustar(i) != null).length;
   const novos = plano.itens.filter((i) => i.tipo === "novo").length;
   const atualizados = plano.itens.filter((i) => i.tipo === "atualizacao").length;
   const semMudanca = plano.itens.filter((i) => i.tipo === "sem_mudanca").length;
   const arquivados = plano.itens.filter((i) => i.tipo === "arquivado").length;
   const inconsistentes = plano.itens.filter((i) => i.tipo === "inconsistente").length;
   const comConflito = plano.itens.filter((i) => Object.keys(i.conflitos).length > 0);
-  return { lidos: plano.itens.length, novos, atualizados, semMudanca, arquivados, inconsistentes, totalConflitos: comConflito.length };
+  return { lidos: plano.itens.length, novos, atualizados, semMudanca, arquivados, inconsistentes, totalConflitos: comConflito.length, itensAAjustar };
+}
+
+/** Liga cada linha da planilha a um registro ativo de mesma chave, um
+ * para um. Com uma linha e um registro é a correspondência de sempre.
+ * Quando a chave se repete, o desempate é: mesmo número de Item; depois
+ * mesma Data de Solicitação; por fim a ordem (linhas na ordem da
+ * planilha, registros na ordem em que vieram do banco). Linha que ficar
+ * sem par não entra em `pares`; `usados` são os registros já ligados. */
+export function parearPorChave(
+  linhas: LinhaPlanilha[], indiceAtivos: Map<string, Record<string, unknown>[]>,
+  campoNomeEntidade: string, campoNomeObra: string | null,
+): { pares: Map<LinhaPlanilha, Record<string, unknown>>; usados: Set<Record<string, unknown>> } {
+  const pares = new Map<LinhaPlanilha, Record<string, unknown>>();
+  const usados = new Set<Record<string, unknown>>();
+
+  const linhasPorChave = new Map<string, LinhaPlanilha[]>();
+  for (const linha of linhas) {
+    const chaveStr = serializarChave(chaveRegistro(linha, campoNomeEntidade, campoNomeObra));
+    const lista = linhasPorChave.get(chaveStr);
+    if (lista) lista.push(linha);
+    else linhasPorChave.set(chaveStr, [linha]);
+  }
+
+  const igual = (a: unknown, b: unknown) => a != null && b != null && String(a).trim() === String(b).trim();
+  for (const [chaveStr, grupo] of linhasPorChave) {
+    const candidatos = indiceAtivos.get(chaveStr);
+    if (!candidatos) continue;
+    const ligar = (criterio: (linha: LinhaPlanilha, registro: Record<string, unknown>) => boolean) => {
+      for (const linha of grupo) {
+        if (pares.has(linha)) continue;
+        const registro = candidatos.find((c) => !usados.has(c) && criterio(linha, c));
+        if (registro) {
+          pares.set(linha, registro);
+          usados.add(registro);
+        }
+      }
+    };
+    ligar((linha, registro) => linha.item != null && registro.item != null && Number(linha.item) === Number(registro.item));
+    ligar((linha, registro) => igual(linha.data_solicitacao, registro.data_solicitacao));
+    ligar(() => true);
+  }
+  return { pares, usados };
 }
 
 /** Classifica cada linha já normalizada (novo/atualização/sem
  * mudança/arquivado/inconsistente) sem gravar nada — fase 1 (prévia).
- * Mesma regra de `_planejar`, reduzida ao escopo deste incremento
- * (sem `preferencias_conflito_planilha` nem a fusão de linhas repetidas
- * na mesma leva — planilhas com duas linhas para a mesma chave geram dois
- * itens de plano em vez de se mesclarem automaticamente; raro na prática
- * e sinalizado ao usuário pela prévia). */
+ * Mesma regra de `_planejar`, reduzida ao escopo deste incremento (sem
+ * `preferencias_conflito_planilha`).
+ *
+ * Diferença deliberada em relação ao original: a chave (código +
+ * disciplina + revisão + N° AT) NÃO é única na planilha oficial — a
+ * mesma AT/revisão reaparece em linhas diferentes (reenvios, ARTs do
+ * mesmo dia), cada uma com seu Item, datas e resultado. O original
+ * fundia essas linhas num registro só, e o sistema ficava com menos
+ * registros que a planilha. Aqui cada linha fica ligada a um registro
+ * próprio (ver `parearPorChave`); o que sobrar sem registro é "novo". */
 export function planejarLinhas(
   linhas: LinhaPlanilha[], colunasNaoMapeadas: string[], origem: string,
   campoCodigo: string, campoNomeEntidade: string, campoNomeObra: string | null,
@@ -282,10 +344,15 @@ export function planejarLinhas(
 ): PlanoImportacao {
   const plano: PlanoImportacao = { origem, itens: [], colunasNaoMapeadas, registrosNaoEncontrados: [] };
 
-  const indiceAtivos = new Map<string, Record<string, unknown>>();
+  const indiceAtivos = new Map<string, Record<string, unknown>[]>();
   for (const linha of ativos) {
-    indiceAtivos.set(serializarChave(chaveRegistro(linha, campoNomeEntidade, campoNomeObra)), linha);
+    const chaveStr = serializarChave(chaveRegistro(linha, campoNomeEntidade, campoNomeObra));
+    const lista = indiceAtivos.get(chaveStr);
+    if (lista) lista.push(linha);
+    else indiceAtivos.set(chaveStr, [linha]);
   }
+  const { pares, usados } = parearPorChave(linhas, indiceAtivos, campoNomeEntidade, campoNomeObra);
+  const encontrados = new Set<Record<string, unknown>>();
   const chavesArquivadas = new Set(
     arquivados.map((linha) => serializarChave(chaveRegistro(linha, campoNomeEntidade, campoNomeObra))),
   );
@@ -337,19 +404,22 @@ export function planejarLinhas(
       continue;
     }
 
-    let existente = indiceAtivos.get(serializarChave(chave)) ?? null;
+    let existente = pares.get(linha) ?? null;
     let chaveEfetiva = chave;
     if (existente === null) {
       const numAtPlanilha = numAtNormalizado(camposPlanilha.num_at);
       if (numAtPlanilha !== null) {
         const chaveFallback = chaveSemAt(linha, campoNomeEntidade, campoNomeObra);
-        const candidato = indiceAtivos.get(serializarChave(chaveFallback));
-        if (candidato && numAtNormalizado(candidato.num_at) === null) {
+        const candidato = (indiceAtivos.get(serializarChave(chaveFallback)) ?? [])
+          .find((c) => !usados.has(c) && numAtNormalizado(c.num_at) === null);
+        if (candidato) {
+          usados.add(candidato);
           existente = candidato;
           chaveEfetiva = chaveFallback;
         }
       }
     }
+    if (existente) encontrados.add(existente);
 
     if (existente === null && chavesArquivadas.has(serializarChave(chaveEfetiva))) {
       plano.itens.push({
@@ -385,12 +455,9 @@ export function planejarLinhas(
     });
   }
 
-  const chavesEncontradas = new Set(
-    plano.itens.filter((i) => i.tipo === "atualizacao" || i.tipo === "sem_mudanca").map((i) => serializarChave(i.chave)),
-  );
-  for (const [chaveStr, registroAtivo] of indiceAtivos) {
+  for (const registroAtivo of ativos) {
     const statusAtivo = String(registroAtivo.status_analise ?? "").trim().toUpperCase();
-    if (!chavesEncontradas.has(chaveStr) && STATUS_ATIVO_ANALISE.has(statusAtivo)) {
+    if (!encontrados.has(registroAtivo) && STATUS_ATIVO_ANALISE.has(statusAtivo)) {
       plano.registrosNaoEncontrados.push({
         id: registroAtivo.id as number,
         identificacao: (registroAtivo[campoCodigo] as string) || (registroAtivo[campoNomeEntidade] as string) || null,

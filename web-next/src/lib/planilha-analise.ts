@@ -5,7 +5,7 @@ import {
   COLUNAS_CESSIONARIO, COLUNAS_PRESTADOR, type DadosCessionario, type DadosPrestador,
 } from "@/lib/analise";
 import {
-  normalizarLinha, normalizarNomeColuna, planejarLinhas, serializarChave, vazio,
+  chaveResolucao, itemAAjustar, normalizarLinha, normalizarNomeColuna, planejarLinhas, vazio,
   LINHA_CABECALHO, MAPA_COLUNAS_CESSIONARIOS, MAPA_COLUNAS_PRESTADORES,
   PADROES_SO_PARA_INSERCAO,
   type ItemPlanoImportacao, type LinhaPlanilha, type PlanoImportacao, type TabelaPlanilha,
@@ -160,6 +160,8 @@ export type RelatorioImportacao = {
   ignoradosSemMudanca: number;
   ignoradosArquivados: number;
   inconsistentes: number;
+  /** Registros já cadastrados cujo número de Item foi igualado ao da planilha. */
+  itensAjustados: number;
   erros: string[];
 };
 
@@ -180,7 +182,7 @@ export async function executarImportacao(
 ): Promise<RelatorioImportacao> {
   const relatorio: RelatorioImportacao = {
     origem: plano.origem, lidos: plano.itens.length, novos: 0, atualizados: 0, conflitosTratados: 0,
-    ignoradosSemMudanca: 0, ignoradosArquivados: 0, inconsistentes: 0, erros: [],
+    ignoradosSemMudanca: 0, ignoradosArquivados: 0, inconsistentes: 0, itensAjustados: 0, erros: [],
   };
 
   const colunasTabela = COLUNAS_TABELA[tabela];
@@ -194,19 +196,27 @@ export async function executarImportacao(
       relatorio.ignoradosArquivados++;
       continue;
     }
-    if (item.tipo === "sem_mudanca") {
-      relatorio.ignoradosSemMudanca++;
-      continue;
-    }
-
     try {
+      // O Item é a ordem da planilha, não um dado da análise: é igualado
+      // direto, sem passar por preenchimento/conflito nem gerar histórico.
+      const itemPlanilha = itemAAjustar(item);
+      if (itemPlanilha != null && (item.tipo === "sem_mudanca" || item.tipo === "atualizacao")) {
+        await obterPool().query(`UPDATE ${tabela} SET item = $1 WHERE id = $2`, [itemPlanilha, item.existenteId]);
+        relatorio.itensAjustados++;
+      }
+      if (item.tipo === "sem_mudanca") {
+        relatorio.ignoradosSemMudanca++;
+        continue;
+      }
+
       if (item.tipo === "novo") {
         const campos: Record<string, unknown> = { ...item.dadosNovos };
         for (const [campo, padrao] of Object.entries(PADROES_SO_PARA_INSERCAO)) {
           if (colunasTabela.includes(campo) && vazio(campos[campo])) campos[campo] = padrao;
         }
-        if (tabela === "prestadores") await inserirPrestador(campos as unknown as DadosPrestador, usuario);
-        else await inserirCessionario(campos as unknown as DadosCessionario, usuario);
+        const itemNovo = typeof item.itemOrigem === "number" ? item.itemOrigem : null;
+        if (tabela === "prestadores") await inserirPrestador(campos as unknown as DadosPrestador, usuario, itemNovo);
+        else await inserirCessionario(campos as unknown as DadosCessionario, usuario, itemNovo);
         relatorio.novos++;
         continue;
       }
@@ -215,7 +225,7 @@ export async function executarImportacao(
       // valor da planilha por padrão, exceto onde o usuário escolheu
       // manter o valor do sistema.
       const final: Record<string, unknown> = { ...item.existente, ...item.preenchimentos };
-      const escolhas = resolucoesConflito[serializarChave(item.chave)] ?? {};
+      const escolhas = resolucoesConflito[chaveResolucao(item)] ?? {};
       let conflitosAqui = 0;
       for (const [campo, [valorSistema, valorPlanilha]] of Object.entries(item.conflitos)) {
         final[campo] = escolhas[campo] === "sistema" ? valorSistema : valorPlanilha;

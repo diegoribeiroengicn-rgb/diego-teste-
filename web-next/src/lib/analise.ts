@@ -65,11 +65,13 @@ export async function obterPrestadorCompleto(id: number): Promise<(DadosPrestado
  * essenciais (COLUNAS_PRESTADOR) — vínculo a Cadastro de Prestador, Obra
  * vinculada, nível de prioridade/SLA reduzido com justificativa e
  * repactuação de prazo ficam para um próximo incremento. */
-export async function inserirPrestador(dados: DadosPrestador, usuario: string): Promise<number> {
+export async function inserirPrestador(dados: DadosPrestador, usuario: string, itemPlanilha: number | null = null): Promise<number> {
   const pool = obterPool();
   const agora = new Date().toISOString();
   const { rows: maiorItem } = await pool.query<{ m: number }>("SELECT COALESCE(MAX(item), 0) AS m FROM prestadores");
-  const item = maiorItem[0].m + 1;
+  // Vindo da planilha, o registro guarda o Item que ela traz; cadastrado
+  // pelo sistema, continua recebendo o próximo número.
+  const item = itemPlanilha ?? maiorItem[0].m + 1;
 
   const valores = COLUNAS_PRESTADOR.map((c) => dados[c] ?? null);
   const { rows } = await pool.query<{ id: number }>(
@@ -143,11 +145,11 @@ export async function obterCessionarioCompleto(id: number): Promise<(DadosCessio
 /** Mesma regra de gat/database.py::inserir_cessionario — mesmo escopo
  * reduzido de `inserirPrestador` (vínculo a Cadastro de Cessionário, RCI/
  * RVP/LUC e repactuação de prazo ficam para um próximo incremento). */
-export async function inserirCessionario(dados: DadosCessionario, usuario: string): Promise<number> {
+export async function inserirCessionario(dados: DadosCessionario, usuario: string, itemPlanilha: number | null = null): Promise<number> {
   const pool = obterPool();
   const agora = new Date().toISOString();
   const { rows: maiorItem } = await pool.query<{ m: number }>("SELECT COALESCE(MAX(item), 0) AS m FROM cessionarios");
-  const item = maiorItem[0].m + 1;
+  const item = itemPlanilha ?? maiorItem[0].m + 1;
 
   const valores = COLUNAS_CESSIONARIO.map((c) => dados[c] ?? null);
   const { rows } = await pool.query<{ id: number }>(

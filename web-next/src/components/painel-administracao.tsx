@@ -18,7 +18,7 @@ import type {
   Usuario,
 } from "@/lib/administracao";
 import type { PermissoesUsuario } from "@/lib/permissoes";
-import { resumoPlano, type ItemPlanoImportacao, type PlanoImportacao, type TabelaPlanilha } from "@/lib/planilha-analise-calculo";
+import { chaveResolucao, resumoPlano, type ItemPlanoImportacao, type PlanoImportacao, type TabelaPlanilha } from "@/lib/planilha-analise-calculo";
 import type { ImportacaoHistorico, RelatorioImportacao, ResolucoesConflito } from "@/lib/planilha-analise";
 
 function formatarDataHora(valor: string | null): string {
@@ -713,8 +713,9 @@ function UploadPlanilha({ tabela, titulo, nomeAba }: { tabela: TabelaPlanilha; t
       <p className="text-sm font-semibold text-(--color-text)">{titulo}</p>
       <p className="mt-1 text-xs text-(--color-text-weak)">
         Lê a aba &quot;{nomeAba}&quot; da planilha oficial. Correspondência por código + disciplina + revisão + N° AT —
-        um registro já cadastrado é atualizado (nunca duplicado); um campo vazio na planilha nunca apaga um valor já
-        preenchido no sistema. Nada é gravado até você revisar a prévia e confirmar.
+        um registro já cadastrado é atualizado (nunca duplicado); quando mais de uma linha tem essa mesma combinação,
+        cada linha vira um registro próprio, identificado pelo número do Item. Um campo vazio na planilha nunca apaga
+        um valor já preenchido no sistema. Nada é gravado até você revisar a prévia e confirmar.
       </p>
 
       {!plano && !relatorio && (
@@ -742,6 +743,9 @@ function UploadPlanilha({ tabela, titulo, nomeAba }: { tabela: TabelaPlanilha; t
             {resumo.inconsistentes > 0 && (
               <span className="rounded-full bg-(--color-red-bg) px-3 py-1 font-medium text-(--color-red)">{resumo.inconsistentes} com inconsistência</span>
             )}
+            {resumo.itensAAjustar > 0 && (
+              <span className="rounded-full bg-(--color-surface-2) px-3 py-1 font-medium text-(--color-text-weak)">{resumo.itensAAjustar} com n° de Item a igualar ao da planilha</span>
+            )}
           </div>
 
           {plano.colunasNaoMapeadas.length > 0 && (
@@ -755,7 +759,7 @@ function UploadPlanilha({ tabela, titulo, nomeAba }: { tabela: TabelaPlanilha; t
               <p className="text-xs font-semibold text-(--color-text)">Conflitos a resolver — por padrão, aplica o valor da planilha</p>
               <div className="mt-2 flex flex-col gap-3">
                 {itensComConflito.map((item: ItemPlanoImportacao) => {
-                  const chaveStr = JSON.stringify(item.chave);
+                  const chaveStr = chaveResolucao(item);
                   return (
                     <div key={chaveStr} className="rounded-xl border border-(--color-border) px-3 py-2.5">
                       <p className="text-xs font-medium text-(--color-text)">Linha {item.linhaPlanilha ?? "?"} — {item.identificacao}</p>
@@ -827,7 +831,8 @@ function UploadPlanilha({ tabela, titulo, nomeAba }: { tabela: TabelaPlanilha; t
           <p className="mt-4 rounded-xl border border-(--color-green)/30 bg-(--color-green)/10 px-4 py-3 text-sm text-(--color-green)">
             Importação concluída — {relatorio.lidos} lidos · {relatorio.novos} novos · {relatorio.atualizados} atualizados
             ({relatorio.conflitosTratados} conflitos tratados) · {relatorio.ignoradosSemMudanca} sem mudança ·
-            {" "}{relatorio.ignoradosArquivados} já arquivados · {relatorio.inconsistentes} com inconsistência.
+            {" "}{relatorio.ignoradosArquivados} já arquivados · {relatorio.inconsistentes} com inconsistência
+            {relatorio.itensAjustados > 0 ? ` · ${relatorio.itensAjustados} com n° de Item igualado ao da planilha` : ""}.
           </p>
           {relatorio.erros.length > 0 && (
             <div className="mt-3">
