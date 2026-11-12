@@ -76,7 +76,7 @@ export function TabelaProjetos({
   const modoCompleto = total != null && tamanho != null && limite != null && tamanhosPagina != null && disciplinas != null && filtros != null;
 
   return (
-    <div className="mx-auto max-w-6xl px-8 py-10">
+    <div className="mx-auto max-w-[100rem] px-4 py-8 sm:px-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-(--color-text)">{titulo}</h1>
@@ -160,7 +160,7 @@ export function TabelaProjetos({
                 {podeEditar && (
                   <Link
                     href={`/${tabela}/analise/${p.id}`}
-                    className="rounded-full border border-(--color-border) px-3 py-1 text-xs font-medium text-(--color-text) hover:bg-(--color-surface-2)"
+                    className="whitespace-nowrap rounded-full border border-(--color-border) px-3 py-1 text-xs font-medium text-(--color-text) hover:bg-(--color-surface-2)"
                   >
                     Editar
                   </Link>
@@ -178,43 +178,43 @@ export function TabelaProjetos({
         </div>
       ) : (
         <div className="mt-6 overflow-x-auto rounded-2xl border border-(--color-border) bg-(--color-surface-1)">
-          <table className="w-full min-w-[920px] text-left text-sm">
+          <table className="w-full text-left text-sm">
             <thead>
               <tr className="text-xs font-medium text-(--color-text-dim)">
-                <th className="px-5 py-3">Item</th>
-                <th className="px-5 py-3">Código</th>
-                <th className="px-5 py-3">{colunaEntidade}</th>
-                <th className="px-5 py-3">Disciplina</th>
-                <th className="px-5 py-3">Rev.</th>
-                <th className="px-5 py-3">N° AT</th>
-                <th className="px-5 py-3">Status</th>
-                <th className="px-5 py-3">Data Limite</th>
-                <th className="px-5 py-3">Responsável</th>
-                <th className="px-5 py-3">Ação</th>
+                <th className="px-3 py-3">Item</th>
+                <th className="px-3 py-3">Código</th>
+                <th className="px-3 py-3">{colunaEntidade}</th>
+                <th className="px-3 py-3">Disciplina</th>
+                <th className="px-3 py-3">Rev.</th>
+                <th className="px-3 py-3">N° AT</th>
+                <th className="px-3 py-3">Status</th>
+                <th className="px-3 py-3">Data Limite</th>
+                <th className="px-3 py-3">Responsável</th>
+                <th className="px-3 py-3 min-w-[11rem]">Ação</th>
               </tr>
             </thead>
             <tbody>
               {projetos.map((p) => (
                 <tr key={p.id} className="border-t border-(--color-border) first:border-0 hover:bg-(--color-surface-2)/60">
-                  <td className="px-5 py-3.5 tabular-nums text-(--color-text-weak)">{p.item ?? "—"}</td>
-                  <td className="px-5 py-3.5 font-medium text-(--color-text)">{p.codigo}</td>
-                  <td className="px-5 py-3.5 text-(--color-text)">{p.entidade}</td>
-                  <td className="px-5 py-3.5 text-(--color-text-weak)">{p.disciplina}</td>
-                  <td className="px-5 py-3.5 text-(--color-text-weak)">R{String(p.revisao).padStart(2, "0")}</td>
-                  <td className="px-5 py-3.5 text-(--color-text-weak)">{p.num_at || "—"}</td>
-                  <td className="px-5 py-3.5">
+                  <td className="px-3 py-3 tabular-nums text-(--color-text-weak)">{p.item ?? "—"}</td>
+                  <td className="px-3 py-3 font-medium text-(--color-text)">{p.codigo}</td>
+                  <td className="px-3 py-3 text-(--color-text)">{p.entidade}</td>
+                  <td className="px-3 py-3 text-(--color-text-weak)">{p.disciplina}</td>
+                  <td className="px-3 py-3 text-(--color-text-weak)">R{String(p.revisao).padStart(2, "0")}</td>
+                  <td className="px-3 py-3 text-(--color-text-weak)">{p.num_at || "—"}</td>
+                  <td className="px-3 py-3">
                     <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${CORES_STATUS[p.status_analise] ?? "bg-(--color-surface-2) text-(--color-text-weak)"}`}>
                       {p.status_analise}
                     </span>
                   </td>
-                  <td className="px-5 py-3.5 text-(--color-text-weak)">{formatarData(p.data_limite)}</td>
-                  <td className="px-5 py-3.5 text-(--color-text-weak)">{p.responsavel || "—"}</td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-2">
+                  <td className="px-3 py-3 text-(--color-text-weak)">{formatarData(p.data_limite)}</td>
+                  <td className="px-3 py-3 text-(--color-text-weak)">{p.responsavel || "—"}</td>
+                  <td className="px-3 py-3">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       {podeEditar && (
                         <Link
                           href={`/${tabela}/analise/${p.id}`}
-                          className="rounded-full border border-(--color-border) px-3 py-1 text-xs font-medium text-(--color-text) hover:bg-(--color-surface-2)"
+                          className="whitespace-nowrap rounded-full border border-(--color-border) px-3 py-1 text-xs font-medium text-(--color-text) hover:bg-(--color-surface-2)"
                         >
                           Editar
                         </Link>

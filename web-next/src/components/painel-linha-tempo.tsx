@@ -45,7 +45,7 @@ function CartaoKpi({ titulo, valor, cor }: { titulo: string; valor: string; cor?
 
 function Etapa({ titulo, data, dias, responsavel, observacao }: { titulo: string; data?: string | null; dias?: number | null; responsavel?: string | null; observacao?: string }) {
   return (
-    <div className="rounded-xl border border-(--color-border) bg-(--color-surface-1) px-4 py-3">
+    <div className="quebra-evitar rounded-xl border border-(--color-border) bg-(--color-surface-1) px-4 py-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <p className="text-sm font-medium text-(--color-text)">{titulo}</p>
         <div className="text-right text-xs text-(--color-text-weak)">
@@ -111,6 +111,41 @@ export function SequenciaProjeto({ linhasProjeto }: { linhasProjeto: LinhaRevisa
       {ordenado[ordenado.length - 1]?.observacoes?.trim() && (
         <p className="text-xs text-(--color-text-dim)">Observações: {ordenado[ordenado.length - 1].observacoes}</p>
       )}
+    </div>
+  );
+}
+
+/** Versão de papel: só aparece na impressão. Mostra todos os projetos do
+ * código com a sequência completa aberta (a tela deixa cada um recolhido). */
+function RelatorioImpressao({
+  modulo, entidade, projetos, linhas,
+}: {
+  modulo: Origem;
+  entidade: ReturnType<typeof consolidadoPorEntidade>[number];
+  projetos: ReturnType<typeof projetosPorEntidade>;
+  linhas: LinhaRevisao[];
+}) {
+  const ordenados = [...projetos].sort((a, b) => (a.disciplina || "").localeCompare(b.disciplina || "") || (a.numAt || "").localeCompare(b.numAt || ""));
+  return (
+    <div className="somente-impressao text-[11px] leading-snug text-black">
+      <div className="border-b-2 border-black pb-2">
+        <p className="text-[10px] uppercase tracking-wider">GAT 2026 · Tecnoplano — Linha do Tempo</p>
+        <h1 className="text-lg font-bold">{entidade.codigo || "—"} · {entidade.nome}</h1>
+        <p>
+          {modulo === "prestadores" ? "Prestador" : "Cessionário"} · emitido em {new Date().toLocaleString("pt-BR")}
+        </p>
+      </div>
+      <p className="mt-2">
+        {entidade.qtdProjetos} projeto(s) · média de retorno {entidade.mediaDias ?? "—"} dia(s) útil(eis) · fora do SLA {entidade.qtdForaSla} · dentro do SLA {entidade.pctDentroSla}%
+      </p>
+      {ordenados.map((projeto) => (
+        <section key={`${projeto.chaveEntidade}-${projeto.numAt}-${projeto.disciplina}-${projeto.ids[0]}`} className="mt-4">
+          <h2 className="quebra-evitar border-b border-black text-sm font-semibold">
+            AT {projeto.numAt || "—"} · {projeto.disciplina || "—"} · REV{String(projeto.revisaoAtual).padStart(2, "0")} · {projeto.qtdRevisoes} revisão(ões)
+          </h2>
+          <SequenciaProjeto linhasProjeto={linhas.filter((l) => projeto.ids.includes(l.id))} />
+        </section>
+      ))}
     </div>
   );
 }
@@ -204,7 +239,9 @@ export function PainelLinhaTempo({
   const hrefProjetos = modulo === "prestadores" ? "/prestadores/projetos" : "/cessionarios/projetos";
 
   return (
-    <div className="mx-auto max-w-6xl px-8 py-10">
+    <>
+    {entidade && <RelatorioImpressao modulo={modulo} entidade={entidade} projetos={projetosEntidade} linhas={linhasFiltradas} />}
+    <div className="nao-imprimir mx-auto max-w-6xl px-8 py-10">
       <h1 className="text-2xl font-semibold text-(--color-text)">Linha do Tempo — Consolidada por Código</h1>
       <p className="mt-1 max-w-3xl text-sm text-(--color-text-weak)">
         Consolida todos os projetos, ATs, disciplinas e revisões do mesmo código de Prestador/Cessionário, com o
@@ -336,6 +373,12 @@ export function PainelLinhaTempo({
           {entidade.qtdInconsistentes > 0 && (
             <p className="mt-1 text-xs text-(--color-purple)">{entidade.qtdInconsistentes} intervalo(s) com data de revisão inconsistente — verifique as datas de entrada na sequência abaixo.</p>
           )}
+          <button
+            type="button" onClick={() => window.print()}
+            className="mr-2 mt-3 inline-block rounded-full bg-(--color-navy) px-4 py-1.5 text-xs font-medium text-white hover:opacity-90"
+          >
+            Imprimir relatório (A4)
+          </button>
           {entidade.codigo && (
             <Link href={hrefProjetos} className="mt-3 inline-block rounded-full border border-(--color-border) px-3 py-1.5 text-xs font-medium text-(--color-navy) hover:bg-(--color-surface-2)">
               Ver projetos deste código
@@ -353,9 +396,10 @@ export function PainelLinhaTempo({
       )}
 
       <p className="mt-8 text-xs text-(--color-text-dim)">
-        Relatório do {modulo === "prestadores" ? "Prestador" : "Cessionário"} (Word) ainda não disponível nesta
-        versão — use o sistema atual enquanto esse recurso não chega por aqui.
+        Para levar o histórico completo de um código em papel ou PDF, selecione-o em &quot;Detalhamento por código&quot; e use
+        &quot;Imprimir relatório (A4)&quot;.
       </p>
     </div>
+    </>
   );
 }

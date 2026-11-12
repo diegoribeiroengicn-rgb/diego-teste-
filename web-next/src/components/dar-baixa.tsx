@@ -142,7 +142,7 @@ export function BotaoDarBaixa({ tabela, projetoId, statusAtual }: { tabela: "pre
 
   if (!aberto) {
     return (
-      <button onClick={abrir} className="rounded-full border border-(--color-border) px-3 py-1 text-xs font-medium text-(--color-text) hover:bg-(--color-surface-2)">
+      <button onClick={abrir} className="whitespace-nowrap rounded-full border border-(--color-border) px-3 py-1 text-xs font-medium text-(--color-text) hover:bg-(--color-surface-2)">
         {rotulo}
       </button>
     );

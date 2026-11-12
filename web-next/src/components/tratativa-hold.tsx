@@ -64,7 +64,7 @@ export function BotaoTratativaHold({
 
   if (!aberto) {
     return (
-      <button onClick={() => setAberto(true)} className="rounded-full border border-(--color-border) px-3 py-1 text-xs font-medium text-(--color-text) hover:bg-(--color-surface-2)">
+      <button onClick={() => setAberto(true)} className="whitespace-nowrap rounded-full border border-(--color-border) px-3 py-1 text-xs font-medium text-(--color-text) hover:bg-(--color-surface-2)">
         Tratativa HOLD
       </button>
     );

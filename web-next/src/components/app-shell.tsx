@@ -70,9 +70,9 @@ export function AppShell({
   );
 
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
+    <div className="flex min-h-screen flex-col md:flex-row print:block print:min-h-0">
       {/* Barra superior — só no mobile, com o botão que abre o menu lateral. */}
-      <div className="flex items-center justify-between border-b border-(--color-border) bg-(--color-surface-1) px-4 py-3 md:hidden">
+      <div className="flex items-center justify-between border-b border-(--color-border) bg-(--color-surface-1) px-4 py-3 md:hidden print:hidden">
         <Image src="/tecnoplano_logo.png" alt="Tecnoplano" width={100} height={36} className="h-7 w-auto" />
         <button
           type="button"
@@ -94,7 +94,7 @@ export function AppShell({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 -translate-x-full flex-col border-r border-(--color-border) bg-(--color-surface-1) px-4 py-5 transition-transform duration-200 md:static md:flex md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 -translate-x-full flex-col border-r border-(--color-border) bg-(--color-surface-1) px-4 py-5 transition-transform duration-200 print:hidden md:static md:flex md:translate-x-0 ${
           aberto ? "translate-x-0" : ""
         }`}
       >

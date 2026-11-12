@@ -117,3 +117,15 @@ body {
 * {
   border-color: var(--color-border);
 }
+
+/* Impressão (A4) — a Linha do Tempo imprime só o relatório do código
+ * escolhido: o menu, os filtros e os botões ficam de fora. */
+.somente-impressao { display: none; }
+@media print {
+  @page { size: A4; margin: 14mm 12mm; }
+  html, body { background: #fff !important; color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .nao-imprimir { display: none !important; }
+  .somente-impressao { display: block !important; }
+  .quebra-evitar { break-inside: avoid; page-break-inside: avoid; }
+  .quebra-antes { break-before: page; page-break-before: always; }
+}
