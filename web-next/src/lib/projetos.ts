@@ -74,6 +74,9 @@ export type FiltroProjetosLista = {
   dataLimiteDe?: string;
   dataLimiteAte?: string;
   analistaProprio?: string | null;
+  /** "" = ordem padrão (aguardando análise primeiro); "item" / "item_desc"
+   * = ordem numérica da planilha (coluna Item), crescente ou decrescente. */
+  ordem?: string;
   /** Tamanho da página carregada (30/50/100, crescendo a cada "Carregar
    * mais") — sempre um LIMIT sobre a base completa no banco, nunca sobre
    * uma lista já truncada em memória. */
@@ -142,7 +145,10 @@ export async function buscarProjetosPaginado(tabela: Tabela, filtro: FiltroProje
     CASE WHEN status_analise = ANY(${STATUS_PENDENTES_SQL}) THEN 0 ELSE 1 END ASC,
     CASE WHEN status_analise = ANY(${STATUS_PENDENTES_SQL}) THEN data_limite END ASC NULLS LAST,
     CASE WHEN status_analise <> ALL(${STATUS_PENDENTES_SQL}) THEN atualizado_em END DESC NULLS LAST`;
-  if (filtro.analistaProprio?.trim()) {
+  if (filtro.ordem === "item" || filtro.ordem === "item_desc") {
+    // Ordem da planilha: só o número do Item, sem priorizar status nem analista.
+    ordem = `item ${filtro.ordem === "item" ? "ASC" : "DESC"} NULLS LAST, id ${filtro.ordem === "item" ? "ASC" : "DESC"}`;
+  } else if (filtro.analistaProprio?.trim()) {
     parametros.push(filtro.analistaProprio.trim());
     ordem = `(UPPER(TRIM(responsavel)) = UPPER($${parametros.length})) DESC, ${ordem}`;
   }

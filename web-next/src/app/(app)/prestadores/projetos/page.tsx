@@ -10,7 +10,7 @@ const LIMITE_MAXIMO = 2000;
 export default async function PaginaProjetosPrestadores({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; codigo?: string; entidade?: string; status?: string; disciplina?: string; de?: string; ate?: string; tamanho?: string; limite?: string }>;
+  searchParams: Promise<{ q?: string; codigo?: string; entidade?: string; status?: string; disciplina?: string; de?: string; ate?: string; ordem?: string; tamanho?: string; limite?: string }>;
 }) {
   const sessao = await obterSessao();
   const sp = await searchParams;
@@ -28,6 +28,7 @@ export default async function PaginaProjetosPrestadores({
     dataLimiteDe: (sp.de || "").trim(),
     dataLimiteAte: (sp.ate || "").trim(),
     analistaProprio: sessao?.analistaVinculado || null,
+    ordem: sp.ordem === "item" || sp.ordem === "item_desc" ? sp.ordem : "",
     limite,
   };
   const podeCadastrar = sessao ? await areaPermitida(sessao.id, sessao.perfil, "prestadores.cadastrar") : false;
@@ -49,7 +50,7 @@ export default async function PaginaProjetosPrestadores({
       limite={limite}
       tamanhosPagina={TAMANHOS_PAGINA}
       disciplinas={disciplinas}
-      filtros={{ q: busca, codigo: filtro.termoCodigo, entidade: filtro.termoEntidade, status: filtro.status, disciplina: filtro.disciplina, de: filtro.dataLimiteDe, ate: filtro.dataLimiteAte }}
+      filtros={{ q: busca, codigo: filtro.termoCodigo, entidade: filtro.termoEntidade, status: filtro.status, disciplina: filtro.disciplina, de: filtro.dataLimiteDe, ate: filtro.dataLimiteAte, ordem: filtro.ordem }}
       analistaProprio={sessao?.analistaVinculado || null}
       temAnalistaProprio={!!sessao?.analistaVinculado}
       podeCadastrar={podeCadastrar}

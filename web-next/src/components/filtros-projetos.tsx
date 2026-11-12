@@ -12,6 +12,7 @@ export type ValoresFiltrosProjetos = {
   disciplina: string;
   de: string;
   ate: string;
+  ordem: string;
 };
 
 const classeInput = "w-full rounded-full border border-(--color-border) bg-(--color-surface-1) px-3.5 py-2 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-navy) focus:ring-2 focus:ring-(--color-navy)/15";
@@ -53,7 +54,7 @@ export function FiltrosProjetos({
     router.push(`${pathname}?${params.toString()}`);
   }
 
-  const temFiltroAtivo = !!(valores.q || valores.codigo || valores.entidade || valores.status || valores.disciplina || valores.de || valores.ate);
+  const temFiltroAtivo = !!(valores.q || valores.codigo || valores.entidade || valores.status || valores.disciplina || valores.de || valores.ate || valores.ordem);
 
   function limparFiltros() {
     setCodigo(""); setEntidade(""); setQ("");
@@ -108,6 +109,14 @@ export function FiltrosProjetos({
             <input type="date" value={valores.ate} onChange={(e) => navegar({ ate: e.target.value })} className={classeInputData} />
           </label>
         </div>
+        <label className="flex items-center gap-1.5 text-xs text-(--color-text-weak)">
+          <span className="font-medium text-(--color-text-dim)">Ordenar por:</span>
+          <select value={valores.ordem} onChange={(e) => navegar({ ordem: e.target.value })} className={classeInputData}>
+            <option value="">Padrão (pendentes primeiro, por data limite)</option>
+            <option value="item">Ordem da planilha (Item 1 → último)</option>
+            <option value="item_desc">Ordem da planilha (último → Item 1)</option>
+          </select>
+        </label>
         {temFiltroAtivo && (
           <button onClick={limparFiltros} className="rounded-full border border-(--color-border) px-3 py-1.5 text-xs font-medium text-(--color-navy) hover:bg-(--color-surface-2)">
             Limpar filtros
