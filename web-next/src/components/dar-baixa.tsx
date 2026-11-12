@@ -42,6 +42,9 @@ export function BotaoDarBaixa({ tabela, projetoId, statusAtual }: { tabela: "pre
   const [textoGerado, setTextoGerado] = useState<string | null>(null);
   const [resumoGerado, setResumoGerado] = useState("");
   const [copiado, setCopiado] = useState(false);
+  const [desfazer, setDesfazer] = useState<{ anterior: unknown; baixaEm: string } | null>(null);
+  const [desfeita, setDesfeita] = useState(false);
+  const [desfazendo, setDesfazendo] = useState(false);
   const campoTexto = useRef<HTMLTextAreaElement>(null);
 
   function abrir() {
@@ -105,10 +108,29 @@ export function BotaoDarBaixa({ tabela, projetoId, statusAtual }: { tabela: "pre
         setErro(corpo?.erro || "Erro ao dar baixa na análise.");
         return;
       }
+      setDesfazer({ anterior: corpo.registro.anterior, baixaEm: corpo.registro.baixaEm });
+      setDesfeita(false);
       setTextoGerado(montarTextoBaixa(corpo.registro, status, codigoDisciplina.trim(), mfiles, drive, email));
       setResumoGerado(montarResumoBaixa(corpo.registro, status, codigoDisciplina.trim(), mfiles, drive, email));
     } finally {
       setSalvando(false);
+    }
+  }
+
+  async function desfazerBaixa() {
+    if (!desfazer || !window.confirm("Desfazer esta baixa? A análise volta ao estado em que estava antes.")) return;
+    setDesfazendo(true);
+    setErro(null);
+    try {
+      const resposta = await fetch(`/api/analises/${tabela}/${projetoId}/baixa`, {
+        method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify(desfazer),
+      });
+      const corpo = await resposta.json().catch(() => null);
+      if (!resposta.ok) { setErro(corpo?.erro || "Não foi possível desfazer a baixa."); return; }
+      setDesfeita(true);
+      setDesfazer(null);
+    } finally {
+      setDesfazendo(false);
     }
   }
 
@@ -235,9 +257,15 @@ export function BotaoDarBaixa({ tabela, projetoId, statusAtual }: { tabela: "pre
 
         {textoGerado != null && (
           <>
-            <p className="mt-3 rounded-xl border border-(--color-green)/30 bg-(--color-green)/10 px-4 py-3 text-sm text-(--color-green)">
-              Baixa confirmada.
-            </p>
+            {desfeita ? (
+              <p className="mt-3 rounded-xl border border-(--color-orange)/30 bg-(--color-orange-bg) px-4 py-3 text-sm text-(--color-orange)">
+                Baixa desfeita — a análise voltou ao estado anterior. O histórico registra a baixa e o desfazer.
+              </p>
+            ) : (
+              <p className="mt-3 rounded-xl border border-(--color-green)/30 bg-(--color-green)/10 px-4 py-3 text-sm text-(--color-green)">
+                Baixa confirmada. Se foi engano, use &quot;Desfazer baixa&quot; abaixo.
+              </p>
+            )}
 
             <p className={`mt-4 ${labelClasse}`}>Resumo da baixa</p>
             <p className="mt-1 whitespace-pre-line rounded-xl border border-(--color-border) bg-(--color-bg) px-4 py-3 text-sm text-(--color-text)">
@@ -275,7 +303,12 @@ export function BotaoDarBaixa({ tabela, projetoId, statusAtual }: { tabela: "pre
             </div>
 
             {erro && <p className="mt-3 text-sm text-(--color-red)">{erro}</p>}
-            <div className="mt-4 flex gap-3">
+            <div className="mt-4 flex flex-wrap gap-3">
+              {desfazer && !desfeita && (
+                <button onClick={desfazerBaixa} disabled={desfazendo} className="whitespace-nowrap rounded-full border border-(--color-red) px-5 py-2 text-sm font-medium text-(--color-red) hover:bg-(--color-red-bg) disabled:opacity-60">
+                  {desfazendo ? "Desfazendo…" : "Desfazer baixa"}
+                </button>
+              )}
               <button onClick={fechar} className="rounded-full border border-(--color-border) px-5 py-2 text-sm font-medium text-(--color-text)">
                 Fechar
               </button>

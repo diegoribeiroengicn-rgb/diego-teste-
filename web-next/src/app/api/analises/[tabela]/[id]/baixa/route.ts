@@ -3,7 +3,7 @@ import { obterSessao } from "@/lib/session";
 import { registrarAtividade } from "@/lib/atividades";
 import { PERFIL_CONSULTA } from "@/lib/administracao-calculo";
 import { STATUS_FINAIS_BAIXA, lerQuantidadeDocumentos } from "@/lib/resumo-conclusao-calculo";
-import { darBaixaAnalise, obterRegistroParaBaixa, type TabelaBaixa } from "@/lib/resumo-conclusao";
+import { darBaixaAnalise, desfazerBaixaAnalise, obterRegistroParaBaixa, type EstadoAnteriorBaixa, type TabelaBaixa } from "@/lib/resumo-conclusao";
 
 function validarTabela(tabela: string): tabela is TabelaBaixa {
   return tabela === "prestadores" || tabela === "cessionarios";
@@ -77,5 +77,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tab
       { erro: duplicada ? "Não foi possível registrar a baixa agora (conflito no histórico). Tente novamente; se persistir, avise a Administração." : exc instanceof Error ? exc.message : "Erro ao dar baixa na análise." },
       { status: duplicada ? 409 : 400 },
     );
+  }
+}
+
+/** Desfaz a baixa recém-confirmada (botão "Desfazer baixa" da confirmação). */
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ tabela: string; id: string }> }) {
+  const sessao = await obterSessao();
+  if (!sessao) return NextResponse.json({ erro: "Sessão expirada." }, { status: 401 });
+  if (sessao.perfil === PERFIL_CONSULTA) return NextResponse.json({ erro: "Acesso não autorizado a desfazer baixa." }, { status: 403 });
+  const { tabela, id } = await params;
+  if (!validarTabela(tabela)) return NextResponse.json({ erro: "Tabela inválida." }, { status: 400 });
+  const corpo = (await req.json().catch(() => null)) as { anterior?: EstadoAnteriorBaixa; baixaEm?: string } | null;
+  if (!corpo?.anterior || !corpo.baixaEm) return NextResponse.json({ erro: "Dados para desfazer a baixa ausentes." }, { status: 400 });
+  try {
+    await desfazerBaixaAnalise(tabela, Number(id), corpo.anterior, corpo.baixaEm, sessao.username);
+    void registrarAtividade(sessao.username, sessao.perfil, "ANALISE_BAIXA_DESFEITA", tabela, `#${id}`);
+    return NextResponse.json({ ok: true });
+  } catch (exc) {
+    return NextResponse.json({ erro: exc instanceof Error ? exc.message : "Erro ao desfazer a baixa." }, { status: 409 });
   }
 }
