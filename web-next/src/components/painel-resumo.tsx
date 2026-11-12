@@ -1,5 +1,5 @@
 import { BuscaAnalista } from "@/components/busca-analista";
-import type { Projeto } from "@/lib/projetos";
+import type { ContagemProjetos } from "@/lib/projetos";
 
 const CORES_STATUS: Record<string, string> = {
   "EM ANÁLISE": "bg-(--color-blue-2)",
@@ -9,11 +9,11 @@ const CORES_STATUS: Record<string, string> = {
   "NÃO LIBERADO": "bg-(--color-red)",
 };
 
-function contarPor(projetos: Projeto[], campo: "status_analise" | "disciplina"): [string, number][] {
+function contarPor(contagens: ContagemProjetos[], campo: "status_analise" | "disciplina"): [string, number][] {
   const contagem = new Map<string, number>();
-  for (const p of projetos) {
-    const chave = p[campo] || "—";
-    contagem.set(chave, (contagem.get(chave) ?? 0) + 1);
+  for (const c of contagens) {
+    const chave = c[campo] || "—";
+    contagem.set(chave, (contagem.get(chave) ?? 0) + c.n);
   }
   return [...contagem.entries()].sort((a, b) => b[1] - a[1]);
 }
@@ -48,16 +48,20 @@ function BarraLista({ titulo, dados, total }: { titulo: string; dados: [string, 
 
 export function PainelResumo({
   titulo,
-  projetos,
+  contagens,
   busca,
 }: {
   titulo: string;
-  projetos: Projeto[];
+  /** Contagem por status e disciplina sobre a base completa (`contarProjetos`). */
+  contagens: ContagemProjetos[];
   busca: string;
 }) {
-  const porStatus = contarPor(projetos, "status_analise");
-  const porDisciplina = contarPor(projetos, "disciplina");
-  const emAndamento = projetos.filter((p) => p.status_analise === "EM ANÁLISE" || p.status_analise === "EM HOLD").length;
+  const porStatus = contarPor(contagens, "status_analise");
+  const porDisciplina = contarPor(contagens, "disciplina");
+  const total = contagens.reduce((s, c) => s + c.n, 0);
+  const emAndamento = contagens
+    .filter((c) => c.status_analise === "EM ANÁLISE" || c.status_analise === "EM HOLD")
+    .reduce((s, c) => s + c.n, 0);
 
   return (
     <div className="mx-auto max-w-6xl px-8 py-10">
@@ -73,7 +77,7 @@ export function PainelResumo({
 
       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) px-6 py-5">
-          <p className="text-3xl font-semibold tabular-nums text-(--color-text)">{projetos.length}</p>
+          <p className="text-3xl font-semibold tabular-nums text-(--color-text)">{total}</p>
           <p className="mt-1 text-xs text-(--color-text-weak)">total de análises</p>
         </div>
         <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) px-6 py-5">
@@ -81,14 +85,14 @@ export function PainelResumo({
           <p className="mt-1 text-xs text-(--color-text-weak)">em andamento (análise + hold)</p>
         </div>
         <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) px-6 py-5">
-          <p className="text-3xl font-semibold tabular-nums text-(--color-green)">{projetos.length - emAndamento}</p>
+          <p className="text-3xl font-semibold tabular-nums text-(--color-green)">{total - emAndamento}</p>
           <p className="mt-1 text-xs text-(--color-text-weak)">concluídas</p>
         </div>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <BarraLista titulo="Por status" dados={porStatus} total={projetos.length} />
-        <BarraLista titulo="Por disciplina" dados={porDisciplina} total={projetos.length} />
+        <BarraLista titulo="Por status" dados={porStatus} total={total} />
+        <BarraLista titulo="Por disciplina" dados={porDisciplina} total={total} />
       </div>
     </div>
   );

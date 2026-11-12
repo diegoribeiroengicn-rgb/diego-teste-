@@ -179,3 +179,25 @@ export async function listarDisciplinasDistintas(tabela: Tabela): Promise<string
   );
   return rows.map((r) => r.disciplina);
 }
+
+export type ContagemProjetos = { status_analise: string; disciplina: string | null; n: number };
+
+/** Contagem de análises por status e disciplina sobre a base completa
+ * (não arquivadas) — fonte dos indicadores do Dashboard. Agregada no
+ * banco de propósito: somar a partir de `buscarProjetos` contaria só os
+ * registros que cabem no LIMIT daquela listagem. */
+export async function contarProjetos(tabela: Tabela, termoResponsavel: string): Promise<ContagemProjetos[]> {
+  const pool = obterPool();
+  const condicoes = [`arquivado_em IS NULL`];
+  const parametros: unknown[] = [];
+  if (termoResponsavel) {
+    parametros.push(termoResponsavel);
+    condicoes.push(`UPPER(responsavel) LIKE UPPER('%' || $${parametros.length} || '%')`);
+  }
+  const { rows } = await pool.query<ContagemProjetos>(
+    `SELECT status_analise, disciplina, COUNT(*)::int AS n FROM ${tabela}
+     WHERE ${condicoes.join(" AND ")} GROUP BY status_analise, disciplina`,
+    parametros,
+  );
+  return rows;
+}

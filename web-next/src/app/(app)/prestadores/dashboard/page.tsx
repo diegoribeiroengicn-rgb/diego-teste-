@@ -1,4 +1,4 @@
-import { buscarProjetos } from "@/lib/projetos";
+import { contarProjetos } from "@/lib/projetos";
 import { PainelResumo } from "@/components/painel-resumo";
 
 export default async function PaginaDashboardPrestadores({
@@ -9,7 +9,7 @@ export default async function PaginaDashboardPrestadores({
   const { q } = await searchParams;
   const busca = (q || "").trim();
 
-  const projetos = await buscarProjetos("prestadores", { termoResponsavel: busca });
+  const contagens = await contarProjetos("prestadores", busca);
 
-  return <PainelResumo titulo="Prestadores — Dashboard" projetos={projetos} busca={busca} />;
+  return <PainelResumo titulo="Prestadores — Dashboard" contagens={contagens} busca={busca} />;
 }
