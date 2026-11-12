@@ -7,18 +7,21 @@
  * sobrecarga, e da projeção de documentos ao longo dos meses.
  *
  * Adaptações deliberadas em relação ao protótipo original:
- * - `normAT` aqui só normaliza (trim + maiúsculas) em vez de validar
- *   contra o padrão antigo "NNNN/AA" — o `num_at` atual do GAT usa o
- *   formato composto (ex.: "AT-0466-26-P221-400-00"), então validar
- *   contra o padrão antigo descartaria ATs válidos.
+ * - `normAT` segue o protótipo (padrão "NNNN/AA", com zeros à esquerda:
+ *   "387/25" e "0387/25" são a mesma AT) e aceita também o número
+ *   composto ("AT-0466-26-P221-400-00"), reduzido à mesma forma. Valor
+ *   fora desses padrões conta como "sem nº de AT", como no protótipo.
  * - Não há mais SLA por prestador fixo no código (`slaPOver`/`slaIOver`
  *   do protótipo traziam uma lista hardcoded de 6 códigos) — o usuário
  *   configura os desvios de SLA na própria tela, sempre vazio por padrão.
- * - Não porta a camada de detecção de inconsistências de planilha do
- *   protótipo (`issues`: colunas S/T invertidas, nº de AT com ano
- *   digitado errado) — é uma checagem de qualidade de dados na hora de
- *   ler a planilha original, sem equivalente útil aqui, já que este
- *   sistema lê direto da tabela `prestadores` (já validada na entrada).
+ * - Da camada de inconsistências de planilha do protótipo (`issues`)
+ *   ficam só as correções que mudam o resultado — N° AT e REV. AT
+ *   invertidos, e ano do nº de AT digitado errado quando a mesma AT
+ *   existe no código com /25 ou /26 — registradas como aviso no item.
+ *   A lista de inconsistências em si não é exibida.
+ * - Não porta o modo "projeção pela média real" (`slaMode`/`histTimes`):
+ *   a projeção usa sempre os SLAs configurados, que é o padrão do
+ *   protótipo.
  * - Não porta `Pdays` (campo "P" do protótipo) — não há coluna
  *   equivalente em `prestadores`; nenhum outro cálculo do motor depende
  *   dele no protótipo, só é exibido à parte.
@@ -41,11 +44,13 @@ export { iso2dn, dn2iso, fmt, dow, addMonths, Calendario };
 
 const up = (s: unknown): string => (s == null ? "" : String(s).replace(/\s+/g, " ").trim().toUpperCase());
 
-const AT_VAZIOS = new Set(["", "***", "-", "N/A", "NAN", "NONE"]);
-function normAT(raw: string | null | undefined): string | null {
-  if (raw == null) return null;
-  const t = String(raw).trim().toUpperCase();
-  return t && !AT_VAZIOS.has(t) ? t : null;
+const AT_RE = /^(?:AT\s*)?(\d{1,4})\s*\/\s*(\d{2})$/i;
+const AT_COMPOSTO_RE = /^AT-(\d{1,4})-(\d{2})(?:-|$)/i;
+function normAT(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const t = raw.trim();
+  const m = t.match(AT_RE) ?? t.match(AT_COMPOSTO_RE);
+  return m ? `${m[1].padStart(4, "0")}/${m[2]}` : null;
 }
 
 export const S_LIB = "LIBERADO";
@@ -81,8 +86,10 @@ export type LinhaBrutaGantt = {
   M: string | null;
   N: string | null;
   O: string | null;
-  at: string | null;
-  revAT: number | null;
+  /** N° AT e REV. AT como estão na origem. Aceitam texto e número porque
+   * as duas colunas às vezes vêm trocadas (nº da AT digitado em REV. AT). */
+  at: string | number | null;
+  revAT: number | string | null;
   resp: string | null;
   status: string | null;
   /** `prestadores.nivel_prioridade` (1, 2, 3 ou null) — fonte única de
@@ -92,6 +99,7 @@ export type LinhaBrutaGantt = {
 
 type LinhaPreparada = {
   row: number;
+  item: number | null;
   code: string;
   status: string | null;
   resp: string;
@@ -116,30 +124,62 @@ type LinhaPreparada = {
 };
 
 export function prepRows(raw: LinhaBrutaGantt[]): { rows: LinhaPreparada[] } {
-  const rows = raw.map((r0): LinhaPreparada => ({
-    row: r0.row,
-    code: up(r0.code),
-    status: up(r0.status) || null,
-    resp: up(r0.resp) || "SEM RESPONSÁVEL",
-    disc: up(r0.disc) || up(r0.discE) || "SEM DISCIPLINA",
-    pr: typeof r0.pr === "number" ? r0.pr : 0,
-    rev: typeof r0.rev === "number" ? r0.rev : null,
-    prest: r0.prest,
-    obra: r0.obra,
-    Kd: iso2dn(r0.K),
-    Ld: iso2dn(r0.L),
-    Md: iso2dn(r0.M),
-    Nd: iso2dn(r0.N),
-    Od: iso2dn(r0.O),
-    Lmanual: !!r0.Lmanual,
-    flags: [],
-    atN: normAT(r0.at),
-    revATn: typeof r0.revAT === "number" ? r0.revAT : null,
-    inferredFrom: null,
-    inferRev: null,
-    effRev: 0,
-    nivelPrioridade: r0.nivelPrioridade,
-  }));
+  const rows = raw.map((r0): LinhaPreparada => {
+    const flags: string[] = [];
+    let at = normAT(r0.at);
+    let revAT: number | string | null = r0.revAT;
+    // N° AT e REV. AT invertidos: o nº da AT foi digitado na coluna da revisão.
+    if (!at && normAT(revAT)) {
+      const textoAt = typeof r0.at === "string" ? r0.at.trim() : "";
+      const revisaoNaColunaAt = typeof r0.at === "number" ? r0.at : /^\d{1,2}$/.test(textoAt) ? Number(textoAt) : null;
+      if (r0.at == null || textoAt === "" || revisaoNaColunaAt != null) {
+        at = normAT(revAT);
+        revAT = revisaoNaColunaAt;
+        flags.push("N° AT e REV. AT invertidos: nº da AT lido da coluna REV. AT");
+      }
+    }
+    if (typeof revAT !== "number") {
+      if (revAT != null) flags.push("REV. AT inválida");
+      revAT = null;
+    }
+    return {
+      row: r0.row,
+      item: r0.item,
+      code: up(r0.code),
+      status: up(r0.status) || null,
+      resp: up(r0.resp) || "SEM RESPONSÁVEL",
+      disc: up(r0.disc) || up(r0.discE) || "SEM DISCIPLINA",
+      pr: typeof r0.pr === "number" ? r0.pr : 0,
+      rev: typeof r0.rev === "number" ? r0.rev : null,
+      prest: r0.prest,
+      obra: r0.obra,
+      Kd: iso2dn(r0.K),
+      Ld: iso2dn(r0.L),
+      Md: iso2dn(r0.M),
+      Nd: iso2dn(r0.N),
+      Od: iso2dn(r0.O),
+      Lmanual: !!r0.Lmanual,
+      flags,
+      atN: at,
+      revATn: revAT,
+      inferredFrom: null,
+      inferRev: null,
+      effRev: 0,
+      nivelPrioridade: r0.nivelPrioridade,
+    };
+  });
+  // Nº de AT com ano digitado errado (ex.: 0439/10) quando a mesma AT
+  // existe no mesmo código com /26 ou /25: lido como essa AT.
+  const conhecidas = new Set(rows.filter((r) => r.atN).map((r) => `${r.code}|${r.atN}`));
+  rows.forEach((r) => {
+    if (!r.atN || /\/(2[4-9])$/.test(r.atN)) return;
+    const numero = r.atN.split("/")[0];
+    const candidatas = ["26", "25"].map((ano) => `${numero}/${ano}`).filter((x) => conhecidas.has(`${r.code}|${x}`));
+    if (candidatas.length === 1) {
+      r.flags.push(`Nº AT ${r.atN} lido como ${candidatas[0]}`);
+      r.atN = candidatas[0];
+    }
+  });
   return { rows };
 }
 
@@ -294,7 +334,7 @@ function summarize(key: string, rows: LinhaPreparada[], canon: Record<string, st
   const act = cyc.filter((r) => r.status === st);
   it.revAT = maxRev;
   it.state = st || "SEM STATUS";
-  if (sup.length) it.flags.push(`Linhas ${sup.map((r) => r.row).join(", ")} (NÃO LIBERADO) superadas por liberação posterior na mesma REV. AT`);
+  if (sup.length) it.flags.push(`Itens ${sup.map((r) => r.item ?? r.row).join(", ")} (NÃO LIBERADO) superados por liberação posterior na mesma REV. AT`);
   it.active = act;
   it.closed = LIBS.has(st ?? "");
   it.pr = act.reduce((s, r) => s + r.pr, 0);
@@ -377,18 +417,22 @@ export function buildItems(prep: { rows: LinhaPreparada[] }, opts: { inferLinks:
   const items = [...g.entries()].map(([k, rs]) => summarize(k, rs, canon));
 
   // Linha sem nº de AT parada em NÃO LIBERADO/EM HOLD cuja pendência já
-  // foi coberta por uma AT liberada depois no mesmo código e disciplina
+  // foi coberta por uma liberação posterior no mesmo código e disciplina
   // — vira SUBSTITUÍDA em vez de ficar "aberta" indefinidamente no Gantt.
+  // A liberação pode ser de uma AT (mesma data ou depois) ou de outra
+  // linha sem nº de AT (só se for estritamente depois).
   items.forEach((it) => {
     if (it.at || (it.state !== S_NL && it.state !== S_HOLD)) return;
     const r = it.rows[0];
+    const kr = r.Kd ?? -Infinity;
     const depois = rows.filter(
-      (x) => x !== r && x.code === r.code && x.disc === r.disc && x.atN && LIBS.has(x.status ?? "") && (x.Kd ?? -Infinity) >= (r.Kd ?? -Infinity),
+      (x) => x !== r && x.code === r.code && x.disc === r.disc && LIBS.has(x.status ?? "") &&
+        (x.atN ? (x.Kd ?? -Infinity) >= kr : (x.Kd ?? -Infinity) > kr),
     );
     if (!depois.length) return;
     const ultima = depois.slice().sort((a, b) => (b.Kd ?? -Infinity) - (a.Kd ?? -Infinity))[0];
-    it.substBy = `AT ${ultima.atN} (linha ${ultima.row}, ${ultima.status} em ${fmt(ultima.Md ?? ultima.Kd)})`;
-    it.flags.push(`Linha sem nº de AT considerada substituída pela ${it.substBy} — mesmo código e disciplina, liberada depois`);
+    it.substBy = `${ultima.atN ? `AT ${ultima.atN}` : "linha sem nº AT"} (item ${ultima.item ?? ultima.row}, ${ultima.status} em ${fmt(ultima.Md ?? ultima.Kd)})`;
+    it.flags.push(`Linha sem nº de AT considerada substituída por ${it.substBy} — mesmo código e disciplina, liberada depois`);
     it.prevState = it.state;
     it.state = S_SUB;
     it.closed = false;
@@ -443,6 +487,9 @@ export type ParametrosGantt = {
   minW: number;
   volFactor: number;
   futuras: EntregaFutura[];
+  /** Usa a Data Limite informada na análise como prazo, em vez do SLA
+   * recalculado, quando ela existe e não é anterior à solicitação. */
+  useL: boolean;
 };
 
 export function defaultParams(baseISO: string, hist: FaixaHistorica[]): ParametrosGantt {
@@ -466,6 +513,7 @@ export function defaultParams(baseISO: string, hist: FaixaHistorica[]): Parametr
     minW: 0.05,
     volFactor: 100,
     futuras: [],
+    useL: true,
   };
 }
 
@@ -571,16 +619,23 @@ export function project(model: ModeloGantt, P: ParametrosGantt, cal: Calendario)
         it.pend.push("Falta Data de Solicitação");
         it.phase = "Sem dados";
       } else {
-        const due = cal.workday(it.K0 - 1, si + hd);
+        const dueSla = cal.workday(it.K0 - 1, si + hd);
+        const lreg = P.useL !== false && it.Lreg != null && it.Lreg >= it.K0 ? it.Lreg : null;
+        const useL = lreg != null;
+        // Com HOLD registrado (início e fim), vale a data repactuada: o
+        // maior entre a Data Limite e o fim do HOLD.
+        const due = lreg != null ? (it.N != null && it.O != null ? Math.max(lreg, it.O) : lreg) : dueSla;
+        if (lreg != null && it.N != null && it.O != null && it.O > lreg) it.flags.push(`HOLD de ${fmt(it.N)} a ${fmt(it.O)} — prazo repactuado para ${fmt(it.O)}`);
+        if (it.Lreg != null && it.Lreg < it.K0) it.flags.push(`Data Limite (${fmt(it.Lreg)}) anterior à solicitação — usado o SLA`);
         it.phase = "Em análise";
         it.d.recv = { v: it.K0, k: "real" };
-        it.d.anaDue = { v: due, k: "sla" };
+        it.d.anaDue = { v: due, k: useL ? "inf" : "sla" };
         if (it.Lreg != null) it.d.Lreg = { v: it.Lreg, k: "inf" };
         it.overdue = due < base;
-        st.push({ it, kind: "anal", s: it.K0, e: due, w: 1, dk: "real", cat: "existente", cyc: 0, rev: it.revAT, pr: it.pr, docs: it.nDocs, over: it.overdue });
+        st.push({ it, kind: "anal", s: it.K0, e: due, w: 1, dk: useL ? "inf" : "real", cat: "existente", cyc: 0, rev: it.revAT, pr: it.pr, docs: it.nDocs, over: it.overdue });
         const end = it.overdue ? baseW : due;
         if (it.overdue) it.flags.push(`Análise vencida em ${fmt(due)} — continuação projetada a partir da data-base`);
-        it.d.libBest = { v: end, k: it.overdue ? "est" : "sla" };
+        it.d.libBest = { v: end, k: it.overdue ? "est" : useL ? "inf" : "sla" };
         const c = chain(it, st, end, it.revAT, 1, "retorno_est", sp, si, prF, docsF, cal, pLib, +P.maxCycles, +P.minW);
         it.d.libMed = { v: c.med, k: "est" };
         it.pRest = c.pRest;
