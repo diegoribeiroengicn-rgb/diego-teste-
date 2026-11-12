@@ -33,6 +33,7 @@ type LinhaBanco = {
   resumo_drive: number | null;
   resumo_email: number | null;
   num_documentos_analisados: number | null;
+  num_documentos: number | null;
   nivel_prioridade: number | null;
   sla_reduzido: number | null;
 };
@@ -50,17 +51,20 @@ function enriquecerLinha(row: LinhaBanco, origem: Origem): LinhaLocalizacao {
 
   let statusEntregaCalc: LinhaLocalizacao["statusEntregaCalc"] = null;
   let tempoAnaliseInterna: number | null = null;
+  let diasRestantes: number | null = null;
   if (row.data_solicitacao) {
     if (origem === "prestadores") {
       const sla = row.sla_dias ?? SLA_PRESTADORES_DIAS_UTEIS;
       const decorridos = diasUteisDecorridos(row.data_solicitacao, row.data_analise, holdDias, holdAbertoDesde);
       statusEntregaCalc = decorridos < sla ? "ANTES DO PRAZO" : decorridos === sla ? "NO PRAZO" : "ATRASADO";
       tempoAnaliseInterna = decorridos;
+      diasRestantes = sla - decorridos;
     } else {
       const sla = row.sla_dias ?? calcularSlaCessionario(row.tipo, row.revisao ?? 0);
       const saldo = saldoDiasUteis(row.data_solicitacao, sla, row.data_analise, holdDias, holdAbertoDesde);
       statusEntregaCalc = saldo > 0 ? "ANTES DO PRAZO" : saldo === 0 ? "NO PRAZO" : "ATRASADO";
       tempoAnaliseInterna = saldo;
+      diasRestantes = saldo;
     }
     if (estaEmHold && statusEntregaCalc === "ATRASADO") statusEntregaCalc = "NO PRAZO";
   }
@@ -91,6 +95,8 @@ function enriquecerLinha(row: LinhaBanco, origem: Origem): LinhaLocalizacao {
     resumoDrive: !!row.resumo_drive,
     resumoEmail: !!row.resumo_email,
     numDocumentosAnalisados: row.num_documentos_analisados,
+    numDocumentos: row.num_documentos ?? 0,
+    diasRestantes,
     nivelPrioridade: row.nivel_prioridade,
     slaReduzido: !!row.sla_reduzido,
   };
@@ -111,7 +117,7 @@ export async function buscarLinhasLocalizacao(): Promise<LinhaLocalizacao[]> {
       `SELECT id, item, codigo, prestador AS nome_entidade, disciplina, num_at, revisao, responsavel, status_analise,
               data_solicitacao, data_analise, data_limite, hold_inicio, hold_fim, observacoes, sla_dias, NULL AS tipo,
               obra_referencia AS obra, atualizado_em, resumo_mfiles, resumo_drive, resumo_email,
-              num_documentos_analisados, nivel_prioridade, sla_reduzido
+              num_documentos_analisados, num_documentos, nivel_prioridade, sla_reduzido
        FROM prestadores WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),
@@ -119,7 +125,7 @@ export async function buscarLinhasLocalizacao(): Promise<LinhaLocalizacao[]> {
       `SELECT id, item, codigo, cessionario AS nome_entidade, disciplina, num_at, revisao, responsavel, status_analise,
               data_solicitacao, data_analise, data_limite, hold_inicio, hold_fim, observacoes, sla_dias, tipo,
               tipo AS obra, atualizado_em, resumo_mfiles, resumo_drive, resumo_email,
-              num_documentos_analisados, NULL::int AS nivel_prioridade, sla_reduzido
+              num_documentos_analisados, num_documentos, NULL::int AS nivel_prioridade, sla_reduzido
        FROM cessionarios WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),

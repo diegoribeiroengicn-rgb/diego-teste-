@@ -10,6 +10,11 @@ export type LinhaLocalizacao = LinhaRevisao & {
   /** Quantidade informada pelo analista na baixa — `null` enquanto a AT
    * não teve baixa com esse campo. */
   numDocumentosAnalisados: number | null;
+  /** Documentos/pranchas recebidos na AT (coluna "N° de Doc."). */
+  numDocumentos: number;
+  /** Dias úteis até o prazo da análise (negativo = vencida), pela mesma
+   * regra de SLA de `statusEntregaCalc`; `null` sem Data de Solicitação. */
+  diasRestantes: number | null;
   /** Nível da Lista de Prioridades (1/2/3) — só existe hoje na tabela
    * `prestadores`; cessionários sempre chega `null` aqui. Mesmos níveis de
    * `lista-prioridades.ts` (não duplica os rótulos, só o valor cru). */

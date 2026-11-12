@@ -1,5 +1,6 @@
 "use client";
 
+import { METODOLOGIA_BACKLOG } from "@/lib/produtividade";
 import { useMemo, useState } from "react";
 import { SeletorCompetencia } from "@/components/seletor-competencia";
 import { BotaoRelatorio } from "@/components/baixar-relatorio";
@@ -160,6 +161,11 @@ export function PainelRelatoriosMensais({
         <CartaoKpi titulo="% SLA Cumprido" valor={`${indicadoresAtual.slaPercentual}%`} cor="var(--color-sky)" />
         <CartaoKpi titulo="Backlog do Período" valor={String(indicadoresAtual.backlog)} cor="var(--color-orange)" />
       </div>
+
+      <details className="mt-3 rounded-xl border border-(--color-border) bg-(--color-surface-1) px-4 py-3 text-xs text-(--color-text-weak)">
+        <summary className="cursor-pointer font-medium text-(--color-text)">{METODOLOGIA_BACKLOG.titulo}</summary>
+        {METODOLOGIA_BACKLOG.paragrafos.map((par) => <p key={par} className="mt-2">{par}</p>)}
+      </details>
 
       <h2 className="mt-6 text-sm font-semibold text-(--color-navy)">Comparativos</h2>
       <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-3">

@@ -254,3 +254,15 @@ export function calcularProdutividadeAnalistas(
     };
   });
 }
+
+/** Texto de metodologia do indicador, exibido junto dele (telas e One Page
+ * Report). Descreve exatamente a regra de `indicadoresMensaisModulo`. */
+export const METODOLOGIA_BACKLOG = {
+  titulo: "Metodologia — Backlog do Período",
+  paragrafos: [
+    "O que é: quantidade de análises que, ao fim do mês da competência, ainda estavam em aberto (status EM ANÁLISE), independentemente de terem sido recebidas no próprio mês ou antes. Mostra a fila de trabalho acumulada, não só o que chegou no período.",
+    "Como é apurado: contam-se, em Prestadores e Cessionários, as análises não arquivadas com status EM ANÁLISE e Data de Solicitação até o último dia do mês. ARTs (disciplina ART/RRT) não são AT e ficam de fora; análises em HOLD, liberadas, não liberadas, obsoletas ou canceladas também não entram.",
+    "Influência das pendências: toda análise ainda pendente permanece no backlog dos meses seguintes até ser concluída; por isso, entregas atrasadas fazem o indicador crescer mesmo sem aumento de demanda. O sistema guarda só o status atual: em competências passadas o valor é uma aproximação (análises ainda em aberto hoje que já haviam sido solicitadas até aquele mês).",
+    "Como interpretar: backlog estável ou em queda com SLA alto indica fila sob controle; backlog crescente indica que as entradas superam a capacidade de conclusão, devendo ser lido junto de Projetos Concluídos, % SLA Cumprido e da carga por analista.",
+  ],
+};

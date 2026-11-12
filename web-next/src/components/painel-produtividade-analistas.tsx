@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { SeletorCompetencia } from "@/components/seletor-competencia";
-import { calcularProdutividadeAnalistas, type LinhaProdutividade, type ModuloProdutividade } from "@/lib/produtividade";
+import { METODOLOGIA_BACKLOG, calcularProdutividadeAnalistas, type LinhaProdutividade, type ModuloProdutividade } from "@/lib/produtividade";
 
 function formatarData(valor: string | null): string {
   if (!valor) return "—";
@@ -122,6 +122,11 @@ export function PainelProdutividadeAnalistas({
         <CartaoKpi titulo="Backlog do Período" valor={String(totais.backlog)} cor="var(--color-orange)" />
         <CartaoKpi titulo="Em Andamento (hoje)" valor={String(totais.andamento)} cor="var(--color-gold)" />
       </div>
+
+      <details className="mt-3 rounded-xl border border-(--color-border) bg-(--color-surface-1) px-4 py-3 text-xs text-(--color-text-weak)">
+        <summary className="cursor-pointer font-medium text-(--color-text)">{METODOLOGIA_BACKLOG.titulo}</summary>
+        {METODOLOGIA_BACKLOG.paragrafos.map((par) => <p key={par} className="mt-2">{par}</p>)}
+      </details>
 
       <h2 className="mt-6 text-sm font-semibold text-(--color-navy)">Produtividade por analista</h2>
       <div className="mt-2 overflow-x-auto rounded-2xl border border-(--color-border) bg-(--color-surface-1)">

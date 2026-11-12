@@ -1,3 +1,4 @@
+import { METODOLOGIA_BACKLOG } from "@/lib/produtividade";
 import ExcelJS from "exceljs";
 import { cabecalho, criarDocumento, documentoParaBuffer, nomeArquivoPdf, secao, tabelaDados, tabelaKpis } from "@/lib/export-pdf";
 import { nomeArquivoExcel } from "@/lib/export-excel-generico";
@@ -151,6 +152,11 @@ export async function gerarOnePageReportPdf(
   secao(doc, "Observações gerenciais");
   doc.font("Helvetica").fontSize(9.5).fillColor("#0F172A")
     .text(observacoes || "Nenhuma observação registrada para esta competência.");
+
+  secao(doc, METODOLOGIA_BACKLOG.titulo);
+  METODOLOGIA_BACKLOG.paragrafos.forEach((par) => {
+    doc.font("Helvetica").fontSize(7.5).fillColor("#475569").text(par, { align: "justify" }).moveDown(0.25);
+  });
 
   const buffer = await documentoParaBuffer(doc);
   return { buffer, nomeArquivo: nomeArquivoPdf("GAT_2026_OnePageReport", competenciaLabel) };
