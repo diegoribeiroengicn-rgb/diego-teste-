@@ -72,6 +72,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tab
     void registrarAtividade(sessao.username, sessao.perfil, "ANALISE_BAIXA", tabela, `#${id} -> ${corpo.status} · ${numDocumentosAnalisados} doc(s) analisado(s)`);
     return NextResponse.json({ ok: true, registro });
   } catch (exc) {
-    return NextResponse.json({ erro: exc instanceof Error ? exc.message : "Erro ao dar baixa na análise." }, { status: 400 });
+    const duplicada = (exc as { code?: string })?.code === "23505";
+    return NextResponse.json(
+      { erro: duplicada ? "Não foi possível registrar a baixa agora (conflito no histórico). Tente novamente; se persistir, avise a Administração." : exc instanceof Error ? exc.message : "Erro ao dar baixa na análise." },
+      { status: duplicada ? 409 : 400 },
+    );
   }
 }

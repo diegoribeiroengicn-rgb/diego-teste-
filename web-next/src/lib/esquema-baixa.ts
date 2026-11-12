@@ -13,7 +13,31 @@ const COLUNAS_BAIXA: { tabela: string; coluna: string; tipo: string }[] = [
 
 let pronto: Promise<void> | null = null;
 
+/** As tabelas vieram do SQLite com os ids já preenchidos; no Postgres a
+ * sequência de cada coluna `id` ficou no início e o próximo INSERT sem id
+ * repete um id existente ("duplicate key ... _pkey"). Avança cada sequência
+ * até o maior id da tabela — nunca recua, nunca altera linhas. */
+async function alinharSequencias(): Promise<void> {
+  const pool = obterPool();
+  const { rows } = await pool.query<{ tabela: string; coluna: string }>(
+    `SELECT table_name AS tabela, column_name AS coluna FROM information_schema.columns
+     WHERE table_schema = current_schema() AND column_default LIKE 'nextval(%'`,
+  );
+  for (const { tabela, coluna } of rows) {
+    await pool.query(
+      `SELECT setval(seq, m) FROM (
+         SELECT pg_get_serial_sequence(format('%I', $1::text), $2::text) AS seq,
+                (SELECT COALESCE(MAX("${coluna}"), 0) FROM "${tabela}") AS m
+       ) t
+       WHERE seq IS NOT NULL AND m > 0
+         AND m >= COALESCE((SELECT last_value FROM pg_sequences WHERE format('%I.%I', schemaname, sequencename) = seq), 0)`,
+      [tabela, coluna],
+    );
+  }
+}
+
 async function aplicar(): Promise<void> {
+  await alinharSequencias();
   const pool = obterPool();
   const { rows } = await pool.query<{ table_name: string; column_name: string }>(
     `SELECT table_name, column_name FROM information_schema.columns

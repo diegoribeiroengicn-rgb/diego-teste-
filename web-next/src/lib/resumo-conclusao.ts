@@ -67,29 +67,40 @@ export async function darBaixaAnalise(tabela: TabelaBaixa, id: number, dados: Da
   const novaDataAnalise = atual.data_analise && !mudouStatus ? atual.data_analise : hojeBr().toISOString().slice(0, 10);
   const obraReferencia = dados.obraReferencia.trim() || null;
 
-  await pool.query(
-    `UPDATE ${tabela} SET status_analise = $1, data_analise = $2, num_at = $3, resumo_mfiles = $4, resumo_drive = $5, resumo_email = $6,
-       resumo_ultima_geracao_em = $7, resumo_gerado_por = $8, resumo_qtd_geracoes = resumo_qtd_geracoes + 1,
-       atualizado_em = $7, atualizado_por = $8, num_documentos_analisados = $10, obra_referencia = $11
-     WHERE id = $9`,
-    [
-      dados.status, novaDataAnalise, dados.numAt.trim(), dados.mfiles ? 1 : 0, dados.drive ? 1 : 0, dados.email ? 1 : 0, agora, usuario, id,
-      dados.numDocumentosAnalisados, obraReferencia,
-    ],
-  );
+  const cliente = await pool.connect();
+  try {
+    await cliente.query("BEGIN");
+    await cliente.query(
+      `UPDATE ${tabela} SET status_analise = $1, data_analise = $2, num_at = $3, resumo_mfiles = $4, resumo_drive = $5, resumo_email = $6,
+         resumo_ultima_geracao_em = $7, resumo_gerado_por = $8, resumo_qtd_geracoes = resumo_qtd_geracoes + 1,
+         atualizado_em = $7, atualizado_por = $8, num_documentos_analisados = $10, obra_referencia = $11
+       WHERE id = $9`,
+      [
+        dados.status, novaDataAnalise, dados.numAt.trim(), dados.mfiles ? 1 : 0, dados.drive ? 1 : 0, dados.email ? 1 : 0, agora, usuario, id,
+        dados.numDocumentosAnalisados, obraReferencia,
+      ],
+    );
 
-  const jaGeradoAntes = atual.resumo_qtd_geracoes > 0;
-  await pool.query(
-    `INSERT INTO resumo_conclusao_historico
-       (tabela, registro_id, evento, mfiles, drive, email, selecao_anterior, usuario, data_hora, num_documentos_analisados, obra_referencia)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-    [
-      tabela, id, jaGeradoAntes ? "EDICAO_CANAIS" : "GERACAO_INICIAL",
-      dados.mfiles ? 1 : 0, dados.drive ? 1 : 0, dados.email ? 1 : 0,
-      jaGeradoAntes ? rotulosCanaisSelecionados(atual.resumo_mfiles, atual.resumo_drive, atual.resumo_email) : null,
-      usuario, agora, dados.numDocumentosAnalisados, obraReferencia,
-    ],
-  );
+    const jaGeradoAntes = atual.resumo_qtd_geracoes > 0;
+    await cliente.query(
+      `INSERT INTO resumo_conclusao_historico
+         (tabela, registro_id, evento, mfiles, drive, email, selecao_anterior, usuario, data_hora, num_documentos_analisados, obra_referencia)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [
+        tabela, id, jaGeradoAntes ? "EDICAO_CANAIS" : "GERACAO_INICIAL",
+        dados.mfiles ? 1 : 0, dados.drive ? 1 : 0, dados.email ? 1 : 0,
+        jaGeradoAntes ? rotulosCanaisSelecionados(atual.resumo_mfiles, atual.resumo_drive, atual.resumo_email) : null,
+        usuario, agora, dados.numDocumentosAnalisados, obraReferencia,
+      ],
+    );
+
+    await cliente.query("COMMIT");
+  } catch (exc) {
+    await cliente.query("ROLLBACK").catch(() => {});
+    throw exc;
+  } finally {
+    cliente.release();
+  }
 
   // Histórico de edições da própria AT (o mesmo consultado em
   // Administração → Histórico), uma linha por campo que mudou.
