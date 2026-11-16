@@ -17,6 +17,7 @@ import {
 } from "@/lib/prestadores-gantt/motor";
 import { hojeBr } from "@/lib/dias-uteis";
 import { GanttSvg } from "./gantt-svg";
+import { PainelAnalistas } from "./painel-analistas";
 import { calcularKpis, estaAberto } from "./kpis";
 import { PremissasDialog } from "./premissas-dialog";
 import { FILTROS_PADRAO, PREMISSAS_PADRAO, UI_PADRAO, type CenarioSalvo, type EntregaFuturaEstado, type FiltrosGanttEstado, type PremissasEstado, type UiGanttEstado } from "./tipos-estado";
@@ -62,6 +63,8 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
   });
   const [cenAtivo, setCenAtivo] = useState<number | null>(null);
   const [comparar, setComparar] = useState("");
+  const [gruposAbertos, setGruposAbertos] = useState<Set<string>>(() => new Set());
+  const [gruposDisponiveis, setGruposDisponiveis] = useState<string[]>([]);
 
   useEffect(() => {
     salvarEstado({ filtros, ui, futuras, premissas });
@@ -355,6 +358,9 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
 
         <div className="card" style={{ marginBottom: 10 }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "12px 18px", alignItems: "flex-end" }}>
+            <div className="fld"><label>Visão</label>
+              <Seg grande valor={ui.visao} opcoes={[["gantt", "📅 Gantt"], ["an", "👥 Analistas"]]} onChange={(v) => setU({ visao: v as UiGanttEstado["visao"] })} />
+            </div>
             <div className="fld"><label>Mostrar</label>
               <Seg grande valor={filtros.apenasPrioritarios ? "prio" : "all"} opcoes={[["all", "Todos"], ["prio", "★ Só prioritários"]]} onChange={(v) => setF({ apenasPrioritarios: v === "prio" })} />
             </div>
@@ -366,6 +372,12 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
             </div>
             <div className="fld"><label>Revisões futuras</label>
               <Seg grande valor={ui.mostrarEstimativas ? "1" : "0"} opcoes={[["0", "Não mostrar"], ["1", "Mostrar prováveis"]]} onChange={(v) => setU({ mostrarEstimativas: v === "1" })} />
+            </div>
+            <div className="fld"><label>Grupos</label>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button type="button" className="btn" onClick={() => setGruposAbertos(new Set(gruposDisponiveis))}>Abrir todos</button>
+                <button type="button" className="btn" onClick={() => setGruposAbertos(new Set())}>Fechar todos</button>
+              </div>
             </div>
           </div>
           <div className="legend" style={{ marginTop: 12 }}>
@@ -384,16 +396,27 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
           </div>
         </div>
 
-        <GanttSvg
-          itens={itensFiltrados}
-          agregado={agregadoFiltrado}
-          base={resultado.base}
-          hEnd={resultado.hEnd}
-          horizonteVisivelDias={ui.horizonte}
-          agrupar={ui.agrupar}
-          mostrarEstimativas={ui.mostrarEstimativas}
-          zoom={ui.zoom}
-        />
+        {ui.visao === "an" ? (
+          <PainelAnalistas
+            itens={itensFiltrados} base={resultado.base} hEnd={resultado.hEnd} cal={cal} mostrarEstimativas={ui.mostrarEstimativas}
+            gran={ui.anGran} onGran={(g) => setU({ anGran: g })}
+            onVer={(an) => { setF({ analistas: [an] }); setU({ visao: "gantt" }); }}
+          />
+        ) : (
+          <GanttSvg
+            itens={itensFiltrados}
+            agregado={agregadoFiltrado}
+            base={resultado.base}
+            hEnd={resultado.hEnd}
+            cal={cal}
+            agrupar={ui.agrupar}
+            mostrarEstimativas={ui.mostrarEstimativas}
+            zoom={ui.zoom}
+            abertos={gruposAbertos}
+            onAlternarGrupo={(g) => setGruposAbertos((a) => { const n = new Set(a); if (n.has(g)) n.delete(g); else n.add(g); return n; })}
+            onGrupos={setGruposDisponiveis}
+          />
+        )}
 
         <PainelEntregasFuturas
           futuras={futuras}

@@ -1,353 +1,405 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgregadoGantt, EstagioGantt, ItemGantt } from "@/lib/prestadores-gantt/motor";
-import { ehPrioritario, fmt } from "@/lib/prestadores-gantt/motor";
+import { Calendario, dow, ehPrioritario, fmt } from "@/lib/prestadores-gantt/motor";
+import { aggregate } from "@/lib/prestadores-gantt/motor";
 import { estaAberto } from "./kpis";
 import type { AgrupamentoGantt } from "./tipos-estado";
 
-const MESES_ABREV = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const MES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
 function esc(s: string): string {
-  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+  return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 }
 
-// Paleta idêntica ao objeto COLORS/GC do HTML de referência (Gantt_PROJ_PREST),
-// não a paleta usada lá só no gráfico da aba "Analistas" — são palettes
-// diferentes no próprio protótipo.
-const COR_PREST = "#A3AEBF"; // GC.prest — "Com o prestador"
-const COR_PREST_EST = "#D5DBE5"; // GC.prestEst — "Com o prestador (data estimada)"
-const COR_ANAL = "#1F5BC4"; // GC.anal — "Em análise na Tecnoplano"
-const COR_ANAL_PREV = "#8DB0EA"; // GC.analPrev — "Análise de documento que ainda vai chegar"
-const COR_HOLD = "#B9A2D6"; // GC.hold
-const COR_VENCIDO = "#D64541"; // GC.late — "Atrasado"
-const COR_OK = "#1E8449"; // GC.ok — marca de liberação (círculo + ✓)
-const COR_HOJE = "#C9A227"; // GC.today
-const COR_PRIO_FUNDO = "#FFF6DA"; // .grow.prio — destaque dourado de prioridade
-const COR_PRIO_ESTRELA = "#B8890B"; // .star
-const COR_NAVY = "#0B2A5B";
+// Paleta idêntica ao objeto GC do protótipo de referência.
+const GC = { prest: "#A3AEBF", prestEst: "#D5DBE5", anal: "#1F5BC4", analPrev: "#8DB0EA", late: "#D64541", ok: "#1E8449", hold: "#B9A2D6", grp: "#E4EAF3", today: "#C9A227" };
 
-function corEstagio(s: EstagioGantt, it: ItemGantt): { fill: string; stroke: string; dash: boolean } {
-  const estimado = s.dk === "est" && (s.cyc ?? 0) > 0;
-  if (s.kind === "hold") return { fill: COR_HOLD, stroke: "none", dash: false };
-  if (s.kind === "prest") {
-    if (estimado) return { fill: "#fff", stroke: COR_PREST, dash: true };
-    if (s.dk === "est") return { fill: COR_PREST_EST, stroke: COR_PREST, dash: true };
-    return { fill: COR_PREST, stroke: "none", dash: false };
+const ddmm = (n: number | null | undefined) => (n == null ? "—" : fmt(n).slice(0, 5));
+const nf = (v: number, d = 0) => v.toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d });
+
+function lateDays(cal: Calendario, due: number, base: number): number {
+  return Math.max(1, cal.net(due + 1, base) - (cal.ehUtil(base) ? 1 : 0));
+}
+
+function plainStatus(it: ItemGantt, cal: Calendario, b: number): { t: string; c: string } {
+  const d = it.d;
+  if (it.pend.length && !it.stages.length) return { t: "❓ Falta informação na planilha", c: "#8A5300" };
+  if (it.phase === "HOLD") return { t: `⏸ Parado (HOLD)${it.N != null ? " desde " + ddmm(it.N) : ""}`, c: "#6B4FA0" };
+  if (it.sim) return { t: `Simulação · análise até ${ddmm(d.anaDue?.v)}`, c: "#4A5568" };
+  if (it.phase === "Com o prestador") {
+    const pd = d.prestDue?.v ?? null;
+    if (it.overdue && pd != null) return { t: `⚠ Prestador atrasado ${lateDays(cal, pd, b)} dias úteis (devia entregar ${ddmm(pd)})`, c: GC.late };
+    return { t: `Com o prestador · entrega até ${ddmm(pd)}`, c: "#4A5568" };
   }
-  // kind === "anal"
-  if (estimado) return { fill: "#fff", stroke: COR_ANAL_PREV, dash: true };
-  if (it.sim || s.cat === "nova_sim" || s.cat === "pipeline") return { fill: COR_ANAL_PREV, stroke: "none", dash: false };
-  return { fill: COR_ANAL, stroke: "none", dash: false };
+  if (it.phase === "Em análise") {
+    const ad = d.anaDue?.v ?? null;
+    if (it.N != null && it.O != null && b >= it.N && b <= it.O) return { t: `⏸ Em HOLD até ${ddmm(it.O)} · prazo repactuado ${ddmm(ad)}`, c: "#6B4FA0" };
+    if (it.overdue && ad != null) return { t: `⚠ Análise atrasada ${lateDays(cal, ad, b)} dias úteis (prazo ${ddmm(ad)})`, c: GC.late };
+    return { t: `Em análise · conclusão até ${ddmm(ad)}`, c: GC.anal };
+  }
+  if (it.closed) return { t: `✓ Liberada em ${ddmm(d.lib?.v)}`, c: GC.ok };
+  return { t: it.phase ?? "", c: "#4A5568" };
 }
 
-type LinhaVisual =
-  | { tipo: "grupo"; rotulo: string; qtd: number; pr: number; prioritario: boolean; rankPrioridade: number | null }
-  | { tipo: "item"; it: ItemGantt };
+function tituloItem(it: ItemGantt): string {
+  const doc = it.at ? "AT " + it.at : it.docLbl ? it.docLbl : it.sim ? "Simulação" : `Sem nº de AT (item ${it.rows[0]?.item ?? it.rows[0]?.row ?? "—"})`;
+  return `${doc} · ${(it.discAct || it.discs || []).join("/")}`;
+}
 
 const AGRUPADORES: Record<AgrupamentoGantt, (it: ItemGantt) => string> = {
   code: (it) => `${it.code} · ${it.prest}`,
   prest: (it) => it.prest,
   analyst: (it) => `Analista: ${it.analyst}`,
   sla: (it) => `SLA de análise ${it.slaI} dias úteis`,
-  none: () => "",
+  none: () => "Todos",
 };
 
+type Grupo = { g: string; its: ItemGantt[] };
+
 export function GanttSvg({
-  itens,
-  agregado,
-  base,
-  hEnd,
-  horizonteVisivelDias,
-  agrupar,
-  mostrarEstimativas,
-  zoom,
+  itens, agregado, base, hEnd, cal, agrupar, mostrarEstimativas, zoom, abertos, onAlternarGrupo, onGrupos,
 }: {
   itens: ItemGantt[];
   agregado: AgregadoGantt;
   base: number;
   hEnd: number;
-  horizonteVisivelDias: number;
+  cal: Calendario;
   agrupar: AgrupamentoGantt;
   mostrarEstimativas: boolean;
   zoom: number;
+  abertos: Set<string>;
+  onAlternarGrupo: (g: string) => void;
+  onGrupos: (nomes: string[]) => void;
 }) {
   const [dica, setDica] = useState<{ x: number; y: number; html: string } | null>(null);
-  const start = base;
-  const end = Math.min(hEnd, base + horizonteVisivelDias);
-  const nd = end - start + 1;
-  const px = zoom;
-  const W = nd * px;
-  const LW = 260;
-  const RH = 24;
-  const HH = 56;
+  const [aberto, setAberto] = useState<ItemGantt | null>(null);
+  const dlgRef = useRef<HTMLDialogElement>(null);
 
-  const linhas = useMemo((): LinhaVisual[] => {
-    let exibidos = itens.filter((it) => estaAberto(it) || !!it.sim);
-    exibidos = exibidos.filter((it) => it.stages.some((s) => s.e >= start && s.s <= end) || it.pend.length);
+  const px = zoom || 9;
+  const start = cal.workday(base, -10);
+  const end = hEnd;
+  const W = (end - start + 1) * px;
+  const LW = 380, RH = 40, GH = 46, HH = 92;
+  const X = (d: number) => (d - start) * px;
+  const tip = (e: React.MouseEvent, html: string) => setDica({ x: e.clientX, y: e.clientY, html });
+  const sem = () => setDica(null);
+
+  const estagiosVisiveis = (it: ItemGantt) =>
+    it.stages.filter((s) => (mostrarEstimativas || !(s.dk === "est" && (s.cyc ?? 0) > 0)) && s.cat !== "hist" && (s.e >= start || s.over) && s.s <= end);
+
+  const grupos = useMemo((): Grupo[] => {
+    let items = itens.filter((it) => estaAberto(it) || !!it.sim);
+    items = items.filter((it) => it.stages.some((s) => s.e >= start && s.s <= end) || it.pend.length);
     const gk = AGRUPADORES[agrupar];
-    const next = (it: ItemGantt) => it.d.recv?.v ?? it.d.prestDue?.v ?? it.d.anaDue?.v ?? 1e9;
-
-    // Nível de prioridade de cada grupo (menor nível = mais crítico) —
-    // igual ao protótipo de referência, cujos projetos prioritários
-    // "aparecem no topo do Gantt, com destaque dourado" só quando
-    // organizado por Projeto (gRank do protótipo só vale para
-    // UI.gGroup === 'code'; nos outros agrupamentos só a estrela por
-    // item aparece, sem reordenar nem destacar o grupo). A prioridade em
-    // si vem só do nível administrado centralmente (nivelPrioridade).
-    const rankGrupo = new Map<string, number>();
-    if (agrupar === "code") {
-      exibidos.forEach((it) => {
-        const g = gk(it);
-        const nivel = it.nivelPrioridade ?? 99;
-        rankGrupo.set(g, Math.min(rankGrupo.get(g) ?? 99, nivel));
-      });
-    }
-    const grupoOrdenado = [...rankGrupo.entries()].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0], "pt-BR"));
-    const ordemGrupo = new Map(grupoOrdenado.map(([g], i) => [g, i]));
-
-    exibidos = exibidos
-      .slice()
-      .sort(
-        (a, b) =>
-          (ordemGrupo.get(gk(a)) ?? 0) - (ordemGrupo.get(gk(b)) ?? 0) ||
-          gk(a).localeCompare(gk(b), "pt-BR") ||
-          next(a) - next(b) ||
-          a.key.localeCompare(b.key),
-      );
-    const out: LinhaVisual[] = [];
-    let last: string | null = null;
-    exibidos.forEach((it) => {
+    const nextD = (it: ItemGantt) => it.d.recv?.v ?? it.d.prestDue?.v ?? it.d.anaDue?.v ?? 1e9;
+    // Prioridade (★) — só reordena/destaca grupos quando organizado por Projeto.
+    const rank = new Map<string, number>();
+    if (agrupar === "code") items.forEach((it) => rank.set(it.code, Math.min(rank.get(it.code) ?? 99, it.nivelPrioridade ?? 99)));
+    const ordemCodigos = [...rank.entries()].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0], "pt-BR")).map(([c]) => c);
+    const gRank = (it: ItemGantt) => (agrupar === "code" ? ((rank.get(it.code) ?? 99) < 99 ? ordemCodigos.indexOf(it.code) : 999) : 0);
+    items.sort((a, b) =>
+      gRank(a) - gRank(b) || gk(a).localeCompare(gk(b), "pt-BR") ||
+      (a.overdue ? 0 : 1) - (b.overdue ? 0 : 1) || nextD(a) - nextD(b) || a.key.localeCompare(b.key));
+    const out: Grupo[] = []; const m = new Map<string, Grupo>();
+    items.forEach((it) => {
       const g = gk(it);
-      if (agrupar !== "none" && g !== last) {
-        const doGrupo = exibidos.filter((x) => gk(x) === g);
-        const rank = rankGrupo.get(g) ?? 99;
-        out.push({
-          tipo: "grupo",
-          rotulo: g,
-          qtd: doGrupo.length,
-          pr: doGrupo.reduce((s, x) => s + x.pr, 0),
-          prioritario: rank < 99,
-          rankPrioridade: rank < 99 ? grupoOrdenado.findIndex(([gg]) => gg === g) : null,
-        });
-        last = g;
-      }
-      out.push({ tipo: "item", it });
+      if (!m.has(g)) { const o = { g, its: [] as ItemGantt[] }; m.set(g, o); out.push(o); }
+      m.get(g)!.its.push(it);
     });
     return out;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itens, agrupar, start, end]);
 
-  const x = (d: number) => (d - start) * px;
-  const mxCarga = useMemo(() => {
-    let m = 0;
-    agregado.days.forEach((_d, i) => {
-      const v = agregado.cats.reduce((t, c) => t + agregado.load[c][i], 0);
-      m = Math.max(m, v);
+  const nomesGrupos = useMemo(() => grupos.map((g) => g.g), [grupos]);
+  useEffect(() => { onGrupos(nomesGrupos); }, [nomesGrupos]); // eslint-disable-line react-hooks/exhaustive-deps
+  const autoAbrir = grupos.length <= 1;
+
+  // ---- cabeçalho: carga semanal (pranchas) + destaque dos prioritários ----
+  const semanas = useMemo(() => {
+    const wk = new Map<number, { k: number; idx: number[]; wd: number }>();
+    agregado.days.forEach((d, i) => {
+      const k = d - ((dow(d) + 6) % 7);
+      if (!wk.has(k)) wk.set(k, { k, idx: [], wd: 0 });
+      const w = wk.get(k)!; w.idx.push(i); w.wd++;
     });
-    return m;
+    return [...wk.values()];
   }, [agregado]);
-  const mxProj = useMemo(() => Math.max(0, ...agregado.projCount), [agregado]);
+  const aggPrio = useMemo(() => aggregate(itens.filter(ehPrioritario), cal, base, hEnd), [itens, cal, base, hEnd]);
+  const carga = (A: AgregadoGantt, idx: number[]) => idx.reduce((t, i) => t + A.cats.reduce((s, c) => s + A.load[c][i], 0), 0);
+  const wTot = semanas.map((w) => carga(agregado, w.idx));
+  const wPri = semanas.map((w) => carga(aggPrio, w.idx));
+  const mx = Math.max(1, ...wTot);
 
-  const diasVisiveis: number[] = [];
-  for (let d = start; d <= end; d++) diasVisiveis.push(d);
+  const dias: number[] = [];
+  for (let d = start; d <= end; d++) dias.push(d);
 
-  const H = linhas.length * RH;
+  // Linhas (grupo + itens abertos) com posição vertical
+  type Linha = { tipo: "g"; G: Grupo; y: number; open: boolean } | { tipo: "i"; it: ItemGantt; y: number };
+  const linhas: Linha[] = [];
+  let y = 0;
+  grupos.forEach((G) => {
+    const open = autoAbrir || abertos.has(G.g);
+    linhas.push({ tipo: "g", G, y, open }); y += GH;
+    if (open) G.its.forEach((it) => { linhas.push({ tipo: "i", it, y }); y += RH; });
+  });
+  const H = y;
+
+  useEffect(() => {
+    const d = dlgRef.current;
+    if (!d) return;
+    if (aberto && !d.open) d.showModal();
+    if (!aberto && d.open) d.close();
+  }, [aberto]);
+
+  function resumoGrupo(G: Grupo) {
+    const late = G.its.filter((i) => i.overdue).length;
+    const crit = G.its.filter((i) => i.crit).length;
+    const nPrest = G.its.filter((i) => i.phase === "Com o prestador").length;
+    const nAn = G.its.filter((i) => i.phase === "Em análise").length;
+    const nPrev = G.its.filter((i) => i.sim).length;
+    const nSd = G.its.filter((i) => i.phase === "Sem dados" || i.phase === "HOLD").length;
+    const parts = [nPrest && `${nPrest} com o prestador`, nAn && `${nAn} em análise`, nPrev && `${nPrev} a entregar`, nSd && `${nSd} sem dados/HOLD`].filter(Boolean).join(" · ");
+    return { late, crit, parts };
+  }
+
+  if (!grupos.length) {
+    return <div className="gwrap"><div className="note" style={{ padding: 20 }}>Nenhum item para os filtros atuais.</div></div>;
+  }
 
   return (
-    <div className="relative rounded-2xl border border-(--color-border) bg-(--color-surface-1)">
-      <div className="overflow-x-auto">
-        <div style={{ width: LW + W, minWidth: "100%" }}>
-          {/* cabeçalho: meses + heatmap de carga/paralelismo */}
-          <div className="flex">
-            <div
-              className="sticky left-0 z-10 flex shrink-0 flex-col justify-end gap-0.5 border-r border-b border-(--color-border) bg-(--color-surface-1) px-3 py-1.5 text-[10px] text-(--color-text-dim)"
-              style={{ width: LW, height: HH }}
-            >
-              <span>{linhas.filter((l) => l.tipo === "item").length} itens · {fmt(start)} → {fmt(end)}</span>
-              <span>Pranchas/dia em análise ▸</span>
-              <span>Projetos simultâneos ▸</span>
-            </div>
-            <svg width={W} height={HH} className="block border-b border-(--color-border)">
-              {diasVisiveis.map((d) => {
-                const dt = new Date(d * 86400000);
-                const ehDia1 = dt.getUTCDate() === 1 || d === start;
-                return ehDia1 ? (
-                  <g key={`mes-${d}`}>
-                    <text x={x(d) + 3} y={12} fontSize={11} fontWeight={700} fill={COR_NAVY}>
-                      {MESES_ABREV[dt.getUTCMonth()]}/{String(dt.getUTCFullYear()).slice(2)}
-                    </text>
-                    <line x1={x(d)} x2={x(d)} y1={0} y2={HH} stroke="var(--color-border)" />
-                  </g>
-                ) : null;
-              })}
-              {agregado.days.map((d, i) => {
-                if (d < start || d > end) return null;
-                const carga = agregado.cats.reduce((t, c) => t + agregado.load[c][i], 0);
-                const corCarga = `rgba(0,64,166,${0.06 + (mxCarga ? carga / mxCarga : 0) * 0.85})`;
-                const pc = agregado.projCount[i];
-                const corProj = `rgba(201,162,39,${0.08 + (mxProj ? pc / mxProj : 0) * 0.9})`;
-                const tip = `<b>${fmt(d)}</b><br/>Pranchas em análise (esperado): ${carga.toFixed(1)}<br/>Projetos simultâneos: ${pc}`;
+    <div className="gwrap">
+      <div className="ginner" style={{ width: LW + W }}>
+        <div className="ghead">
+          <div className="gcorner" style={{ width: LW, height: HH }}>
+            <div><b>{grupos.length}</b> {grupos.length === 1 ? "grupo" : "grupos"} · <b>{grupos.reduce((t, g) => t + g.its.length, 0)}</b> itens</div>
+            <div style={{ marginTop: "auto", fontWeight: 600, color: "#0B2A5B" }}>Pranchas para analisar por semana ▸</div>
+          </div>
+          <svg width={W} height={HH} style={{ display: "block" }}>
+            {dias.map((d) => {
+              const dt = new Date(d * 864e5);
+              return (
+                <g key={d}>
+                  {(dt.getUTCDate() === 1 || d === start) && <text x={X(d) + 4} y={14} fontSize={12} fontWeight={700} fill="#0B2A5B">{MES[dt.getUTCMonth()]}/{String(dt.getUTCFullYear()).slice(2)}</text>}
+                  {dt.getUTCDate() === 1 && <line x1={X(d)} x2={X(d)} y1={0} y2={HH} stroke="#C9D2E0" />}
+                  {dow(d) === 1 && <>
+                    <line x1={X(d)} x2={X(d)} y1={20} y2={HH} stroke="#EDF0F5" />
+                    {px * 7 >= 34 && <text x={X(d) + 3} y={32} fontSize={10.5} fill="#5B6B82">{ddmm(d)}</text>}
+                  </>}
+                </g>
+              );
+            })}
+            {semanas.map((w, j) => {
+              const ws = Math.max(w.k, start), we = Math.min(w.k + 6, end);
+              if (we < start) return null;
+              const v = wTot[j], h = Math.round((v / mx) * 38), hp = Math.round((wPri[j] / mx) * 38);
+              const x = X(ws) + 2, ww = Math.max(4, X(we + 1) - X(ws) - 4);
+              const html = `<b>Semana de ${fmt(w.k)}</b><br>Pranchas para analisar: <b>${nf(v)}</b><br>★ dos prioritários: <b>${nf(wPri[j])}</b>`;
+              return (
+                <g key={w.k} onMouseMove={(e) => tip(e, html)} onMouseLeave={sem}>
+                  <rect x={x} y={88 - h} width={ww} height={Math.max(h, 1)} rx={3} fill="#9DB9E6" />
+                  {hp > 0 && <rect x={x} y={88 - hp} width={ww} height={hp} rx={3} fill="#C9A227" />}
+                  {ww >= 18 && v >= 0.5 && <text x={x + ww / 2} y={84 - h} fontSize={10.5} fontWeight={700} textAnchor="middle" fill="#0B2A5B" pointerEvents="none">{nf(v)}</text>}
+                </g>
+              );
+            })}
+            <line x1={X(base)} x2={X(base)} y1={18} y2={HH} stroke={GC.today} strokeWidth={3} />
+            <rect x={X(base) - 22} y={0} width={44} height={17} rx={8} fill={GC.today} />
+            <text x={X(base)} y={12.5} fontSize={10.5} fontWeight={800} textAnchor="middle" fill="#0B2A5B">HOJE</text>
+          </svg>
+        </div>
+
+        <div className="gbody">
+          <div className="glabels" style={{ width: LW }}>
+            {linhas.map((l) => {
+              if (l.tipo === "g") {
+                const { late, crit, parts } = resumoGrupo(l.G);
+                const gp = agrupar === "code" && l.G.its.some((i) => ehPrioritario(i));
+                const nivel = Math.min(...l.G.its.map((i) => i.nivelPrioridade ?? 99));
                 return (
-                  <g key={`hm-${d}`}>
-                    <rect
-                      x={x(d)} y={34} width={Math.max(1, px)} height={10} fill={corCarga}
-                      onMouseEnter={(e) => setDica({ x: e.clientX, y: e.clientY, html: tip })}
-                      onMouseLeave={() => setDica(null)}
-                    />
-                    <rect
-                      x={x(d)} y={45} width={Math.max(1, px)} height={10} fill={corProj}
-                      onMouseEnter={(e) => setDica({ x: e.clientX, y: e.clientY, html: tip })}
-                      onMouseLeave={() => setDica(null)}
-                    />
-                  </g>
+                  <div key={`g-${l.G.g}`} className={`grow${gp ? " prio" : ""}`} style={{ height: GH }} onClick={() => onAlternarGrupo(l.G.g)}>
+                    <span className="car">{l.open ? "▼" : "▶"}</span>
+                    <div>
+                      <div className="gt">{gp && <span className="star">★{nivel < 99 ? nivel : ""}</span>}{l.G.g}</div>
+                      <div className="gs">
+                        {l.G.its.length} {l.G.its.length === 1 ? "item" : "itens"} · {parts || "—"}
+                        {late > 0 && <> · <b style={{ color: GC.late }}>{late} atrasado{late > 1 ? "s" : ""}</b></>}
+                        {crit > 0 && <> · <b style={{ color: GC.late }}>{crit} crítica{crit > 1 ? "s" : ""}</b></>}
+                      </div>
+                    </div>
+                  </div>
                 );
-              })}
-              <line x1={x(base)} x2={x(base)} y1={0} y2={HH} stroke={COR_HOJE} strokeWidth={3} strokeOpacity={0.55} />
-            </svg>
+              }
+              const it = l.it;
+              const st = plainStatus(it, cal, base);
+              return (
+                <div key={it.key} className="irow" style={{ height: RH }} title={`${it.obra || ""} — clique para ver o histórico`} onClick={() => setAberto(it)}>
+                  <div className="it">
+                    {agrupar !== "code" && ehPrioritario(it) && <span className="star">★</span>}
+                    {it.crit && <span className="tag">REV {it.revAT} · crítica</span>}
+                    {agrupar !== "code" ? `${it.code} · ` : ""}{tituloItem(it)}
+                  </div>
+                  <div className="is" style={{ color: st.c }}>{st.t}</div>
+                </div>
+              );
+            })}
           </div>
 
-          {/* corpo: rótulos + barras */}
-          <div className="flex">
-            <div className="sticky left-0 z-10 shrink-0 bg-(--color-surface-1)" style={{ width: LW }}>
-              {linhas.map((l, i) =>
-                l.tipo === "grupo" ? (
-                  <div
-                    key={`g-${i}`}
-                    className="flex items-center truncate bg-(--color-surface-2) px-3 text-xs font-semibold text-(--color-text)"
-                    style={
-                      l.prioritario
-                        ? { height: RH, background: COR_PRIO_FUNDO, borderLeft: `4px solid ${COR_HOJE}` }
-                        : { height: RH }
-                    }
-                    title={l.rotulo}
-                  >
-                    {l.prioritario && (
-                      <span style={{ color: COR_PRIO_ESTRELA, fontWeight: 800 }}>
-                        ★{l.rankPrioridade != null ? l.rankPrioridade + 1 : ""}
-                      </span>
-                    )}
-                    <span className="truncate">{l.rotulo}</span>
-                    <span className="ml-1 shrink-0 font-normal text-(--color-text-dim)">
-                      · {l.qtd} {l.qtd === 1 ? "item" : "itens"} · {l.pr.toFixed(0)} pr.
-                    </span>
-                  </div>
-                ) : (
-                  <div
-                    key={l.it.key}
-                    className="flex items-center gap-1 truncate border-t border-(--color-border) px-3 text-xs text-(--color-text)"
-                    style={{ height: RH }}
-                    title={`${l.it.code} · ${l.it.at ? "AT " + l.it.at : "sem AT"} · R${l.it.revAT ?? "-"} · ${l.it.analyst}`}
-                  >
-                    {agrupar !== "code" && ehPrioritario(l.it) && (
-                      <span style={{ color: COR_PRIO_ESTRELA, fontWeight: 800 }}>★</span>
-                    )}
-                    {l.it.crit && <span className="rounded bg-(--color-red) px-1 text-[9px] font-bold text-white">CRÍT</span>}
-                    {l.it.prazo === "Vencido" && <span className="rounded bg-(--color-orange) px-1 text-[9px] font-bold text-white">VENC</span>}
-                    <span className="truncate">
-                      {l.it.code} · {l.it.at ? `AT ${l.it.at}` : l.it.sim ? "simulação" : "s/ AT"} · R{l.it.revAT ?? "-"}
-                    </span>
-                  </div>
-                ),
-              )}
-            </div>
-            <svg width={W} height={H} className="block">
-              {px >= 10 && diasVisiveis.map((d) => {
-                const dt = new Date(d * 86400000);
-                const fds = dt.getUTCDay() === 0 || dt.getUTCDay() === 6;
-                return fds ? <rect key={`fds-${d}`} x={x(d)} y={0} width={px} height={H} fill="var(--color-surface-2)" opacity={0.5} /> : null;
-              })}
-              {linhas.map((l, i) => {
-                const y = i * RH;
-                if (l.tipo === "grupo") {
-                  return (
-                    <rect
-                      key={`gb-${i}`}
-                      x={0} y={y} width={W} height={RH}
-                      fill={l.prioritario ? COR_PRIO_FUNDO : "var(--color-surface-2)"}
-                    />
-                  );
-                }
-                const it = l.it;
+          <svg width={W} height={H} style={{ display: "block" }}>
+            <rect x={X(base)} y={0} width={3} height={H} fill={GC.today} opacity={0.55} />
+            {linhas.map((l) => {
+              if (l.tipo === "g") {
+                const { late, parts } = resumoGrupo(l.G);
+                const all = l.G.its.flatMap((i) => estagiosVisiveis(i));
+                const s0 = all.length ? Math.min(...all.map((s) => s.s)) : null;
+                const ends = all.filter((s) => !(s.dk === "est" && (s.cyc ?? 0) > 0)).map((s) => s.e);
+                const e0 = ends.length ? Math.max(...ends) : null;
+                const libs = l.G.its.map((i) => (mostrarEstimativas ? i.d.libMed : i.d.libBest)).filter((o) => o && o.v != null).map((o) => o!.v as number);
+                const lib = libs.length ? Math.max(...libs) : null;
+                const yy = l.y;
                 return (
-                  <g key={it.key}>
-                    <line x1={0} x2={W} y1={y + RH - 0.5} y2={y + RH - 0.5} stroke="var(--color-border)" />
-                    {it.stages.map((s, si) => {
-                      if (!mostrarEstimativas && s.dk === "est" && (s.cyc ?? 0) > 0) return null;
-                      if (s.e < start || s.s > end) return null;
-                      const x1 = x(Math.max(s.s, start)), x2 = x(Math.min(s.e, end) + 1), w = Math.max(2, x2 - x1);
-                      const { fill, stroke, dash } = corEstagio(s, it);
-                      const tip = `<b>${esc(it.code)}${it.at ? " · AT " + esc(it.at) : ""}</b> · ${esc(it.prest)}<br/>${s.kind === "prest" ? "Com o prestador" : s.kind === "hold" ? "HOLD" : "Análise"} · REV ${s.rev ?? "-"}${s.cyc ? " · ciclo estimado " + s.cyc : ""}<br/>${fmt(s.s)} → ${fmt(s.e)}<br/>Pranchas: ${s.pr.toFixed(1)} · Analista: ${esc(it.analyst)}${s.over ? "<br/><b>Prazo vencido</b>" : ""}`;
+                  <g key={`g-${l.G.g}`}>
+                    <rect x={0} y={yy} width={W} height={GH} fill="#E8EEF7" opacity={0.55} />
+                    {s0 != null && e0 != null && (() => {
+                      const x1 = X(Math.max(s0, start)), x2 = X(Math.min(e0, end) + 1);
+                      const html = `<b>${esc(l.G.g)}</b><br>Período com trabalho previsto: ${fmt(Math.max(s0, start))} a ${fmt(e0)}<br>${parts}${late ? `<br><b>${late} atrasado(s)</b>` : ""}`;
                       return (
-                        <rect
-                          key={si}
-                          x={x1} y={y + 4} width={w} height={RH - 8} rx={2}
-                          fill={fill}
-                          stroke={dash ? stroke : "none"} strokeDasharray={dash ? "4 3" : undefined}
-                          onMouseEnter={(e) => setDica({ x: e.clientX, y: e.clientY, html: tip })}
-                          onMouseLeave={() => setDica(null)}
-                        />
-                      );
-                    })}
-                    {it.overdue &&
-                      it.stages.some((s) => s.over && s.e < base) &&
-                      (() => {
-                        const sVenc = it.stages.find((s) => s.over && s.e < base)!;
-                        const xa = x(Math.max(sVenc.e + 1, start)), xb = x(base);
-                        return xb > xa ? <rect x={xa} y={y + 7} width={xb - xa} height={RH - 14} fill={COR_VENCIDO} /> : null;
-                      })()}
-                    {it.d.libMed?.v != null && it.d.libMed.v >= start && it.d.libMed.v <= end && (() => {
-                      const cx = x(it.d.libMed.v) + px / 2, cy = y + RH / 2;
-                      return (
-                        <g>
-                          <circle cx={cx} cy={cy} r={8} fill={COR_OK} />
-                          <text x={cx} y={cy + 1} fontSize={10} fontWeight={800} textAnchor="middle" dominantBaseline="middle" fill="#fff">
-                            ✓
-                          </text>
-                        </g>
+                        <>
+                          <rect x={x1} y={yy + 15} width={Math.max(4, x2 - x1)} height={16} rx={8} fill={GC.grp} stroke="#C3CEDF" onMouseMove={(e) => tip(e, html)} onMouseLeave={sem} />
+                          {l.G.its.flatMap((i) => estagiosVisiveis(i).filter((s) => s.kind === "anal" && !(s.dk === "est" && (s.cyc ?? 0) > 0)).map((s, k) => {
+                            const a = X(Math.max(s.s, start)), b2 = X(Math.min(s.e, end) + 1);
+                            return <rect key={`${i.key}-${k}`} x={a} y={yy + 19} width={Math.max(2, b2 - a)} height={8} rx={4} fill={i.sim ? GC.analPrev : GC.anal} opacity={0.55} pointerEvents="none" />;
+                          }))}
+                          {late > 0 && <>
+                            <circle cx={X(base)} cy={yy + 23} r={10} fill={GC.late} />
+                            <text x={X(base)} y={yy + 27} fontSize={11} fontWeight={800} textAnchor="middle" fill="#fff" pointerEvents="none">{late}</text>
+                          </>}
+                        </>
                       );
                     })()}
+                    {lib != null && lib <= end && (
+                      <g onMouseMove={(e) => tip(e, `Tudo deste grupo liberado por volta de <b>${fmt(lib)}</b>${mostrarEstimativas ? " (considerando revisões prováveis)" : " (se tudo for aprovado na próxima análise)"}`)} onMouseLeave={sem}>
+                        <circle cx={X(lib) + px / 2} cy={yy + 23} r={9} fill={GC.ok} />
+                        <text x={X(lib) + px / 2} y={yy + 27} fontSize={11} fontWeight={800} textAnchor="middle" fill="#fff">✓</text>
+                        <text x={X(lib) + px / 2 + 13} y={yy + 27} fontSize={11} fontWeight={700} fill={GC.ok}>{ddmm(lib)}</text>
+                      </g>
+                    )}
                   </g>
                 );
-              })}
-              <line x1={x(base)} x2={x(base)} y1={0} y2={H} stroke={COR_HOJE} strokeWidth={3} strokeOpacity={0.55} />
-            </svg>
-          </div>
+              }
+              const it = l.it, yy = l.y;
+              const vs = estagiosVisiveis(it);
+              const lo = mostrarEstimativas ? it.d.libMed : it.d.libBest;
+              const lv = lo?.v ?? null;
+              return (
+                <g key={it.key}>
+                  <line x1={0} x2={W} y1={yy + RH - 0.5} y2={yy + RH - 0.5} stroke="#EEF1F6" />
+                  {vs.map((s, si) => {
+                    const x1 = X(Math.max(s.s, start)), x2 = X(Math.min(s.e, end) + 1), w = Math.max(3, x2 - x1);
+                    const est = s.dk === "est" && (s.cyc ?? 0) > 0;
+                    let fill: string, stroke = "none", dash = false, txt = "", tc = "#fff";
+                    if (s.kind === "hold") { fill = GC.hold; txt = "Parado"; }
+                    else if (s.kind === "prest") { fill = s.dk === "est" ? GC.prestEst : GC.prest; txt = "Prestador"; tc = "#2D3748"; if (fill === GC.prestEst) { stroke = "#A3AEBF"; dash = true; } }
+                    else { fill = it.sim ? GC.analPrev : GC.anal; txt = "Análise"; }
+                    if (est) { fill = "#fff"; stroke = s.kind === "prest" ? "#A3AEBF" : "#8DB0EA"; dash = true; txt = s.kind === "prest" ? "nova revisão?" : "reanálise?"; tc = "#5B6B82"; }
+                    const html = `<b>${esc(tituloItem(it))}</b> · ${esc(it.code)} ${esc(it.prest)}<br>${esc(it.obra || "")}<br><br><b>${s.kind === "prest" ? "Com o prestador" : s.kind === "hold" ? "Parado (HOLD)" : "Análise na Tecnoplano"}</b>${est ? ` — só acontece se houver nova revisão (${nf(s.w * 100)}% de chance)` : ""}<br>De ${fmt(s.s)} até ${fmt(s.e)}${s.kind === "prest" ? ` · prazo de ${it.slaP} dias úteis` : s.kind === "anal" ? ` · prazo de ${it.slaI} dias úteis` : ""}<br>${({ real: "Data registrada na planilha", sla: "Data calculada pelo prazo (SLA)", inf: "Data informada pelo prestador", est: "Data estimada" } as const)[s.dk]}<br>Pranchas: ${nf(s.pr, 1)} · Analista: ${esc(it.analyst)}`;
+                    const vencida = s.over && s.e < base;
+                    const xa = X(Math.max(s.e + 1, start)), xb = X(base);
+                    return (
+                      <g key={si}>
+                        {s.e >= start && <rect x={x1} y={yy + 9} width={w} height={RH - 18} rx={5} fill={fill} stroke={stroke} strokeDasharray={dash ? "4 3" : undefined} onMouseMove={(e) => tip(e, html)} onMouseLeave={sem} />}
+                        {s.e >= start && w >= txt.length * 6.2 + 10 && <text x={x1 + w / 2} y={yy + RH / 2 + 4} fontSize={11} fontWeight={600} textAnchor="middle" fill={tc} pointerEvents="none">{txt}</text>}
+                        {vencida && xb > xa && (
+                          <>
+                            <rect x={xa} y={yy + 9} width={xb - xa} height={RH - 18} rx={5} fill={GC.late}
+                              onMouseMove={(e) => tip(e, `<b>Atrasado</b><br>O prazo venceu em ${fmt(s.e)}.<br>Hoje são ${lateDays(cal, s.e, base)} dias úteis de atraso.`)} onMouseLeave={sem} />
+                            {xb - xa > 60 && <text x={(xa + xb) / 2} y={yy + RH / 2 + 4} fontSize={11} fontWeight={700} textAnchor="middle" fill="#fff" pointerEvents="none">atrasado</text>}
+                          </>
+                        )}
+                      </g>
+                    );
+                  })}
+                  {lv != null && lv >= start && lv <= end && (
+                    <g onMouseMove={(e) => tip(e, mostrarEstimativas ? `<b>Liberação prevista</b>: ${fmt(lv)}<br>Considera a chance de novas revisões.` : `<b>Liberação</b> em ${fmt(lv)}<br>se o documento for aprovado na próxima análise.`)} onMouseLeave={sem}>
+                      <circle cx={X(lv) + px / 2} cy={yy + RH / 2} r={8} fill={GC.ok} />
+                      <text x={X(lv) + px / 2} y={yy + RH / 2 + 4} fontSize={10} fontWeight={800} textAnchor="middle" fill="#fff">✓</text>
+                    </g>
+                  )}
+                  {it.pend.length > 0 && !vs.length && (
+                    <text x={X(Math.max(base, start)) + 8} y={yy + RH / 2 + 4} fontSize={11.5} fill="#8A5300">❓ {it.pend[0]}</text>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
         </div>
       </div>
+
       {dica && (
-        <div
-          className="pointer-events-none fixed z-50 max-w-xs rounded-lg border border-(--color-border) bg-(--color-surface-1) px-3 py-2 text-xs text-(--color-text) shadow-lg"
-          style={{ left: dica.x + 12, top: dica.y + 12 }}
-          dangerouslySetInnerHTML={{ __html: dica.html }}
-        />
+        <div id="tip" style={{ position: "fixed", left: dica.x + 12, top: dica.y + 12, display: "block" }} dangerouslySetInnerHTML={{ __html: dica.html }} />
       )}
-      {linhas.filter((l) => l.tipo === "item").length === 0 && (
-        <p className="p-8 text-center text-sm text-(--color-text-weak)">Nenhum item para os filtros atuais.</p>
-      )}
-      {/* Legenda — mesmos 9 itens do protótipo de referência, exceto "Novas
-          ATs previstas (ritmo)" (aba "📈 Previsão", não portada — ver nota
-          em motor.ts). */}
-      <p className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 text-[11px] text-(--color-text-dim)">
-        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2.5 w-[18px] rounded-sm" style={{ background: COR_PREST }} /> Com o prestador</span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-2.5 w-[18px] rounded-sm border border-dashed" style={{ background: COR_PREST_EST, borderColor: COR_PREST }} />
-          Com o prestador (data estimada)
-        </span>
-        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2.5 w-[18px] rounded-sm" style={{ background: COR_ANAL }} /> Em análise na Tecnoplano</span>
-        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2.5 w-[18px] rounded-sm" style={{ background: COR_ANAL_PREV }} /> Análise de documento que ainda vai chegar</span>
-        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2.5 w-[18px] rounded-sm" style={{ background: COR_VENCIDO }} /> Atrasado</span>
-        <span className="inline-flex items-center gap-1.5">
-          <span
-            className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full text-[10px] font-bold text-white"
-            style={{ background: COR_OK }}
-          >
-            ✓
-          </span>
-          Liberação
-        </span>
-        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2.5 w-1 rounded-sm" style={{ background: COR_HOJE }} /> Hoje</span>
-        <span className="inline-flex items-center gap-1"><span style={{ color: COR_PRIO_ESTRELA, fontWeight: 800 }}>★</span> Prioritário</span>
-      </p>
+
+      <dialog ref={dlgRef} onClose={() => setAberto(null)} onClick={(e) => e.target === dlgRef.current && setAberto(null)}>
+        {aberto && <HistoricoItem it={aberto} onFechar={() => setAberto(null)} />}
+      </dialog>
     </div>
+  );
+}
+
+const DK: Record<string, string> = { real: "R", inf: "I", sla: "S", est: "E" };
+const ROT_DK: Record<string, string> = { real: "Real", sla: "SLA", est: "Estimada", inf: "Informada" };
+const CLASSE_PRAZO: Record<string, string> = { Vencido: "p-venc", "Próximo do vencimento": "p-prox", "Em dia": "p-dia", HOLD: "p-hold", "Sem dados": "p-sd", Liberada: "p-lib", Simulado: "p-sim", Encerrada: "p-sd" };
+
+function Marca({ o }: { o: { v: number | null; k: string } | undefined }) {
+  return o && o.v != null ? <>{fmt(o.v)}<span className={`dk ${o.k}`}>{DK[o.k]}</span></> : <span className="note">—</span>;
+}
+
+function HistoricoItem({ it, onFechar }: { it: ItemGantt; onFechar: () => void }) {
+  const dts: [string, { v: number | null; k: string } | undefined][] = [
+    ["Emissão da AT (M)", it.d.at], ["Enviado pelo prestador", it.d.entrega], ["Entrega prevista do prestador", it.d.prestDue],
+    ["Recebimento previsto / real", it.d.recv], ["Conclusão prevista da análise", it.d.anaDue], ["Data Limite registrada (L)", it.d.Lreg],
+    ["Liberação sem novas reprovações", it.d.libBest], ["Liberação estimada (mediana)", it.d.libMed],
+  ];
+  const titulo = `${it.code} · ${it.prest} · ${it.at ? "AT " + it.at : it.docLbl ? it.docLbl + " — " + it.obra : it.sim ? "Simulação" : "Sem nº de AT"}`;
+  return (
+    <>
+      <div className="dh"><b>{titulo}</b><button type="button" className="btn sm" onClick={onFechar}>Fechar</button></div>
+      <div className="db">
+        <div className="pgrid">
+          <div>
+            <table className="mini"><thead><tr><th>Campo</th><th>Valor</th></tr></thead><tbody>
+              <tr><td>Projeto (obra)</td><td style={{ textAlign: "left" }}>{it.obra}</td></tr>
+              <tr><td>Status atual (V)</td><td>{it.state}</td></tr>
+              <tr><td>Fase</td><td>{it.phase}</td></tr>
+              <tr><td>REV. AT vigente</td><td>{it.revAT ?? "—"}</td></tr>
+              <tr><td>Analista</td><td>{it.analyst}</td></tr>
+              <tr><td>Pranchas (ciclo atual)</td><td>{it.pr}</td></tr>
+              <tr><td>SLA prestador / análise</td><td>{it.slaP} / {it.slaI} du</td></tr>
+              {it.nivelPrioridade != null && <tr><td>Prioridade</td><td><span className="star">★</span>Nível {it.nivelPrioridade}</td></tr>}
+              <tr><td>Prazo</td><td><span className={`pill ${CLASSE_PRAZO[it.prazo ?? ""] || "p-sd"}`}>{it.prazo}</span> {it.crit && <span className="pill p-crit">CRÍTICA</span>}</td></tr>
+              {it.old && <tr><td>Projeto antigo</td><td>Sim — fora da projeção principal</td></tr>}
+            </tbody></table>
+          </div>
+          <div>
+            <table className="mini"><thead><tr><th>Data projetada</th><th>Valor</th></tr></thead><tbody>
+              {dts.filter(([, o]) => o && o.v != null).map(([n, o]) => <tr key={n}><td>{n}</td><td><Marca o={o} /></td></tr>)}
+            </tbody></table>
+            {it.pend.length > 0 && <div className="warn" style={{ marginTop: 8 }}>{it.pend.map((p, i) => <div key={i}>{p}</div>)}</div>}
+            {it.flags.length > 0 && <div className="info" style={{ marginTop: 8 }}>{it.flags.map((p, i) => <div key={i}>{p}</div>)}</div>}
+          </div>
+        </div>
+        <h4 style={{ color: "#0B2A5B", margin: "14px 0 6px" }}>Etapas projetadas</h4>
+        <table className="mini"><thead><tr><th>Etapa</th><th>Início</th><th>Fim</th><th>REV</th><th>Tipo</th><th>Prob.</th><th>Pranchas</th></tr></thead><tbody>
+          {it.stages.map((s: EstagioGantt, i) => (
+            <tr key={i}>
+              <td>{s.kind === "prest" ? "Prestador" : s.kind === "hold" ? "HOLD" : s.cat === "hist" ? "Análise (histórico)" : "Análise interna"}{s.cyc ? ` · ciclo est. ${s.cyc}` : ""}</td>
+              <td>{fmt(s.s)}</td><td>{fmt(s.e)}</td><td>{s.rev ?? "—"}</td><td>{ROT_DK[s.dk]}</td><td>{nf(s.w * 100)}%</td><td>{nf(s.pr, 1)}</td>
+            </tr>
+          ))}
+        </tbody></table>
+        <div className="note" style={{ marginTop: 6 }}>R = real (planilha) · I = informada · S = calculada pelo SLA · E = estimada</div>
+      </div>
+    </>
   );
 }

@@ -39,6 +39,8 @@ export type UiGanttEstado = {
   incluirAntigos: boolean;
   /** "atual" oculta ciclos/entregas estimados; "simulado" os inclui. */
   cenario: "atual" | "simulado";
+  visao: "gantt" | "an";
+  anGran: "w" | "m";
 };
 
 export const FILTROS_PADRAO: FiltrosGanttEstado = {
@@ -62,6 +64,8 @@ export const UI_PADRAO: UiGanttEstado = {
   slaI: 10,
   incluirAntigos: false,
   cenario: "simulado",
+  visao: "gantt",
+  anGran: "w",
 };
 
 export type EntregaFuturaEstado = EntregaFutura & { id: string };

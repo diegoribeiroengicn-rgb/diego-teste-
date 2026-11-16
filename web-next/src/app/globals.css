@@ -212,3 +212,50 @@ body {
 .gref table.pt input.ov{border-color:var(--gold);background:#FFFBEF;font-weight:700}
 .gref .scroll{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:8px}
 .gref .cmp{font-size:11.5px;margin-top:4px;font-weight:600}
+/* Gantt — corpo (rótulos, barras, histórico) */
+.gref .gwrap{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:auto;max-height:78vh;position:relative}
+.gref .ginner{position:relative}
+.gref .ghead{position:sticky;top:0;z-index:5;display:flex;background:#fff;border-bottom:1px solid var(--line)}
+.gref .gcorner{position:sticky;left:0;z-index:6;background:#fff;border-right:1px solid var(--line);flex:0 0 auto;font-size:11px;color:var(--muted);padding:4px 8px;display:flex;flex-direction:column;justify-content:flex-end}
+.gref .gbody{display:flex}
+.gref .glabels{position:sticky;left:0;z-index:4;background:#fff;border-right:1px solid var(--line);flex:0 0 auto}
+.gref .glabels .grow{display:flex;gap:8px;align-items:center;padding:0 10px;background:#F3F6FB;border-bottom:1px solid #E1E7F0;cursor:pointer;line-height:1.25;overflow:hidden}
+.gref .glabels .grow:hover{background:#E9EFF8}
+.gref .glabels .grow .car{color:var(--brand);font-size:12px;width:12px}
+.gref .glabels .grow .gt{font-weight:700;color:var(--navy);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:330px}
+.gref .glabels .grow .gs{font-size:11.5px;color:#4A5568;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:330px}
+.gref .glabels .grow.prio{background:#FFF6DA;border-left:5px solid var(--gold)}
+.gref .glabels .grow.prio:hover{background:#FCEFC4}
+.gref .glabels .irow{padding:3px 10px 3px 30px;border-bottom:1px solid #EEF1F6;cursor:pointer;line-height:1.3;overflow:hidden;display:flex;flex-direction:column;justify-content:center}
+.gref .glabels .irow:hover{background:#F7F9FD}
+.gref .glabels .irow .it{font-size:12px;font-weight:600;color:#1B2433;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gref .glabels .irow .is{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gref .glabels .tag{background:#D64541;color:#fff;border-radius:4px;font-size:10px;padding:0 5px;margin-right:6px;font-weight:700}
+.gref #tip{pointer-events:none;z-index:100;background:#0B1A33;color:#fff;font-size:11.5px;padding:7px 9px;border-radius:6px;max-width:360px;box-shadow:0 6px 18px rgba(0,0,0,.3);line-height:1.4}
+.gref .mini{width:100%;border-collapse:collapse;font-size:12px}
+.gref .mini th,.gref .mini td{padding:4px 6px;border-bottom:1px solid var(--line2);text-align:right;white-space:nowrap}
+.gref .mini th:first-child,.gref .mini td:first-child{text-align:left}
+.gref .mini th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase}
+.gref .warn{background:#FBEBD0;border:1px solid #F0C987;color:#7A4B00;border-radius:8px;padding:8px 10px;font-size:12px}
+.gref .dk{display:inline-block;font-size:9.5px;font-weight:700;border-radius:3px;padding:0 3px;margin-left:3px;vertical-align:1px;line-height:14px}
+.gref .dk.real{background:var(--navy);color:#fff}
+.gref .dk.inf{background:#fff;color:#8A6D00;border:1px solid var(--gold)}
+.gref .dk.sla{background:var(--brand2);color:#fff}
+.gref .dk.est{background:#fff;color:#7B4FB3;border:1px dashed #7B4FB3}
+.gref .pill{display:inline-block;padding:1px 7px;border-radius:12px;font-size:11px;font-weight:600}
+.gref .p-venc{background:#F6D5D1;color:var(--red)} .gref .p-prox{background:#FBEBD0;color:#8A5300} .gref .p-dia{background:#D5F0DF;color:var(--green)}
+.gref .p-crit{background:var(--red);color:#fff} .gref .p-sd{background:#E9ECF2;color:#4A5568} .gref .p-hold{background:#EDE3F7;color:#7B4FB3} .gref .p-lib{background:#D5F0DF;color:var(--green)} .gref .p-sim{background:#FFF3CF;color:#7A5B00}
+/* Visão por analista */
+.gref .anpanel{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.gref table.antb{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}
+.gref table.antb th{background:var(--navy);color:#fff;padding:7px 8px;text-align:center;font-weight:600;position:sticky;top:0;white-space:nowrap}
+.gref table.antb th.l,.gref table.antb td.l{text-align:left}
+.gref table.antb td{padding:6px 8px;border-bottom:1px solid #EEF1F6;text-align:center;white-space:nowrap}
+.gref table.antb tr:hover td{background:#F7F9FD}
+.gref table.antb td.now{background:#EAF1FB;font-weight:700}
+.gref table.antb td.tot{background:#FFF6DA;font-weight:700}
+.gref table.antb .big{font-size:15px;font-weight:800;color:var(--navy);display:block}
+.gref table.antb .sm{display:block;font-size:10.5px;color:#5B6B82;font-weight:500}
+.gref table.antb tr.total td{background:#EEF2F8;font-weight:800;border-top:2px solid var(--navy)}
+.gref table.antb a.an{color:var(--brand);cursor:pointer;font-weight:700;text-decoration:none}
+.gref table.antb a.an:hover{text-decoration:underline}
