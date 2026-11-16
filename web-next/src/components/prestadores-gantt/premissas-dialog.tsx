@@ -35,6 +35,19 @@ export function PremissasDialog({
   const [busca, setBusca] = useState("");
   const [msgPrio, setMsgPrio] = useState<string | null>(null);
   const [salvandoPrio, setSalvandoPrio] = useState(false);
+  /** Aceita vários de uma vez: projetos separados por vírgula, espaço ou linha; prestadores/cessionários por ponto e vírgula ou linha. */
+  async function adicionarVarios(tipo: "DOCUMENTO" | "PRESTADOR", texto: string) {
+    const partes = [...new Set(texto.split(tipo === "DOCUMENTO" ? /[\s,;]+/ : /[;\n]+/).map((x) => x.trim()).filter(Boolean))];
+    if (!partes.length) return;
+    setSalvandoPrio(true); setMsgPrio(null);
+    const falhas: string[] = [];
+    for (const chave of partes) {
+      const erro = await onDefinirMarcador(tipo, tipo === "DOCUMENTO" ? chave.toUpperCase() : chave, true);
+      if (erro) falhas.push(`${chave}: ${erro}`);
+    }
+    setMsgPrio(falhas.length ? `Alguns não foram salvos — ${falhas.join(" | ")}` : `${partes.length} prioridade(s) registrada(s): ${partes.join(", ")}.`);
+    setSalvandoPrio(false);
+  }
   async function marcador(tipo: "DOCUMENTO" | "PRESTADOR", chave: string, ativo: boolean) {
     setSalvandoPrio(true); setMsgPrio(null);
     const erro = await onDefinirMarcador(tipo, chave, ativo);
@@ -128,9 +141,11 @@ export function PremissasDialog({
                   <select value={tipoMarcador} onChange={(e) => { setTipoMarcador(e.target.value as "DOCUMENTO" | "PRESTADOR"); setNovoMarcador(""); }} className="btn sm">
                     <option value="DOCUMENTO">Projeto/documento</option><option value="PRESTADOR">{E.Ent}</option>
                   </select>
-                  <input list="dlMarcadores" value={novoMarcador} onChange={(e) => setNovoMarcador(e.target.value)} placeholder={tipoMarcador === "DOCUMENTO" ? "código, ex.: P241" : `nome do ${E.ent}`} className="btn sm" style={{ width: 220 }} />
-                  <datalist id="dlMarcadores">{(tipoMarcador === "DOCUMENTO" ? codigos : [...new Set(itens.map((i) => i.prest))].sort()).map((c) => <option key={c} value={c} />)}</datalist>
-                  <button type="button" className="btn sm pri" disabled={salvandoPrio || !novoMarcador.trim()} onClick={async () => { await marcador(tipoMarcador, novoMarcador.trim(), true); setNovoMarcador(""); }}>+ Adicionar</button>
+                  <textarea value={novoMarcador} onChange={(e) => setNovoMarcador(e.target.value)} rows={2}
+                    placeholder={tipoMarcador === "DOCUMENTO" ? "um ou vários códigos: P267, P268, P270" : `um ou vários nomes, separados por ; ou linha`}
+                    className="btn sm" style={{ width: 300, height: 52, whiteSpace: "pre-wrap" }} />
+                  <button type="button" className="btn sm pri" disabled={salvandoPrio || !novoMarcador.trim()} onClick={async () => { await adicionarVarios(tipoMarcador, novoMarcador); setNovoMarcador(""); }}>+ Adicionar</button>
+                  <span className="note">Pode ser qualquer código, mesmo sem análise em andamento (entregas futuras).</span>
                 </div>
               )}
               {msgPrio && <div className="note" style={{ marginTop: 8, color: "#173E77" }}>{msgPrio}</div>}
