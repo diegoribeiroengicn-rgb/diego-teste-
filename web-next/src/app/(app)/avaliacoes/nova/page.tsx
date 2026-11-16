@@ -1,7 +1,10 @@
+import { connection } from "next/server";
 import { buscarPerguntasChecklist, buscarResponsaveisDistintos } from "@/lib/avaliacao-checklist";
 import { FormularioAvaliacaoChecklist } from "@/components/formulario-avaliacao-checklist";
 
 export default async function PaginaNovaAvaliacao() {
+  // Renderização por requisição: a página lê o banco, nunca no build.
+  await connection();
   const [perguntas, responsaveis] = await Promise.all([
     buscarPerguntasChecklist(),
     buscarResponsaveisDistintos(),
