@@ -1,4 +1,5 @@
 import { obterPool } from "@/lib/db";
+import { alinharSequencias } from "@/lib/esquema-baixa";
 
 /** Estrutura única de prioridades (Prestador, Documento/Projeto e Análise),
  * criada de forma segura e idempotente na primeira utilização. Nada do que
@@ -49,6 +50,9 @@ export function garantirEsquemaPrioridades(): Promise<void> {
   pronto ??= (async () => {
     const pool = obterPool();
     for (const comando of SQL) await pool.query(comando);
+    // As tabelas vieram do SQLite com ids já preenchidos: sem alinhar as sequências, o primeiro
+    // INSERT em historico_edicoes (ou em outra tabela) falha com "duplicate key ... _pkey".
+    await alinharSequencias();
   })().catch((exc) => {
     pronto = null;
     throw new Error(`Não foi possível preparar o banco para as prioridades: ${exc instanceof Error ? exc.message : exc}`);

@@ -11,10 +11,10 @@ import type { Projeto } from "@/lib/projetos";
 
 const CORES_STATUS: Record<string, string> = {
   "EM ANÁLISE": "bg-(--color-blue-3) text-(--color-blue-2)",
-  "EM HOLD": "bg-(--color-orange-bg) text-(--color-orange)",
-  LIBERADO: "bg-(--color-green-bg) text-(--color-green)",
-  "LIBERADO C/ REST.": "bg-(--color-green-bg) text-(--color-green)",
-  "NÃO LIBERADO": "bg-(--color-red-bg) text-(--color-red)",
+  "EM HOLD": "bg-(--color-surface-2) text-(--color-text-weak)",
+  LIBERADO: "bg-(--color-blue-3) text-(--color-navy)",
+  "LIBERADO C/ REST.": "bg-(--color-blue-3) text-(--color-navy)",
+  "NÃO LIBERADO": "bg-(--color-surface-2) text-(--color-text-weak)",
 };
 
 function formatarData(valor: string | null): string {

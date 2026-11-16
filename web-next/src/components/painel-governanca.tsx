@@ -31,13 +31,14 @@ const fmtDataHora = (v: string | null) => {
 };
 
 const COR_STATUS: Record<string, string> = {
-  "EM ANÁLISE": "bg-(--color-blue-3) text-(--color-blue-2)", "EM HOLD": "bg-(--color-orange-bg) text-(--color-orange)",
-  LIBERADO: "bg-(--color-green-bg) text-(--color-green)", "LIBERADO C/ REST.": "bg-(--color-green-bg) text-(--color-green)",
-  "NÃO LIBERADO": "bg-(--color-red-bg) text-(--color-red)",
+  "EM ANÁLISE": "bg-(--color-blue-3) text-(--color-blue-2)", "EM HOLD": "bg-(--color-surface-2) text-(--color-text-weak)",
+  LIBERADO: "bg-(--color-blue-3) text-(--color-navy)", "LIBERADO C/ REST.": "bg-(--color-blue-3) text-(--color-navy)",
+  "NÃO LIBERADO": "bg-(--color-surface-2) text-(--color-text-weak)",
 };
 
 function Cartao({ titulo, valor, detalhe, tom, destino, ativo }: { titulo: string; valor: string; detalhe?: string; tom?: "red" | "orange" | "green" | "navy"; destino: string; ativo?: boolean }) {
-  const cor = tom === "red" ? "text-(--color-red)" : tom === "orange" ? "text-(--color-orange)" : tom === "green" ? "text-(--color-green)" : "text-(--color-navy)";
+  void tom; // indicadores quantitativos são sempre neutros (azul-marinho)
+  const cor = "text-(--color-navy)";
   return (
     <Link href={destino} className={`block rounded-2xl border bg-(--color-surface-1) px-4 py-3.5 transition-colors hover:bg-(--color-surface-2) ${ativo ? "border-(--color-navy) ring-2 ring-(--color-navy)/20" : "border-(--color-border)"}`}>
       <p className="text-xs text-(--color-text-weak)">{titulo}</p>
@@ -95,9 +96,9 @@ function TabelaLinhas({ linhas, vazio }: { linhas: LinhaLocalizacao[]; vazio: st
 function BarraSla({ d }: { d: LinhaDistribuicao }) {
   return (
     <div className="flex h-2 w-full overflow-hidden rounded-full bg-(--color-surface-2)">
-      {d.dentro > 0 && <div className="bg-(--color-green)" style={{ flexGrow: d.dentro }} />}
-      {d.proximo > 0 && <div className="bg-(--color-orange)" style={{ flexGrow: d.proximo }} />}
-      {d.vencido > 0 && <div className="bg-(--color-red)" style={{ flexGrow: d.vencido }} />}
+      {d.dentro > 0 && <div className="bg-(--color-blue-3)" style={{ flexGrow: d.dentro }} />}
+      {d.proximo > 0 && <div className="bg-(--color-blue-2)" style={{ flexGrow: d.proximo }} />}
+      {d.vencido > 0 && <div className="bg-(--color-navy)" style={{ flexGrow: d.vencido }} />}
     </div>
   );
 }
@@ -113,7 +114,7 @@ function TabelaDistribuicao({ titulo, dados, hrefLinha }: { titulo: string; dado
               <div className="flex items-center justify-between gap-2 text-xs">
                 {hrefLinha ? <Link href={hrefLinha(d.chave)} className="truncate font-medium text-(--color-navy) hover:underline">{d.chave}</Link> : <span className="truncate text-(--color-text)">{d.chave}</span>}
                 <span className="shrink-0 tabular-nums text-(--color-text-weak)">
-                  <span className="text-(--color-green)">{d.dentro}</span> · <span className="text-(--color-orange)">{d.proximo}</span> · <span className="text-(--color-red)">{d.vencido}</span>
+                  <span>{d.dentro}</span> · <span>{d.proximo}</span> · <span className="font-semibold">{d.vencido}</span>
                 </span>
               </div>
               <div className="mt-1"><BarraSla d={d} /></div>
@@ -268,8 +269,8 @@ export function PainelGovernanca({
                     <td className="px-3 py-2.5 text-right tabular-nums text-(--color-text-weak)">{e.total}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums font-medium text-(--color-text)">{e.pendentes}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-(--color-text-weak)">{e.documentosPendentes}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-(--color-green)">{e.concluidas}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums" style={{ color: e.vencidas ? "var(--color-red)" : undefined }}>{e.vencidas}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-(--color-text)">{e.concluidas}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums" style={{ fontWeight: e.vencidas ? 600 : undefined }}>{e.vencidas}</td>
                     <td className="w-40 px-3 py-2.5"><div className="h-2 rounded-full bg-(--color-surface-2)"><div className="h-2 rounded-full bg-(--color-navy)" style={{ width: `${(e.pendentes / maior) * 100}%` }} /></div></td>
                   </tr>
                 );
@@ -283,9 +284,9 @@ export function PainelGovernanca({
       <Secao titulo="Alertas operacionais">
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
           {alertas.map((a) => (
-            <Link key={a.chave} href={go(a.chave)} className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm hover:bg-(--color-surface-2) ${a.n && a.tom === "red" ? "border-(--color-red)/40 bg-(--color-red-bg)" : "border-(--color-border) bg-(--color-surface-1)"}`}>
+            <Link key={a.chave} href={go(a.chave)} className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm hover:bg-(--color-surface-2) border-(--color-border) bg-(--color-surface-1)`}>
               <span className="text-(--color-text)">{a.rotulo}</span>
-              <span className={`text-lg font-semibold tabular-nums ${a.n ? (a.tom === "red" ? "text-(--color-red)" : "text-(--color-navy)") : "text-(--color-text-dim)"}`}>{a.n}</span>
+              <span className={`text-lg font-semibold tabular-nums ${a.n ? "text-(--color-navy)" : "text-(--color-text-dim)"}`}>{a.n}</span>
             </Link>
           ))}
         </div>
