@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ehPrioritario, type FaixaHistorica, type ItemGantt } from "@/lib/prestadores-gantt/motor";
+import { ehPrioritario, fmt, type FaixaHistorica, type ItemGantt } from "@/lib/prestadores-gantt/motor";
 import { FERIADOS_RJ_ISO } from "@/lib/dias-uteis";
+import { BotaoPrioridade } from "@/components/prioridade-analise";
 import { PREMISSAS_PADRAO, type PremissasEstado, type UiGanttEstado } from "./tipos-estado";
 
 type Aba = "prio" | "sla" | "cal" | "adv";
@@ -19,25 +20,41 @@ function Num({ valor, min, max, onChange, ov }: { valor: number | ""; min: numbe
  * nunca altera a planilha nem o banco. A prioridade (★) vem do sistema
  * (nível definido na edição da análise do prestador). */
 export function PremissasDialog({
-  aberto, onFechar, nomeCenario, premissas, setPremissas, ui, setUi, hist, itens, onDefinirPrioridade, abaInicial,
+  aberto, onFechar, nomeCenario, premissas, setPremissas, ui, setUi, hist, itens, marcadores, tabela, podeDefinir, onDefinirMarcador, abaInicial,
 }: {
   aberto: boolean; onFechar: () => void; nomeCenario: string;
   premissas: PremissasEstado; setPremissas: (p: PremissasEstado) => void;
   ui: UiGanttEstado; setUi: (u: UiGanttEstado) => void;
   hist: FaixaHistorica[]; itens: ItemGantt[];
-  onDefinirPrioridade: (codigo: string, nivel: number | null) => Promise<string | null>;
+  marcadores: { documentos: string[]; prestadores: string[] }; tabela: "prestadores" | "cessionarios"; podeDefinir: boolean;
+  onDefinirMarcador: (tipo: "DOCUMENTO" | "PRESTADOR", chave: string, ativo: boolean) => Promise<string | null>;
   abaInicial?: Aba;
 }) {
-  const [novoCodigo, setNovoCodigo] = useState("");
-  const [novoNivel, setNovoNivel] = useState("3");
+  const [novoMarcador, setNovoMarcador] = useState("");
+  const [tipoMarcador, setTipoMarcador] = useState<"DOCUMENTO" | "PRESTADOR">("DOCUMENTO");
+  const [busca, setBusca] = useState("");
   const [msgPrio, setMsgPrio] = useState<string | null>(null);
   const [salvandoPrio, setSalvandoPrio] = useState(false);
-  async function definir(codigo: string, nivel: number | null) {
+  /** Aceita vários de uma vez: projetos separados por vírgula, espaço ou linha; prestadores/cessionários por ponto e vírgula ou linha. */
+  async function adicionarVarios(tipo: "DOCUMENTO" | "PRESTADOR", texto: string) {
+    const partes = [...new Set(texto.split(tipo === "DOCUMENTO" ? /[\s,;]+/ : /[;\n]+/).map((x) => x.trim()).filter(Boolean))];
+    if (!partes.length) return;
     setSalvandoPrio(true); setMsgPrio(null);
-    const erro = await onDefinirPrioridade(codigo, nivel);
-    setMsgPrio(erro ?? (nivel ? `${codigo}: prioridade nível ${nivel} definida.` : `${codigo}: prioridade removida.`));
+    const falhas: string[] = [];
+    for (const chave of partes) {
+      const erro = await onDefinirMarcador(tipo, tipo === "DOCUMENTO" ? chave.toUpperCase() : chave, true);
+      if (erro) falhas.push(`${chave}: ${erro}`);
+    }
+    setMsgPrio(falhas.length ? `Alguns não foram salvos — ${falhas.join(" | ")}` : `${partes.length} prioridade(s) registrada(s): ${partes.join(", ")}.`);
     setSalvandoPrio(false);
   }
+  async function marcador(tipo: "DOCUMENTO" | "PRESTADOR", chave: string, ativo: boolean) {
+    setSalvandoPrio(true); setMsgPrio(null);
+    const erro = await onDefinirMarcador(tipo, chave, ativo);
+    setMsgPrio(erro ?? (ativo ? `${chave}: marcado como prioritário.` : `${chave}: prioridade removida.`));
+    setSalvandoPrio(false);
+  }
+  const E = tabela === "cessionarios" ? { Ent: "Cessionário", ent: "cessionário" } : { Ent: "Prestador", ent: "prestador" };
   const ref = useRef<HTMLDialogElement>(null);
   const [aba, setAba] = useState<Aba>("prio");
   const [novoFeriado, setNovoFeriado] = useState("");
@@ -83,40 +100,56 @@ export function PremissasDialog({
         </div>
 
         {aba === "prio" && (
-          <div className="card">
-            <h3>★ Projetos prioritários <span className="hint">aparecem no topo do Gantt (Organizar por Projeto), fixos, com destaque dourado</span></h3>
-            <div className="note" style={{ marginBottom: 8 }}>
-              Aqui você define a prioridade de um projeto (código) inteiro. Vale para todas as análises em aberto do código e fica salva no sistema
-              (também aparece na Lista de Prioridades). Nível 3 = SLA 7 du, nível 2 = 5 du, nível 1 = até 3 du.
+          <div className="pgrid">
+            <div className="card" style={{ gridColumn: "1/-1" }}>
+              <h3>★ Prioridade por análise <span className="hint">cada linha é uma análise (projeto + disciplina + revisão) com data operacional própria</span></h3>
+              <div className="note" style={{ marginBottom: 8 }}>
+                A prioridade de uma análise vale só para ela e não passa para as outras disciplinas ou revisões. Use “Prioridade” na linha para definir, editar ou remover.
+              </div>
+              <input value={busca} onChange={(e) => setBusca(e.target.value.toUpperCase())} placeholder={`Filtrar por código, ${E.ent} ou AT`} className="btn sm" style={{ width: 260, marginBottom: 8 }} />
+              <div className="scroll" style={{ maxHeight: 300 }}>
+                <table className="pt">
+                  <thead><tr><th>Código</th><th>{E.Ent}</th><th>AT</th><th>Disciplina</th><th>Operacional</th><th /></tr></thead>
+                  <tbody>
+                    {itens.filter((it) => !it.closed && !it.sim && it.rows[0] && (!busca || `${it.code} ${it.prest} ${it.at ?? ""}`.toUpperCase().includes(busca)))
+                      .sort((a, b) => Number(ehPrioritario(b)) - Number(ehPrioritario(a)) || a.code.localeCompare(b.code))
+                      .slice(0, 80).map((it) => (
+                        <tr key={it.key}>
+                          <td>{ehPrioritario(it) && <span className="star">★</span>}<b>{it.code}</b></td><td>{it.prest}</td><td>{it.at ?? "s/ AT"}</td>
+                          <td>{(it.discAct || it.discs).join("/")}</td><td>{it.d.anaDue?.v != null ? fmt(it.d.anaDue.v) : "—"}</td>
+                          <td style={{ textAlign: "right" }}>{podeDefinir && <BotaoPrioridade tabela={tabela} id={it.rows[0].row} nivelAtual={it.nivelPrioridade ?? null} />}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="note" style={{ marginTop: 6 }}>Mostrando até 80 análises em aberto; use o filtro para localizar.</div>
             </div>
-            <table className="pt">
-              <thead><tr><th>Código</th><th>Prestador</th><th>Nível</th><th>Análises abertas</th><th /></tr></thead>
-              <tbody>
-                {[...prioritarios.entries()].sort((a, b) => a[1].nivel - b[1].nivel || a[0].localeCompare(b[0])).map(([c, v]) => (
-                  <tr key={c}>
-                    <td><span className="star">★</span><b>{c}</b></td><td>{v.prest}</td>
-                    <td>
-                      <select disabled={salvandoPrio} value={v.nivel} onChange={(e) => definir(c, Number(e.target.value))} style={{ border: "1px solid #DDE3EC", borderRadius: 6, height: 26 }}>
-                        <option value={1}>Nível 1 (até 3 du)</option><option value={2}>Nível 2 (5 du)</option><option value={3}>Nível 3 (7 du)</option>
-                      </select>
-                    </td>
-                    <td>{v.n}</td>
-                    <td style={{ textAlign: "right" }}><button type="button" className="btn sm" disabled={salvandoPrio} onClick={() => definir(c, null)}>remover</button></td>
-                  </tr>
-                ))}
-                {!prioritarios.size && <tr><td colSpan={5} className="note">Nenhum projeto prioritário definido.</td></tr>}
-              </tbody>
-            </table>
-            <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center", background: "#FFFBEF", border: "1px solid #E9D9A0", borderRadius: 8, padding: "8px 10px" }} className="note">
-              <b>Adicionar prioritário:</b>
-              <input list="dlCodigosPrio" value={novoCodigo} onChange={(e) => setNovoCodigo(e.target.value.toUpperCase())} placeholder="código, ex.: P241" className="btn sm" style={{ width: 150 }} />
-              <datalist id="dlCodigosPrio">{codigos.filter((c) => !prioritarios.has(c)).map((c) => <option key={c} value={c} />)}</datalist>
-              <select value={novoNivel} onChange={(e) => setNovoNivel(e.target.value)} className="btn sm">
-                <option value="1">Nível 1 (até 3 du)</option><option value="2">Nível 2 (5 du)</option><option value="3">Nível 3 (7 du)</option>
-              </select>
-              <button type="button" className="btn sm pri" disabled={salvandoPrio || !novoCodigo.trim()} onClick={async () => { await definir(novoCodigo.trim(), Number(novoNivel)); setNovoCodigo(""); }}>+ Adicionar</button>
+            <div className="card" style={{ gridColumn: "1/-1" }}>
+              <h3>☆ Projeto e {E.ent} prioritários <span className="hint">marcadores independentes — não tornam prioritárias as análises</span></h3>
+              <table className="pt">
+                <thead><tr><th>Tipo</th><th>Identificação</th><th /></tr></thead>
+                <tbody>
+                  {marcadores.documentos.map((c) => <tr key={`d-${c}`}><td>Projeto/documento</td><td><span className="star">☆</span><b>{c}</b></td><td style={{ textAlign: "right" }}>{podeDefinir && <button type="button" className="btn sm" disabled={salvandoPrio} onClick={() => marcador("DOCUMENTO", c, false)}>remover</button>}</td></tr>)}
+                  {marcadores.prestadores.map((c) => <tr key={`p-${c}`}><td>{E.Ent}</td><td><span className="star">☆</span><b>{c}</b></td><td style={{ textAlign: "right" }}>{podeDefinir && <button type="button" className="btn sm" disabled={salvandoPrio} onClick={() => marcador("PRESTADOR", c, false)}>remover</button>}</td></tr>)}
+                  {!marcadores.documentos.length && !marcadores.prestadores.length && <tr><td colSpan={3} className="note">Nenhum projeto ou prestador marcado.</td></tr>}
+                </tbody>
+              </table>
+              {podeDefinir && (
+                <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center", background: "#FFFBEF", border: "1px solid #E9D9A0", borderRadius: 8, padding: "8px 10px" }} className="note">
+                  <b>Adicionar:</b>
+                  <select value={tipoMarcador} onChange={(e) => { setTipoMarcador(e.target.value as "DOCUMENTO" | "PRESTADOR"); setNovoMarcador(""); }} className="btn sm">
+                    <option value="DOCUMENTO">Projeto/documento</option><option value="PRESTADOR">{E.Ent}</option>
+                  </select>
+                  <textarea value={novoMarcador} onChange={(e) => setNovoMarcador(e.target.value)} rows={2}
+                    placeholder={tipoMarcador === "DOCUMENTO" ? "um ou vários códigos: P267, P268, P270" : `um ou vários nomes, separados por ; ou linha`}
+                    className="btn sm" style={{ width: 300, height: 52, whiteSpace: "pre-wrap" }} />
+                  <button type="button" className="btn sm pri" disabled={salvandoPrio || !novoMarcador.trim()} onClick={async () => { await adicionarVarios(tipoMarcador, novoMarcador); setNovoMarcador(""); }}>+ Adicionar</button>
+                  <span className="note">Pode ser qualquer código, mesmo sem análise em andamento (entregas futuras).</span>
+                </div>
+              )}
+              {msgPrio && <div className="note" style={{ marginTop: 8, color: "#173E77" }}>{msgPrio}</div>}
             </div>
-            {msgPrio && <div className="note" style={{ marginTop: 8, color: "#173E77" }}>{msgPrio}</div>}
           </div>
         )}
 
@@ -125,16 +158,16 @@ export function PremissasDialog({
             <div className="card" style={{ gridColumn: "1/-1" }}>
               <h3>Prazos padrão</h3>
               <div className="frm" style={{ gridTemplateColumns: "auto auto auto auto" }}>
-                <label>SLA do prestador — padrão (du)</label><Num valor={ui.slaP} min={1} max={120} onChange={(v) => setUi({ ...ui, slaP: v })} />
+                <label>SLA do {E.ent} — padrão (du)</label><Num valor={ui.slaP} min={1} max={120} onChange={(v) => setUi({ ...ui, slaP: v })} />
                 <label>SLA de análise — padrão (du)</label><Num valor={ui.slaI} min={1} max={120} onChange={(v) => setUi({ ...ui, slaI: v })} />
               </div>
             </div>
             <div className="card" style={{ gridColumn: "1/-1" }}>
-              <h3>SLA por prestador / código <span className="hint">valores em destaque sobrescrevem o padrão apenas daquele código</span></h3>
+              <h3>SLA por {E.ent} / código <span className="hint">valores em destaque sobrescrevem o padrão apenas daquele código</span></h3>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }} className="note">
                 Aplicar em lote: SLA
                 <select className="btn sm" value={lote.qual} onChange={(e) => setLote({ ...lote, qual: e.target.value as "P" | "I" })}>
-                  <option value="P">do prestador</option><option value="I">da análise</option>
+                  <option value="P">do {E.ent}</option><option value="I">da análise</option>
                 </select>
                 <Num valor={lote.valor} min={1} max={120} onChange={(v) => setLote({ ...lote, valor: v })} /> du em todos os códigos
                 <button type="button" className="btn sm gold" onClick={() => {
@@ -145,7 +178,7 @@ export function PremissasDialog({
               </div>
               <div className="scroll" style={{ maxHeight: 420 }}>
                 <table className="pt">
-                  <thead><tr><th>Código</th><th>Prestador</th><th>SLA prestador</th><th>SLA análise</th></tr></thead>
+                  <thead><tr><th>Código</th><th>{E.Ent}</th><th>SLA {E.ent}</th><th>SLA análise</th></tr></thead>
                   <tbody>
                     {codigos.map((c) => {
                       const it = itens.find((x) => x.code === c);
@@ -210,7 +243,7 @@ export function PremissasDialog({
                 <select value={premissas.oldRef} onChange={(e) => set({ oldRef: e.target.value as PremissasEstado["oldRef"] })}>
                   <option value="at">1º envio da AT</option><option value="projeto">1º envio do projeto (código)</option><option value="ultimo">Última movimentação</option>
                 </select>
-                <label>Retorno do prestador já vencido</label>
+                <label>Retorno do {E.ent} já vencido</label>
                 <select value={premissas.overdueMode} onChange={(e) => set({ overdueMode: e.target.value as PremissasEstado["overdueMode"] })}>
                   <option value="base">Assumir recebimento na data-base</option><option value="espalhar">Distribuir nos próximos N dias úteis</option><option value="excluir">Não projetar</option>
                 </select>

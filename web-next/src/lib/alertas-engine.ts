@@ -1,4 +1,5 @@
 import { obterPool } from "@/lib/db";
+import { garantirEsquemaPrioridades } from "@/lib/esquema-prioridades";
 import { calcularHoldDias, diasUteisDecorridos, diasUteisEntre, emHold, hojeBr, saldoDiasUteis } from "@/lib/dias-uteis";
 import {
   TIPO_ALERTA_LABELS,
@@ -69,12 +70,13 @@ function calcularSlaCessionario(tipo: string | null, revisao: number): number {
 }
 
 async function buscarLinhasModulo(pool: ReturnType<typeof obterPool>, modulo: Origem): Promise<LinhaAlertaBase[]> {
+  await garantirEsquemaPrioridades();
   const tabela = modulo;
   const colunaNome = modulo === "prestadores" ? "prestador" : "cessionario";
   const { rows } = await pool.query<LinhaBanco>(
     `SELECT id, item, codigo, ${colunaNome} AS nome_entidade, disciplina, num_at, revisao, responsavel, status_analise,
             data_solicitacao, data_analise, hold_inicio, hold_fim, sla_dias, sla_reduzido,
-            ${modulo === "prestadores" ? "nivel_prioridade" : "NULL::int AS nivel_prioridade"},
+            ${"nivel_prioridade"},
             ${modulo === "cessionarios" ? "tipo" : "NULL AS tipo"}
      FROM ${tabela} WHERE status_analise != $1 AND arquivado_em IS NULL`,
     [STATUS_CANCELADO],

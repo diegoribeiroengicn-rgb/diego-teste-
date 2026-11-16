@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { buscarLinhasProdutividade } from "@/lib/relatorios-mensais";
 import { hojeBr } from "@/lib/dias-uteis";
 import { obterConfiguracao } from "@/lib/administracao";
@@ -13,6 +14,8 @@ export default async function PaginaPainelAnalistas({
 }: {
   searchParams: Promise<{ mes?: string; ano?: string }>;
 }) {
+  // Renderização por requisição: a página lê o banco, nunca no build.
+  await connection();
   const { mes: mesParam, ano: anoParam } = await searchParams;
   const hoje = hojeBr();
   const mes = Number(mesParam) || hoje.getUTCMonth() + 1;

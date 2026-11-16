@@ -1,4 +1,6 @@
 import { obterPool } from "@/lib/db";
+import { garantirEsquemaPrioridades } from "@/lib/esquema-prioridades";
+import { marcadoresPrioridade, type MarcadoresPrioridade } from "@/lib/prioridades";
 import { calcularHoldDias, diasUteisDecorridos, emHold, saldoDiasUteis } from "@/lib/dias-uteis";
 import { garantirColunasBaixa } from "@/lib/esquema-baixa";
 import type { LinhaLocalizacao } from "@/lib/localizacao-ats-calculo";
@@ -44,7 +46,7 @@ function calcularSlaCessionario(tipo: string | null, revisao: number): number {
   return SLA_CESSIONARIOS_REVISAO;
 }
 
-function enriquecerLinha(row: LinhaBanco, origem: Origem): LinhaLocalizacao {
+function enriquecerLinha(row: LinhaBanco, origem: Origem, marc: MarcadoresPrioridade): LinhaLocalizacao {
   const holdDias = calcularHoldDias(row.hold_inicio, row.hold_fim);
   const estaEmHold = emHold(row.hold_inicio, row.hold_fim);
   const holdAbertoDesde = estaEmHold ? row.hold_inicio : null;
@@ -99,6 +101,8 @@ function enriquecerLinha(row: LinhaBanco, origem: Origem): LinhaLocalizacao {
     diasRestantes,
     nivelPrioridade: row.nivel_prioridade,
     slaReduzido: !!row.sla_reduzido,
+    prioDocumento: !!row.codigo && marc.documentos.includes(row.codigo),
+    prioPrestador: !!row.nome_entidade && marc.prestadores.includes(row.nome_entidade),
   };
 }
 
@@ -110,6 +114,7 @@ function enriquecerLinha(row: LinhaBanco, origem: Origem): LinhaLocalizacao {
  * incorporou a finalidade do antigo módulo independente "Localização de
  * ATs" (hoje só um redirecionamento, ver `/localizacao-ats`). */
 export async function buscarLinhasLocalizacao(): Promise<LinhaLocalizacao[]> {
+  await garantirEsquemaPrioridades();
   await garantirColunasBaixa();
   const pool = obterPool();
   const [prestadores, cessionarios] = await Promise.all([
@@ -125,14 +130,15 @@ export async function buscarLinhasLocalizacao(): Promise<LinhaLocalizacao[]> {
       `SELECT id, item, codigo, cessionario AS nome_entidade, disciplina, num_at, revisao, responsavel, status_analise,
               data_solicitacao, data_analise, data_limite, hold_inicio, hold_fim, observacoes, sla_dias, tipo,
               tipo AS obra, atualizado_em, resumo_mfiles, resumo_drive, resumo_email,
-              num_documentos_analisados, num_documentos, NULL::int AS nivel_prioridade, sla_reduzido
+              num_documentos_analisados, num_documentos, nivel_prioridade, sla_reduzido
        FROM cessionarios WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),
   ]);
 
+  const [mp, mc] = await Promise.all([marcadoresPrioridade("prestadores"), marcadoresPrioridade("cessionarios")]);
   return [
-    ...prestadores.rows.map((r) => enriquecerLinha(r, "prestadores")),
-    ...cessionarios.rows.map((r) => enriquecerLinha(r, "cessionarios")),
+    ...prestadores.rows.map((r) => enriquecerLinha(r, "prestadores", mp)),
+    ...cessionarios.rows.map((r) => enriquecerLinha(r, "cessionarios", mc)),
   ];
 }

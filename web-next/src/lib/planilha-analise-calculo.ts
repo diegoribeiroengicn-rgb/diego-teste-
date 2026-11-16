@@ -238,7 +238,29 @@ export type ItemPlanoImportacao = {
   preenchimentos: Record<string, unknown>;
   conflitos: Record<string, [unknown, unknown]>;
   motivoInconsistencia: string | null;
+  /** Data de entrega da planilha diferente do prazo (contratual ou da
+   * prioridade já cadastrada) — exige decisão do usuário na prévia. */
+  divergencia?: DivergenciaImportacao;
 };
+
+export type DivergenciaImportacao = {
+  /** "SLA": linha sem prioridade com data diferente do contratual.
+   * "REIMPORTACAO": linha que já tem prioridade e a planilha traz outra data. */
+  origem: "SLA" | "REIMPORTACAO";
+  entrada: string;
+  slaContratualDias: number;
+  vencimentoContratual: string;
+  dataPlanilha: string;
+  diferencaDiasUteis: number;
+  /** Só em REIMPORTACAO: vencimento operacional da prioridade existente. */
+  vencimentoOperacionalAtual?: string;
+  disciplina: string | null;
+  revisao: number | null;
+  entidade: string;
+};
+
+/** Decisão do usuário para uma divergência (por linha). */
+export type DecisaoDivergencia = { prioritaria?: boolean; dataOperacional?: string; justificativa?: string; substituir?: boolean };
 
 export type RegistroNaoEncontrado = {
   id: number;

@@ -253,6 +253,8 @@ export type ItemGantt = {
   pr: number;
   nDocs: number;
   analyst: string;
+  /** Origem do fluxo — só preenchido no Gantt consolidado. */
+  fluxo?: "prestadores" | "cessionarios";
   /** Prioridade administrada centralmente (`prestadores.nivel_prioridade`),
    * 1 = mais crítica. `null` = fora da lista de prioridades. */
   nivelPrioridade?: number | null;

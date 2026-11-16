@@ -1,4 +1,5 @@
 import { obterPool } from "@/lib/db";
+import { garantirEsquemaPrioridades } from "@/lib/esquema-prioridades";
 
 export type Projeto = {
   id: number;
@@ -12,6 +13,8 @@ export type Projeto = {
   num_documentos: number | null;
   data_limite: string | null;
   responsavel: string | null;
+  /** Prioridade da análise (1/2/3) — nula = sem prioridade. */
+  nivel_prioridade: number | null;
 };
 
 export type Tabela = "prestadores" | "cessionarios";
@@ -31,6 +34,7 @@ export async function buscarProjetos(
   tabela: Tabela,
   opcoes: { termoResponsavel: string; analistaProprio?: string | null; statusEntre?: string[] },
 ): Promise<Projeto[]> {
+  await garantirEsquemaPrioridades();
   const colunaEntidade = COLUNA_ENTIDADE[tabela];
   const pool = obterPool();
   const condicoes = [`arquivado_em IS NULL`];
@@ -53,7 +57,7 @@ export async function buscarProjetos(
   }
 
   const { rows } = await pool.query<Omit<Projeto, "entidade"> & Record<string, unknown>>(
-    `SELECT id, item, codigo, "${colunaEntidade}" AS entidade, disciplina, revisao, status_analise, num_at, num_documentos, data_limite, responsavel
+    `SELECT id, item, codigo, "${colunaEntidade}" AS entidade, disciplina, revisao, status_analise, num_at, num_documentos, data_limite, responsavel, nivel_prioridade
      FROM ${tabela}
      WHERE ${condicoes.join(" AND ")}
      ORDER BY ${ordem}
@@ -77,6 +81,8 @@ export type FiltroProjetosLista = {
   /** "" = ordem padrão (aguardando análise primeiro); "item" / "item_desc"
    * = ordem numérica da planilha (coluna Item), crescente ou decrescente. */
   ordem?: string;
+  /** true = lista só os projetos ARQUIVADOS (consulta); padrão = só os ativos. */
+  arquivados?: boolean;
   /** Tamanho da página carregada (30/50/100, crescendo a cada "Carregar
    * mais") — sempre um LIMIT sobre a base completa no banco, nunca sobre
    * uma lista já truncada em memória. */
@@ -107,9 +113,10 @@ const STATUS_PENDENTES_SQL = "ARRAY['EM ANÁLISE','EM HOLD','RIOGALEÃO']";
  * atualização mais recente — nunca pela posição da linha na planilha de
  * origem. */
 export async function buscarProjetosPaginado(tabela: Tabela, filtro: FiltroProjetosLista): Promise<ResultadoProjetosLista> {
+  await garantirEsquemaPrioridades();
   const colunaEntidade = COLUNA_ENTIDADE[tabela];
   const pool = obterPool();
-  const condicoes = [`arquivado_em IS NULL`];
+  const condicoes = [filtro.arquivados ? `arquivado_em IS NOT NULL` : `arquivado_em IS NULL`];
   const parametros: unknown[] = [];
 
   if (filtro.termoCodigo?.trim()) {
@@ -155,7 +162,7 @@ export async function buscarProjetosPaginado(tabela: Tabela, filtro: FiltroProje
 
   parametros.push(filtro.limite);
   const { rows } = await pool.query<Omit<Projeto, "entidade"> & Record<string, unknown> & { total_geral: string }>(
-    `SELECT id, item, codigo, "${colunaEntidade}" AS entidade, disciplina, revisao, status_analise, num_at, num_documentos, data_limite, responsavel,
+    `SELECT id, item, codigo, "${colunaEntidade}" AS entidade, disciplina, revisao, status_analise, num_at, num_documentos, data_limite, responsavel, nivel_prioridade,
             COUNT(*) OVER() AS total_geral
      FROM ${tabela}
      WHERE ${condicoes.join(" AND ")}

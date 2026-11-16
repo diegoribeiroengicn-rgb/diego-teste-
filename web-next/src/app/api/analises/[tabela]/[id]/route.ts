@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { obterSessao } from "@/lib/session";
 import { registrarAtividade } from "@/lib/atividades";
 import { areaPermitida } from "@/lib/permissoes";
+import { podeVerContratual, semContratual } from "@/lib/prioridades";
 import { validarAtDataStatus, mensagemErros } from "@/lib/analise-validacao-calculo";
 import {
   atualizarCessionario, atualizarPrestador, obterCessionarioCompleto, obterPrestadorCompleto,
@@ -26,7 +27,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tab
   if (!registro) {
     return NextResponse.json({ erro: "Registro não encontrado." }, { status: 404 });
   }
-  return NextResponse.json({ registro });
+  // Prazo contratual é restrito a Gestor/Admin — filtrado aqui no backend.
+  const verContratual = await podeVerContratual(sessao.id, sessao.perfil);
+  return NextResponse.json({ registro: verContratual ? registro : semContratual(registro as Record<string, unknown>) });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ tabela: string; id: string }> }) {

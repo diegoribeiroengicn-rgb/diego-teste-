@@ -2,6 +2,7 @@ import { obterSessao } from "@/lib/session";
 import { areaPermitida } from "@/lib/permissoes";
 import { buscarBaseVisaoGestor } from "@/lib/visao-gestor";
 import { buscarListaPrioridades } from "@/lib/lista-prioridades";
+import { podeVerContratual } from "@/lib/prioridades";
 import { buscarAlertasModulo } from "@/lib/alertas-engine";
 import { statusRadarAtivo, TIPO_AVALIACAO_OBRIGATORIA } from "@/lib/alertas-engine-calculo";
 import { PainelVisaoGestor } from "@/components/painel-visao-gestor";
@@ -26,7 +27,7 @@ export default async function PaginaVisaoGestor() {
 
   const [base, listaPrioridades, alertasPrest, alertasCess] = await Promise.all([
     buscarBaseVisaoGestor(),
-    buscarListaPrioridades(),
+    buscarListaPrioridades(await podeVerContratual(sessao.id, sessao.perfil)),
     buscarAlertasModulo("prestadores"),
     buscarAlertasModulo("cessionarios"),
   ]);

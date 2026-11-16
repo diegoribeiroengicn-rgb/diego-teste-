@@ -3,6 +3,7 @@ import { buscarAlertasPessoais } from "@/lib/meus-alertas";
 import { buscarLinhasLocalizacao } from "@/lib/localizacao-ats";
 import { buscarAtividades } from "@/lib/atividades";
 import { hojeBr } from "@/lib/dias-uteis";
+import { podeVerContratual } from "@/lib/prioridades";
 import { PopupAlertasPendentesLazy as PopupAlertasPendentes } from "@/components/popup-alertas-pendentes-lazy";
 import { PainelGovernanca } from "@/components/painel-governanca";
 import type { ChaveVer, FiltrosPainel } from "@/lib/painel-governanca-calculo";
@@ -23,6 +24,7 @@ export default async function PaginaInicio({ searchParams }: { searchParams: Pro
   };
   const ver = sp.ver && sp.ver in ROTULO_VER ? (sp.ver as ChaveVer) : null;
 
+  const verContratual = sessao ? await podeVerContratual(sessao.id, sessao.perfil) : false;
   const [linhas, atividades, pendentes] = await Promise.all([
     buscarLinhasLocalizacao(),
     buscarAtividades().catch(() => []),
@@ -33,7 +35,7 @@ export default async function PaginaInicio({ searchParams }: { searchParams: Pro
     <>
       <PainelGovernanca
         primeiroNome={primeiroNome} linhas={linhas} filtros={filtros} ver={ver} busca={(sp.busca || "").trim()}
-        atividades={atividades.slice(0, 12)} agora={hojeBr().getTime()}
+        atividades={atividades.slice(0, 12)} agora={hojeBr().getTime()} verContratual={verContratual}
       />
       <PopupAlertasPendentes prazoPendenteInicial={pendentes.prazoPendente} manuaisPendenteInicial={pendentes.manuaisPendente} />
     </>

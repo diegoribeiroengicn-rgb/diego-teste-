@@ -1,4 +1,5 @@
 import { obterPool } from "@/lib/db";
+import { garantirEsquemaPrioridades } from "@/lib/esquema-prioridades";
 import { calcularHoldDias, diasUteisDecorridos, emHold, saldoDiasUteis } from "@/lib/dias-uteis";
 
 const SLA_PRESTADORES_DIAS_UTEIS = 10;
@@ -189,7 +190,8 @@ function montarItem(row: LinhaBanco, modulo: "prestadores" | "cessionarios", rot
  * juntos: projetos ativos com nível de prioridade, SLA reduzido, ou a até
  * 2 dias úteis do vencimento/já atrasados. Mesma regra de
  * gat/business_rules.py::montar_lista_prioridades. */
-export async function buscarListaPrioridades(): Promise<ItemPrioridade[]> {
+export async function buscarListaPrioridades(verContratual = false): Promise<ItemPrioridade[]> {
+  await garantirEsquemaPrioridades();
   const pool = obterPool();
 
   const [prestadores, cessionarios] = await Promise.all([
@@ -202,7 +204,7 @@ export async function buscarListaPrioridades(): Promise<ItemPrioridade[]> {
     ),
     pool.query<LinhaBanco>(
       `SELECT id, codigo, cessionario AS nome_entidade, num_at, disciplina, revisao, responsavel,
-              NULL::int AS nivel_prioridade, sla_reduzido, sla_dias, sla_original,
+              nivel_prioridade, sla_reduzido, sla_dias, sla_original,
               data_solicitacao, data_limite, data_analise, hold_inicio, hold_fim,
               justificativa_sla, status_analise, tipo
        FROM cessionarios WHERE arquivado_em IS NULL`,
@@ -225,5 +227,6 @@ export async function buscarListaPrioridades(): Promise<ItemPrioridade[]> {
     const db = b.data_limite ? new Date(b.data_limite).getTime() : Infinity;
     return da - db;
   });
+  if (!verContratual) for (const it of itens) it.sla_original = null;
   return itens;
 }

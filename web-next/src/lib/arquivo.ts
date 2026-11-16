@@ -181,3 +181,39 @@ export async function listarAuditoriaArquivo(tipoOperacao: string | null, origem
   const { rows } = await pool.query<RegistroAuditoriaArquivo>(`SELECT * FROM arquivo_auditoria ${where} ORDER BY data_hora DESC`, params);
   return rows;
 }
+
+/** Arquiva um PROJETO (código) inteiro: todas as análises ainda ativas de
+ * prestadores e cessionários. Lógico e reversível — nada é excluído; cada
+ * análise guarda quem arquivou, quando e o motivo, e fica uma linha de
+ * auditoria do projeto. Reversão: `restaurarProjetoGat`. */
+export async function arquivarProjetoGat(codigo: string, usuario: string, motivo: string | null): Promise<number> {
+  const pool = obterPool();
+  const agora = new Date().toISOString();
+  let total = 0;
+  for (const tabela of ["prestadores", "cessionarios"] as const) {
+    const { rowCount } = await pool.query(
+      `UPDATE ${tabela} SET arquivado_em = $1, arquivado_por = $2, motivo_arquivamento = $3, arquivado_teste = 0 WHERE codigo = $4 AND arquivado_em IS NULL`,
+      [agora, usuario, motivo, codigo],
+    );
+    total += rowCount ?? 0;
+  }
+  if (total > 0) {
+    await registrarAuditoriaArquivo(pool, "projetos_gat", 0, TIPO_ARQUIVAMENTO, usuario, motivo, `Projeto GAT ${codigo} (${total} análise(s))`);
+  }
+  return total;
+}
+
+export type ContagemProjetosSituacao = { historico: number; ativos: number; arquivados: number };
+
+/** Total histórico, ativos e arquivados — em PROJETOS (códigos distintos).
+ * Ativo = tem ao menos uma análise não arquivada; arquivado = todas as
+ * análises do código estão arquivadas. */
+export async function contarProjetosPorSituacao(tabela: "prestadores" | "cessionarios"): Promise<ContagemProjetosSituacao> {
+  const { rows } = await obterPool().query<{ historico: string; ativos: string; arquivados: string }>(
+    `SELECT COUNT(*) AS historico,
+            COUNT(*) FILTER (WHERE ativas > 0) AS ativos,
+            COUNT(*) FILTER (WHERE ativas = 0) AS arquivados
+       FROM (SELECT codigo, COUNT(*) FILTER (WHERE arquivado_em IS NULL) AS ativas FROM ${tabela} WHERE codigo IS NOT NULL AND codigo <> '' GROUP BY codigo) t`,
+  );
+  return { historico: Number(rows[0].historico), ativos: Number(rows[0].ativos), arquivados: Number(rows[0].arquivados) };
+}

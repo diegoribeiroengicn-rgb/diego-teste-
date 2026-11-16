@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { buscarLinhasLocalizacao } from "@/lib/localizacao-ats";
 import { PainelProjetosBusca } from "@/components/painel-projetos-busca";
 
@@ -6,6 +7,8 @@ import { PainelProjetosBusca } from "@/components/painel-projetos-busca";
  * a finalidade do antigo módulo independente "Localização de ATs", que
  * hoje é só um redirecionamento para esta rota (ver `/localizacao-ats`). */
 export default async function PaginaProjetos() {
+  // Renderização por requisição: a página lê o banco, nunca no build.
+  await connection();
   const linhas = await buscarLinhasLocalizacao();
   return <PainelProjetosBusca linhas={linhas} />;
 }

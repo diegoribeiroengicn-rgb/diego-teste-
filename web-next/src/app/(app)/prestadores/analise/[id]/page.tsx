@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { obterSessao } from "@/lib/session";
 import { areaPermitida } from "@/lib/permissoes";
 import { obterPrestadorCompleto } from "@/lib/analise";
+import { podeVerContratual, semContratual } from "@/lib/prioridades";
 import { FormularioAnalise } from "@/components/formulario-analise";
 
 export default async function PaginaEditarAnalisePrestador({ params }: { params: Promise<{ id: string }> }) {
@@ -21,8 +22,10 @@ export default async function PaginaEditarAnalisePrestador({ params }: { params:
   }
 
   const { id } = await params;
-  const registro = await obterPrestadorCompleto(Number(id));
-  if (!registro) notFound();
+  const bruto = await obterPrestadorCompleto(Number(id));
+  if (!bruto) notFound();
+  // Prazo contratual (SLA/vencimento originais) só vai ao navegador de Gestor/Admin.
+  const registro = (await podeVerContratual(sessao!.id, sessao!.perfil)) ? bruto : semContratual(bruto);
 
   return <FormularioAnalise tabela="prestadores" registro={registro} />;
 }

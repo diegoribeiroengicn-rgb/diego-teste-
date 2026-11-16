@@ -1,5 +1,9 @@
 import { obterPool } from "@/lib/db";
+import { garantirEsquemaPrioridades } from "@/lib/esquema-prioridades";
+import { slaContratual, vencimentoContratual, STATUS_ABERTOS_PRAZO } from "@/lib/prazos-calculo";
 import type { LinhaBrutaGantt } from "./motor";
+
+export type ModuloGantt = "prestadores" | "cessionarios";
 
 type LinhaPrestadorBanco = {
   id: number;
@@ -24,27 +28,33 @@ type LinhaPrestadorBanco = {
   nivel_prioridade: number | null;
 };
 
-/** Todas as linhas de `prestadores` (sem filtro por responsável nem por
- * status) — o Gantt mostra o horizonte da equipe inteira por padrão; é o
- * próprio motor (gat/.../motor.ts) quem decide o que fazer com cada
- * status (fechado, ativo, cancelado etc.), igual ao sistema atual. */
-export async function buscarLinhasGantt(): Promise<LinhaBrutaGantt[]> {
+/** Todas as linhas de `prestadores` ou `cessionarios` (sem filtro por
+ * responsável nem por status; arquivadas ficam de fora) — o Gantt mostra o
+ * horizonte da equipe inteira por padrão; é o próprio motor quem decide o
+ * que fazer com cada status. As duas tabelas entram no MESMO formato: em
+ * Cessionários, `prest` é o cessionário e `obra` é o tipo (Loja, Externo,
+ * Quiosque...). O prazo usado pelo Gantt é o operacional (`data_limite`). */
+export async function buscarLinhasGantt(modulo: ModuloGantt = "prestadores"): Promise<LinhaBrutaGantt[]> {
+  await garantirEsquemaPrioridades();
   const pool = obterPool();
-  const { rows } = await pool.query<LinhaPrestadorBanco>(
-    `SELECT id, item, codigo, prestador, disciplina, disciplina_sla, obra_referencia,
-            revisao, num_documentos, data_solicitacao, data_limite, data_limite_ajustada_manualmente,
-            data_analise, hold_inicio, hold_fim, num_at, revisao_at, responsavel, status_analise,
-            nivel_prioridade
-     FROM prestadores WHERE arquivado_em IS NULL`,
-  );
+  const sql = modulo === "prestadores"
+    ? `SELECT id, item, codigo, prestador AS entidade, disciplina, disciplina_sla, obra_referencia AS obra,
+              revisao, num_documentos, data_solicitacao, data_limite, data_limite_ajustada_manualmente,
+              data_analise, hold_inicio, hold_fim, num_at, revisao_at, responsavel, status_analise, nivel_prioridade
+       FROM prestadores WHERE arquivado_em IS NULL`
+    : `SELECT id, item, codigo, cessionario AS entidade, disciplina, disciplina_sla, tipo AS obra,
+              revisao, num_documentos, data_solicitacao, data_limite, data_limite_ajustada_manualmente,
+              data_analise, hold_inicio, hold_fim, num_at, revisao_at, responsavel, status_analise, nivel_prioridade
+       FROM cessionarios WHERE arquivado_em IS NULL`;
+  const { rows } = await pool.query<LinhaPrestadorBanco & { entidade: string | null; obra: string | null }>(sql);
   return rows.map((r) => ({
     row: r.id,
     item: r.item,
     code: r.codigo,
-    prest: r.prestador,
+    prest: r.entidade,
     discE: r.disciplina,
     disc: r.disciplina_sla,
-    obra: r.obra_referencia,
+    obra: r.obra,
     rev: r.revisao,
     pr: r.num_documentos ?? 0,
     K: r.data_solicitacao,
@@ -57,9 +67,25 @@ export async function buscarLinhasGantt(): Promise<LinhaBrutaGantt[]> {
     revAT: r.revisao_at,
     resp: r.responsavel,
     status: r.status_analise,
-    // Mesma coluna administrada centralmente e já usada por
-    // lista-prioridades.ts/visao-gestor.ts/alertas-engine.ts — o Gantt
-    // não mantém uma classificação própria de prioridade.
+    // Prioridade da ANÁLISE (linha) — a mesma coluna lida pela Lista de
+    // Prioridades, Visão do Gestor e indicadores.
     nivelPrioridade: r.nivel_prioridade,
   }));
+}
+
+/** Vencimento CONTRATUAL de cada análise em aberto (id → ISO). Só deve ser
+ * chamado para Gestor/Admin — o analista nunca recebe esse mapa. */
+export async function buscarVencimentosContratuais(modulo: ModuloGantt): Promise<Record<number, { vencimento: string; sla: number }>> {
+  const colunaTipo = modulo === "cessionarios" ? "tipo" : "NULL::text AS tipo";
+  const { rows } = await obterPool().query(
+    `SELECT id, revisao, data_solicitacao, ${colunaTipo} FROM ${modulo} WHERE arquivado_em IS NULL AND status_analise = ANY($1)`,
+    [STATUS_ABERTOS_PRAZO],
+  );
+  const out: Record<number, { vencimento: string; sla: number }> = {};
+  for (const r of rows) {
+    const sla = slaContratual(modulo, r.tipo ?? null, r.revisao ?? 0);
+    const v = vencimentoContratual(r.data_solicitacao, sla);
+    if (v) out[Number(r.id)] = { vencimento: v, sla };
+  }
+  return out;
 }

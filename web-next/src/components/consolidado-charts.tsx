@@ -21,7 +21,7 @@ import { MESES_PT_ABREV } from "@/lib/meses";
 const COR_VERDE = "#16A34A";
 const COR_LIMA = "#65A30D";
 const COR_DOURADO = "#D97706";
-const COR_LARANJA = "#EA580C";
+const COR_LARANJA = "#5B6B82";
 const COR_VERMELHO = "#DC2626";
 const COR_AZUL_2 = "#2563EB";
 const COR_ROXO = "#7C3AED";

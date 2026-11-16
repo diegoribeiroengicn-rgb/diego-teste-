@@ -3,10 +3,10 @@ import type { ContagemProjetos } from "@/lib/projetos";
 
 const CORES_STATUS: Record<string, string> = {
   "EM ANÁLISE": "bg-(--color-blue-2)",
-  "EM HOLD": "bg-(--color-orange)",
-  LIBERADO: "bg-(--color-green)",
-  "LIBERADO C/ REST.": "bg-(--color-green)",
-  "NÃO LIBERADO": "bg-(--color-red)",
+  "EM HOLD": "bg-(--color-text-weak)",
+  LIBERADO: "bg-(--color-navy)",
+  "LIBERADO C/ REST.": "bg-(--color-navy)",
+  "NÃO LIBERADO": "bg-(--color-text-dim)",
 };
 
 function contarPor(contagens: ContagemProjetos[], campo: "status_analise" | "disciplina"): [string, number][] {

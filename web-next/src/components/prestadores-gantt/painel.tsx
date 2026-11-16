@@ -25,8 +25,10 @@ import { FILTROS_PADRAO, PREMISSAS_PADRAO, UI_PADRAO, type CenarioSalvo, type En
 import { FERIADOS_RJ_ISO } from "@/lib/dias-uteis";
 import { iso2dn } from "@/lib/prestadores-gantt/motor";
 
-const CHAVE_LOCALSTORAGE = "gat_gantt_prestadores_v1";
-const CHAVE_CENARIOS = "gat_gantt_prestadores_cenarios_v1";
+const CHAVE_BASE = "gat_gantt_prestadores_v1";
+const CHAVE_CENARIOS_BASE = "gat_gantt_prestadores_cenarios_v1";
+let CHAVE_LOCALSTORAGE = CHAVE_BASE;
+let CHAVE_CENARIOS = CHAVE_CENARIOS_BASE;
 
 function hojeISO(): string {
   const d = hojeBr();
@@ -50,7 +52,21 @@ function salvarEstado(dados: { filtros: FiltrosGanttEstado; ui: UiGanttEstado; f
   }
 }
 
-export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBrutas: LinhaBrutaGantt[]; geradoEm?: string }) {
+export type ModuloPainelGantt = "prestadores" | "cessionarios";
+
+export function PainelGanttPrestadores({ linhasBrutas, geradoEm, marcadores, podeDefinirPrioridade, modulo = "prestadores", contratuais = null }: {
+  linhasBrutas: LinhaBrutaGantt[]; geradoEm?: string; marcadores: { documentos: string[]; prestadores: string[] }; podeDefinirPrioridade: boolean;
+  modulo?: ModuloPainelGantt;
+  /** Vencimento contratual por análise (id) — só chega a Gestor/Admin; `null` para os demais. */
+  contratuais?: Record<number, { vencimento: string; sla: number }> | null;
+}) {
+  const cess = modulo === "cessionarios";
+  // Chaves de armazenamento separadas por módulo (cada Gantt guarda seus filtros e cenários).
+  CHAVE_LOCALSTORAGE = cess ? "gat_gantt_cessionarios_v1" : CHAVE_BASE;
+  CHAVE_CENARIOS = cess ? "gat_gantt_cessionarios_cenarios_v1" : CHAVE_CENARIOS_BASE;
+  const R = cess
+    ? { ent: "Cessionário", entMin: "cessionário", obra: "Tipo", aba: "PROJ_CESS", com: "Com o cessionário", titulo: "Gantt de Cessionários — Fluxo Cessionário × Análise e Paralelismo", sla: "SLA cessionário padrão (du)" }
+    : { ent: "Prestador", entMin: "prestador", obra: "Projeto (obra)", aba: "PROJ_PREST", com: "Com o prestador", titulo: "Gantt de ATs — Fluxo Prestador × Análise e Paralelismo", sla: "SLA prestador padrão (du)" };
   const [filtros, setFiltros] = useState<FiltrosGanttEstado>(
     () => ({ ...FILTROS_PADRAO, ...carregarEstadoSalvo().filtros }),
   );
@@ -244,11 +260,11 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
   }
   const setF = (p: Partial<FiltrosGanttEstado>) => setFiltros((f) => ({ ...f, ...p }));
   const setU = (p: Partial<UiGanttEstado>) => setUi((u) => ({ ...u, ...p }));
-  async function definirPrioridade(codigo: string, nivel: number | null): Promise<string | null> {
+  async function definirMarcador(tipo: "DOCUMENTO" | "PRESTADOR", chave: string, ativo: boolean): Promise<string | null> {
     try {
-      const r = await fetch("/api/prioridades-prestador", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ codigo, nivel }) });
+      const r = await fetch("/api/prioridades/marcador", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tipo, tabela: modulo, chave, ativo, origem: "GESTAO" }) });
       const corpo = await r.json().catch(() => ({}));
-      if (!r.ok) return corpo.erro ?? "Não foi possível definir a prioridade.";
+      if (!r.ok) return corpo.erro ?? "Não foi possível salvar a prioridade.";
       router.refresh();
       return null;
     } catch {
@@ -266,8 +282,8 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
       <header className="top">
         <div className="logo"><img alt="Tecnoplano" src="/tecnoplano_logo.png" /></div>
         <div>
-          <h1>Gantt de ATs — Fluxo Prestador × Análise e Paralelismo</h1>
-          <div className="sub">Fonte: aba PROJ_PREST · {linhasBrutas.length} linhas{geradoEm ? ` · extraído em ${geradoEm}` : ""}</div>
+          <h1>{R.titulo}</h1>
+          <div className="sub">Fonte: aba {R.aba} · {linhasBrutas.length} linhas{geradoEm ? ` · extraído em ${geradoEm}` : ""}</div>
         </div>
         <div className="right">
           Data-base: <b>{baseBr}</b> · Horizonte até <b>{fimBr}</b>
@@ -283,7 +299,7 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
         <div className="fld"><label>Horizonte (dias)</label>
           <input type="number" min={7} max={730} value={ui.horizonte} onChange={(e) => setU({ horizonte: Math.max(7, Math.min(730, Number(e.target.value) || 90)) })} />
         </div>
-        <div className="fld"><label>SLA prestador padrão (du)</label>
+        <div className="fld"><label>{R.sla}</label>
           <input type="number" min={1} max={120} value={ui.slaP} onChange={(e) => setU({ slaP: Math.max(1, Math.min(120, Number(e.target.value) || 10)) })} />
         </div>
         <div className="fld"><label>SLA análise padrão (du)</label>
@@ -295,13 +311,13 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
         <div className="fld"><label>Projetos &gt; {params.oldMonths} meses</label>
           <Seg valor={ui.incluirAntigos ? "1" : "0"} opcoes={[["0", "Excluídos"], ["1", "Incluídos"]]} onChange={(v) => setU({ incluirAntigos: v === "1" })} />
         </div>
-        <div className="fld"><label>Buscar (código, AT, obra)</label>
+        <div className="fld"><label>Buscar (código, AT, {cess ? "tipo" : "obra"})</label>
           <input value={filtros.busca} onChange={(e) => setF({ busca: e.target.value })} placeholder="Ex.: P221 ou AT-0466" style={{ width: 170 }} />
         </div>
         <SelectFiltro rotulo="Código" valor={filtros.codigo} opcoes={todosCodigos} onChange={(v) => setF({ codigo: v })} />
-        <SeletorMultiplo rotulo="Prestador" opcoes={todosPrestadores} selecionados={filtros.prestadores}
+        <SeletorMultiplo rotulo={R.ent} opcoes={todosPrestadores} selecionados={filtros.prestadores}
           onAlternar={(v) => setF({ prestadores: alternarSelecao(filtros.prestadores, v) })} onLimpar={() => setF({ prestadores: [] })} />
-        <SelectFiltro rotulo="Projeto (obra)" valor={filtros.obra} opcoes={todasObras} onChange={(v) => setF({ obra: v })} />
+        <SelectFiltro rotulo={R.obra} valor={filtros.obra} opcoes={todasObras} onChange={(v) => setF({ obra: v })} />
         <SelectFiltro rotulo="AT" valor={filtros.at} opcoes={todasAts} onChange={(v) => setF({ at: v })} />
         <SelectFiltro rotulo="Disciplina" valor={filtros.disciplina} opcoes={todasDisciplinas} onChange={(v) => setF({ disciplina: v })} />
         <SeletorMultiplo rotulo="Analista" opcoes={todosAnalistas} selecionados={filtros.analistas}
@@ -311,7 +327,7 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
         <SelectFiltro rotulo="Criticidade" valor={filtros.criticidade} opcoes={[["crit", "Críticas"], ["norm", "Normais"]]} onChange={(v) => setF({ criticidade: v })} />
         <SelectFiltro rotulo="Situação do prazo" valor={filtros.prazo}
           opcoes={["Vencido", "Próximo do vencimento", "Em dia", "HOLD", "Sem dados"]} onChange={(v) => setF({ prazo: v })} />
-        <SelectFiltro rotulo="Fase atual" valor={filtros.fase} opcoes={[["prest", "Com o prestador"], ["analise", "Em análise"]]} onChange={(v) => setF({ fase: v })} />
+        <SelectFiltro rotulo="Fase atual" valor={filtros.fase} opcoes={[["prest", R.com], ["analise", "Em análise"]]} onChange={(v) => setF({ fase: v })} />
         <SelectFiltro rotulo="Prioridade" valor={filtros.apenasPrioritarios ? "prio" : ""} opcoes={[["prio", "★ Só prioritários"]]} onChange={(v) => setF({ apenasPrioritarios: v === "prio" })} />
         <div className="fld"><label>&nbsp;</label>
           <div style={{ display: "flex", gap: 6 }}>
@@ -322,7 +338,7 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
         </div>
         {datasAbertas && (
           <div id="dateFilters" style={{ display: "flex", width: "100%", gap: 10, flexWrap: "wrap" }}>
-            <div className="fld"><label>Entrega prevista do prestador</label>
+            <div className="fld"><label>Entrega prevista do {R.entMin}</label>
               <div><input type="date" value={filtros.pd1} onChange={(e) => setF({ pd1: e.target.value })} /> a <input type="date" value={filtros.pd2} onChange={(e) => setF({ pd2: e.target.value })} /></div></div>
             <div className="fld"><label>Retorno/recebimento previsto</label>
               <div><input type="date" value={filtros.rv1} onChange={(e) => setF({ rv1: e.target.value })} /> a <input type="date" value={filtros.rv2} onChange={(e) => setF({ rv2: e.target.value })} /></div></div>
@@ -334,19 +350,19 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
 
       <main>
         <div className="grid kpis" style={{ marginBottom: 12 }}>
-          <Kpi ico="📤" lbl="Com o prestador" val={String(kpis.comPrestador)} cls={kpis.comPrestadorAtrasados ? "amber" : ""}
-            det={<>{kpis.comPrestadorAtrasados ? <b style={{ color: "#D64541" }}>{kpis.comPrestadorAtrasados} atrasados</b> : "nenhum atrasado"}{delta(kpis.comPrestadorAtrasados, kpisRef?.k.comPrestadorAtrasados)}</>} />
-          <Kpi ico="🔎" lbl="Em análise na Tecnoplano" val={String(kpis.emAnalise)} cls={kpis.emAnaliseAtrasadas ? "amber" : ""}
-            det={<>{kpis.emAnaliseAtrasadas ? <b style={{ color: "#D64541" }}>{kpis.emAnaliseAtrasadas} atrasadas</b> : "nenhuma atrasada"}{delta(kpis.emAnaliseAtrasadas, kpisRef?.k.emAnaliseAtrasadas)}</>} />
+          <Kpi ico="📤" lbl={R.com} val={String(kpis.comPrestador)} cls=""
+            det={<>{kpis.comPrestadorAtrasados ? <b>{kpis.comPrestadorAtrasados} atrasados</b> : "nenhum atrasado"}{delta(kpis.comPrestadorAtrasados, kpisRef?.k.comPrestadorAtrasados)}</>} />
+          <Kpi ico="🔎" lbl="Em análise na Tecnoplano" val={String(kpis.emAnalise)} cls=""
+            det={<>{kpis.emAnaliseAtrasadas ? <b>{kpis.emAnaliseAtrasadas} atrasadas</b> : "nenhuma atrasada"}{delta(kpis.emAnaliseAtrasadas, kpisRef?.k.emAnaliseAtrasadas)}</>} />
           <Kpi ico="★" lbl="Prioritários" val={String(kpis.prioritarios)} cls="gold"
-            det={<>{kpis.prioritarios} análises prioritárias abertas<br /><b style={{ color: kpis.prioritariosAtrasados ? "#D64541" : "inherit" }}>{kpis.prioritariosAtrasados} atrasadas</b>{delta(kpis.prioritariosAtrasados, kpisRef?.k.prioritariosAtrasados)}</>} />
+            det={<>{kpis.prioritarios} análises prioritárias abertas<br /><b>{kpis.prioritariosAtrasados} atrasadas</b>{delta(kpis.prioritariosAtrasados, kpisRef?.k.prioritariosAtrasados)}</>} />
           <Kpi ico="📈" lbl="Novas ATs previstas" val={kpis.simulados ? `≈${kpis.simulados}` : "—"} cls=""
             det={kpis.simulados ? "estimadas pelo ritmo e entregas futuras" : "previsão desligada"} />
           <Kpi ico="⚠" lbl="Atrasados ou críticos" val={<>{kpis.vencidos}<small> atrasados</small></>} cls={kpis.vencidos ? "red" : ""}
             det={<>{`${kpis.criticas} com muitas revisões (críticos) · próximos: ${kpis.proximos}`}{delta(kpis.vencidos, kpisRef?.k.vencidos)}</>} />
           <Kpi ico="📈" lbl="Semana mais cheia" val={kpis.picoSemanal.semana != null ? <>{kpis.picoSemanal.v.toFixed(0)}<small> pranchas</small></> : "—"} cls=""
             det={<>{kpis.picoSemanal.semana != null ? `semana de ${fmt(kpis.picoSemanal.semana)}` : ""}{delta(Math.round(kpis.picoSemanal.v), kpisRef ? Math.round(kpisRef.k.picoSemanal.v) : undefined)}</>} />
-          <Kpi ico="✓" lbl="Tudo liberado por volta de" val={kpis.conclusaoSemNovasReprovacoes != null ? fmt(kpis.conclusaoSemNovasReprovacoes) : "—"} cls="gold"
+          <Kpi ico="✓" lbl="Tudo liberado por volta de" val={kpis.conclusaoSemNovasReprovacoes != null ? fmt(kpis.conclusaoSemNovasReprovacoes) : "—"} cls=""
             det={<>{`se aprovado na próxima análise · com revisões prováveis: ${kpis.conclusaoMediana != null ? fmt(kpis.conclusaoMediana) : "—"}`}{kpis.conclusaoSemNovasReprovacoes != null && delta(kpis.conclusaoSemNovasReprovacoes, kpisRef?.k.conclusaoSemNovasReprovacoes ?? undefined, (n) => fmt(n))}</>} />
         </div>
 
@@ -382,7 +398,7 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
               <button type="button" className="btn gold" style={{ height: 36 }} onClick={() => { setAbaPremissas("prio"); setEditandoPremissas(true); }}>★ Definir prioridades</button>
             </div>
             <div className="fld"><label>Organizar por</label>
-              <Seg grande valor={ui.agrupar} opcoes={[["code", "Projeto"], ["prest", "Prestador"], ["analyst", "Analista"], ["sla", "Prazo (SLA)"]]} onChange={(v) => setU({ agrupar: v as UiGanttEstado["agrupar"] })} />
+              <Seg grande valor={ui.agrupar} opcoes={[["code", "Projeto"], ["prest", R.ent], ["analyst", "Analista"], ["sla", "Prazo (SLA)"]]} onChange={(v) => setU({ agrupar: v as UiGanttEstado["agrupar"] })} />
             </div>
             <div className="fld"><label>Zoom</label>
               <Seg grande valor={String(ui.zoom)} opcoes={[["5", "Meses"], ["9", "Semanas"], ["16", "Dias"]]} onChange={(v) => setU({ zoom: Number(v) })} />
@@ -398,8 +414,8 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
             </div>
           </div>
           <div className="legend" style={{ marginTop: 12 }}>
-            <span><i style={{ background: "#A3AEBF" }} />Com o prestador</span>
-            <span><i style={{ background: "#D5DBE5", border: "1px dashed #A3AEBF" }} />Com o prestador (data estimada)</span>
+            <span><i style={{ background: "#A3AEBF" }} />{R.com}</span>
+            <span><i style={{ background: "#D5DBE5", border: "1px dashed #A3AEBF" }} />{R.com} (data estimada)</span>
             <span><i style={{ background: "#1F5BC4" }} />Em análise na Tecnoplano</span>
             <span><i style={{ background: "#8DB0EA" }} />Análise de documento que ainda vai chegar</span>
             <span><i style={{ background: "#D64541" }} />Atrasado</span>
@@ -430,6 +446,9 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
             mostrarEstimativas={ui.mostrarEstimativas}
             zoom={ui.zoom}
             abertos={gruposAbertos}
+            marcadores={marcadores}
+            modulo={modulo}
+            contratuais={contratuais}
             onAlternarGrupo={(g) => setGruposAbertos((a) => { const n = new Set(a); if (n.has(g)) n.delete(g); else n.add(g); return n; })}
             onGrupos={setGruposDisponiveis}
           />
@@ -446,13 +465,13 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
       <PremissasDialog
         aberto={editandoPremissas} onFechar={() => setEditandoPremissas(false)}
         nomeCenario={cenAtivo != null && cenarios[cenAtivo] ? ` · cenário: ${cenarios[cenAtivo].nome}` : " · cenário atual (não salvo)"}
-        premissas={premissas} setPremissas={setPremissas} ui={ui} setUi={setUi} hist={hist} itens={modelo.items} onDefinirPrioridade={definirPrioridade} abaInicial={abaPremissas}
+        premissas={premissas} setPremissas={setPremissas} ui={ui} setUi={setUi} hist={hist} itens={modelo.items} marcadores={marcadores} tabela={modulo} podeDefinir={podeDefinirPrioridade} onDefinirMarcador={definirMarcador} abaInicial={abaPremissas}
       />
     </div>
   );
 }
 
-function Kpi({ ico, lbl, val, det, cls }: { ico: string; lbl: string; val: React.ReactNode; det: React.ReactNode; cls?: string }) {
+export function Kpi({ ico, lbl, val, det, cls }: { ico: string; lbl: string; val: React.ReactNode; det: React.ReactNode; cls?: string }) {
   return (
     <div className={`card kpi ${cls || ""}`}>
       <div className="lbl">{ico} {lbl}</div>
@@ -462,7 +481,7 @@ function Kpi({ ico, lbl, val, det, cls }: { ico: string; lbl: string; val: React
   );
 }
 
-function Seg({ valor, opcoes, onChange, grande }: { valor: string; opcoes: [string, string][]; onChange: (v: string) => void; grande?: boolean }) {
+export function Seg({ valor, opcoes, onChange, grande }: { valor: string; opcoes: [string, string][]; onChange: (v: string) => void; grande?: boolean }) {
   return (
     <div className={`seg ${grande ? "big" : ""}`}>
       {opcoes.map(([v, t]) => (
@@ -472,7 +491,7 @@ function Seg({ valor, opcoes, onChange, grande }: { valor: string; opcoes: [stri
   );
 }
 
-function SelectFiltro({
+export function SelectFiltro({
   rotulo, valor, opcoes, onChange, semTodos,
 }: { rotulo: string; valor: string; opcoes: (string | [string, string])[]; onChange: (v: string) => void; semTodos?: boolean }) {
   return (
@@ -485,7 +504,7 @@ function SelectFiltro({
   );
 }
 
-function SeletorMultiplo({
+export function SeletorMultiplo({
   rotulo, opcoes, selecionados, onAlternar, onLimpar,
 }: { rotulo: string; opcoes: string[]; selecionados: string[]; onAlternar: (valor: string) => void; onLimpar: () => void }) {
   const [aberto, setAberto] = useState(false);

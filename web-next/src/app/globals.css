@@ -19,7 +19,8 @@
   --color-green: #16A34A;
   --color-lime: #65A30D;
   --color-red: #DC2626;
-  --color-orange: #EA580C;
+  /* Sem laranja no sistema: o antigo "laranja" agora é cinza-azulado neutro (informativo, não alarmante). */
+  --color-orange: #5B6B82;
   --color-purple: #7C3AED;
   --color-gold: #D97706;
   --color-sky: #0284C7;
@@ -31,7 +32,7 @@
   --color-green-bg: #DCFCE7;
   --color-lime-bg: #ECFCCB;
   --color-red-bg: #FEE2E2;
-  --color-orange-bg: #FFF7ED;
+  --color-orange-bg: #EEF2F8;
   --color-purple-bg: #EDE9FE;
 }
 
@@ -53,6 +54,8 @@
     --color-text-weak: #9FADC2;
 
     --color-red-bg: #3A1F22;
+    --color-orange: #94A3B8;
+    --color-orange-bg: #1E293B;
   }
 }
 
@@ -73,6 +76,8 @@
   --color-text-weak: #9FADC2;
 
   --color-red-bg: #3A1F22;
+  --color-orange: #94A3B8;
+  --color-orange-bg: #1E293B;
 }
 
 @theme inline {

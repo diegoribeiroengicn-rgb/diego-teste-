@@ -17,7 +17,7 @@ let pronto: Promise<void> | null = null;
  * sequência de cada coluna `id` ficou no início e o próximo INSERT sem id
  * repete um id existente ("duplicate key ... _pkey"). Avança cada sequência
  * até o maior id da tabela — nunca recua, nunca altera linhas. */
-async function alinharSequencias(): Promise<void> {
+export async function alinharSequencias(): Promise<void> {
   const pool = obterPool();
   const { rows } = await pool.query<{ tabela: string; coluna: string }>(
     `SELECT table_name AS tabela, column_name AS coluna FROM information_schema.columns
