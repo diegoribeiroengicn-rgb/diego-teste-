@@ -1,4 +1,6 @@
 import { obterPool } from "@/lib/db";
+import { calcularDataLimite } from "@/lib/dias-uteis";
+import { SLA_PRESTADORES_DIAS_UTEIS } from "@/lib/analise-validacao-calculo";
 
 /** Grava uma linha de histórico por campo alterado — mesma regra de
  * gat/database.py::_registrar_historico, reaproveitada aqui pelo CRUD de
@@ -178,4 +180,50 @@ export async function atualizarCessionario(id: number, dados: DadosCessionario, 
   );
   const campos = Object.fromEntries(COLUNAS_CESSIONARIO.map((c) => [c, dados[c] ?? null]));
   await registrarHistorico("cessionarios", id, antigo, campos, usuario);
+}
+
+// ---------------------------------------------------------------------------
+// Prioridade (Prestadores) — nível 1/2/3 lido por Lista de Prioridades, Visão
+// do Gestor, Alertas e Gantt (coluna única `prestadores.nivel_prioridade`).
+// ---------------------------------------------------------------------------
+
+export const SLA_POR_NIVEL_PRIORIDADE: Record<number, number> = { 3: 7, 2: 5, 1: 3 };
+const STATUS_ABERTOS = ["EM ANÁLISE", "EM HOLD", "RIOGALEÃO"];
+
+/** Define (ou remove, com `nivel = null`) o nível de prioridade de uma
+ * análise de Prestador; com `aplicarAoCodigo`, também das demais análises
+ * em aberto do mesmo código. Segue a regra do sistema anterior: nível
+ * 3/2/1 = SLA de 7/5/3 dias úteis; sem prioridade volta ao SLA original.
+ * A data limite só é recalculada onde não foi ajustada manualmente. Grava
+ * em colunas próprias — não passa por `atualizarPrestador`, então a
+ * importação de planilha nunca apaga a prioridade. */
+export async function definirPrioridadePrestador(
+  id: number, nivel: number | null, justificativa: string | null, aplicarAoCodigo: boolean, usuario: string,
+): Promise<number> {
+  const pool = obterPool();
+  const { rows: base } = await pool.query("SELECT id, codigo FROM prestadores WHERE id = $1 AND arquivado_em IS NULL", [id]);
+  if (!base[0]) throw new Error("Registro não encontrado.");
+  const { rows: alvos } = aplicarAoCodigo && base[0].codigo
+    ? await pool.query(
+        "SELECT * FROM prestadores WHERE arquivado_em IS NULL AND (id = $1 OR (codigo = $2 AND status_analise = ANY($3)))",
+        [id, base[0].codigo, STATUS_ABERTOS],
+      )
+    : await pool.query("SELECT * FROM prestadores WHERE id = $1", [id]);
+
+  const agora = new Date().toISOString();
+  for (const r of alvos) {
+    const original = r.sla_original ?? r.sla_dias ?? SLA_PRESTADORES_DIAS_UTEIS;
+    const sla = nivel ? SLA_POR_NIVEL_PRIORIDADE[nivel] : original;
+    const limite = r.data_limite_ajustada_manualmente || !r.data_solicitacao
+      ? r.data_limite
+      : calcularDataLimite(r.data_solicitacao, sla)?.toISOString().slice(0, 10) ?? r.data_limite;
+    await pool.query(
+      `UPDATE prestadores SET nivel_prioridade = $1, sla_dias = $2, sla_original = COALESCE(sla_original, $3),
+         data_limite = $4, justificativa_sla = $5, sla_alterado_por = $6, sla_alterado_em = $7,
+         atualizado_em = $7, atualizado_por = $6 WHERE id = $8`,
+      [nivel, sla, original, limite, nivel ? (justificativa?.trim() || null) : null, usuario, agora, r.id],
+    );
+    await registrarHistorico("prestadores", r.id, r, { nivel_prioridade: nivel, sla_dias: sla, data_limite: limite }, usuario);
+  }
+  return alvos.length;
 }

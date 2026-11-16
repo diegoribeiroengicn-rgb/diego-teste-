@@ -67,6 +67,11 @@ export function FormularioAnalise(
   const [numErros, setNumErros] = useState(registro?.num_erros?.toString() ?? "");
   const [etg, setEtg] = useState(registro?.etg ?? ETG_OPCOES[0]);
 
+  const regPrest = registro as (RegistroPrestador & { nivel_prioridade?: number | null; justificativa_sla?: string | null }) | undefined;
+  const [nivelPrioridade, setNivelPrioridade] = useState<string>(regPrest?.nivel_prioridade ? String(regPrest.nivel_prioridade) : "");
+  const [justificativaPrioridade, setJustificativaPrioridade] = useState(regPrest?.justificativa_sla ?? "");
+  const [aplicarAoCodigo, setAplicarAoCodigo] = useState(true);
+
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -143,6 +148,13 @@ export function FormularioAnalise(
         setErro(corpo.erro ?? "Erro ao salvar a análise.");
         return;
       }
+      if (tabela === "prestadores" && registro && (nivelPrioridade || regPrest?.nivel_prioridade) && String(regPrest?.nivel_prioridade ?? "") !== nivelPrioridade) {
+        const r2 = await fetch(`/api/analises/prestadores/${registro.id}/prioridade`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nivel: nivelPrioridade ? Number(nivelPrioridade) : null, justificativa: justificativaPrioridade, aplicarAoCodigo }),
+        });
+        if (!r2.ok) { setErro((await r2.json().catch(() => ({}))).erro ?? "A análise foi salva, mas a prioridade não."); return; }
+      }
       router.push(`/${tabela}/projetos`);
       router.refresh();
     } catch {
@@ -162,6 +174,29 @@ export function FormularioAnalise(
       </p>
 
       <form onSubmit={salvar} className="mt-6 space-y-5">
+        {tabela === "prestadores" && registro && (
+          <div className="rounded-xl border border-(--color-border) bg-(--color-surface-2) p-4">
+            <p className="text-sm font-semibold text-(--color-text)">★ Prioridade (aparece no Gantt e na Lista de Prioridades)</p>
+            <div className="mt-3 grid grid-cols-2 gap-4">
+              <Campo label="Nível de prioridade">
+                <select value={nivelPrioridade} onChange={(e) => setNivelPrioridade(e.target.value)} className={classeInput}>
+                  <option value="">Sem prioridade (SLA padrão)</option>
+                  <option value="3">Nível 3 — SLA 7 dias úteis</option>
+                  <option value="2">Nível 2 — SLA 5 dias úteis</option>
+                  <option value="1">Nível 1 — SLA até 3 dias úteis</option>
+                </select>
+              </Campo>
+              <Campo label="Justificativa">
+                <input value={justificativaPrioridade} onChange={(e) => setJustificativaPrioridade(e.target.value)} className={classeInput} placeholder="Motivo da prioridade" disabled={!nivelPrioridade} />
+              </Campo>
+            </div>
+            <label className="mt-3 flex items-center gap-2 text-sm text-(--color-text)">
+              <input type="checkbox" checked={aplicarAoCodigo} onChange={(e) => setAplicarAoCodigo(e.target.checked)} />
+              Aplicar a todas as análises em aberto do código {registro.codigo || ""}
+            </label>
+            <p className="mt-1 text-xs text-(--color-text-weak)">A data limite é recalculada pelo SLA do nível, exceto nas análises com data ajustada manualmente.</p>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-4">
           <Campo label="Código">
             <input value={codigo} onChange={(e) => setCodigo(e.target.value)} className={classeInput} placeholder="Ex.: P245" />
