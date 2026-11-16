@@ -6,6 +6,11 @@ export function estaAberto(it: ItemGantt): boolean {
 
 export type KpisGantt = {
   abertos: number;
+  comPrestador: number;
+  comPrestadorAtrasados: number;
+  emAnalise: number;
+  emAnaliseAtrasadas: number;
+  prioritariosAtrasados: number;
   simulados: number;
   criticas: number;
   prioritarios: number;
@@ -43,8 +48,15 @@ export function calcularKpis(itens: ItemGantt[], agregado: AgregadoGantt): KpisG
   const medianas = abertosItens.map((it) => it.d.libMed?.v).filter((v): v is number => v != null);
   const semReprovacoes = abertosItens.map((it) => it.d.libBest?.v).filter((v): v is number => v != null);
 
+  const emAn = abertosItens.filter((it) => it.state === "EM ANÁLISE");
+  const comP = abertosItens.filter((it) => it.state !== "EM ANÁLISE");
   return {
     abertos: abertosItens.length,
+    comPrestador: comP.length,
+    comPrestadorAtrasados: comP.filter((it) => it.overdue).length,
+    emAnalise: emAn.length,
+    emAnaliseAtrasadas: emAn.filter((it) => it.overdue).length,
+    prioritariosAtrasados: abertosItens.filter((it) => ehPrioritario(it) && it.overdue).length,
     simulados,
     criticas,
     prioritarios,

@@ -17,7 +17,7 @@ import {
 } from "@/lib/prestadores-gantt/motor";
 import { hojeBr } from "@/lib/dias-uteis";
 import { GanttSvg } from "./gantt-svg";
-import { calcularKpis } from "./kpis";
+import { calcularKpis, estaAberto } from "./kpis";
 import { FILTROS_PADRAO, UI_PADRAO, type EntregaFuturaEstado, type FiltrosGanttEstado, type UiGanttEstado } from "./tipos-estado";
 
 const CHAVE_LOCALSTORAGE = "gat_gantt_prestadores_v1";
@@ -25,16 +25,6 @@ const CHAVE_LOCALSTORAGE = "gat_gantt_prestadores_v1";
 function hojeISO(): string {
   const d = hojeBr();
   return d.toISOString().slice(0, 10);
-}
-
-function CartaoKpi({ titulo, valor, destaque, cor }: { titulo: string; valor: string; destaque?: string; cor?: string }) {
-  return (
-    <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) px-4 py-3.5">
-      <p className="text-xl font-semibold tabular-nums" style={cor ? { color: cor } : undefined}>{valor}</p>
-      <p className="mt-0.5 text-xs text-(--color-text-weak)">{titulo}</p>
-      {destaque && <p className="text-[11px] text-(--color-text-dim)">{destaque}</p>}
-    </div>
-  );
 }
 
 function carregarEstadoSalvo(): { filtros?: FiltrosGanttEstado; ui?: UiGanttEstado; futuras?: EntregaFuturaEstado[] } {
@@ -54,12 +44,13 @@ function salvarEstado(dados: { filtros: FiltrosGanttEstado; ui: UiGanttEstado; f
   }
 }
 
-export function PainelGanttPrestadores({ linhasBrutas }: { linhasBrutas: LinhaBrutaGantt[] }) {
+export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBrutas: LinhaBrutaGantt[]; geradoEm?: string }) {
   const [filtros, setFiltros] = useState<FiltrosGanttEstado>(
     () => ({ ...FILTROS_PADRAO, ...carregarEstadoSalvo().filtros }),
   );
   const [ui, setUi] = useState<UiGanttEstado>(() => ({ ...UI_PADRAO, ...carregarEstadoSalvo().ui }));
   const [futuras, setFuturas] = useState<EntregaFuturaEstado[]>(() => carregarEstadoSalvo().futuras ?? []);
+  const [datasAbertas, setDatasAbertas] = useState(false);
 
   useEffect(() => {
     salvarEstado({ filtros, ui, futuras });
@@ -70,7 +61,14 @@ export function PainelGanttPrestadores({ linhasBrutas }: { linhasBrutas: LinhaBr
   const hist = useMemo(() => histLib(modelo.items), [modelo]);
   const cal = useMemo(() => new Calendario(), []);
 
+  const simulado = ui.cenario === "simulado";
+  const baseISO = ui.base || hojeISO();
+
   const todosPrestadores = useMemo(() => [...new Set(modelo.items.map((it) => it.prest))].filter(Boolean).sort(), [modelo]);
+  const todosCodigos = useMemo(() => [...new Set(modelo.items.map((it) => it.code))].filter(Boolean).sort(), [modelo]);
+  const todasObras = useMemo(() => [...new Set(modelo.items.map((it) => it.obra))].filter(Boolean).sort(), [modelo]);
+  const todasAts = useMemo(() => [...new Set(modelo.items.map((it) => it.at || ""))].filter(Boolean).sort(), [modelo]);
+  const todasDisciplinas = useMemo(() => [...new Set(modelo.items.flatMap((it) => it.discs))].filter(Boolean).sort(), [modelo]);
   const todosAnalistas = useMemo(
     () => [...new Set(linhasBrutas.map((r) => (r.resp || "").trim().toUpperCase()))].filter((a) => a && a !== "SEM RESPONSÁVEL").sort(),
     [linhasBrutas],
@@ -78,13 +76,18 @@ export function PainelGanttPrestadores({ linhasBrutas }: { linhasBrutas: LinhaBr
 
   const params = useMemo(
     () => ({
-      ...defaultParams(hojeISO(), hist),
+      ...defaultParams(baseISO, hist),
+      slaPDefault: ui.slaP,
+      slaIDefault: ui.slaI,
+      includeOld: ui.incluirAntigos,
       horizon: ui.horizonte,
-      futuras: futuras.map((f): EntregaFutura => ({
-        code: f.code, obra: f.obra, disc: f.disc, analyst: f.analyst, date: f.date, n: f.n, pr: f.pr, slaI: f.slaI,
-      })),
+      futuras: simulado
+        ? futuras.map((f): EntregaFutura => ({
+            code: f.code, obra: f.obra, disc: f.disc, analyst: f.analyst, date: f.date, n: f.n, pr: f.pr, slaI: f.slaI,
+          }))
+        : [],
     }),
-    [hist, ui.horizonte, futuras],
+    [hist, baseISO, ui.slaP, ui.slaI, ui.incluirAntigos, ui.horizonte, futuras, simulado],
   );
 
   const resultado = useMemo(() => project(modelo, params, cal), [modelo, params, cal]);
@@ -101,8 +104,19 @@ export function PainelGanttPrestadores({ linhasBrutas }: { linhasBrutas: LinhaBr
           it.prest.toUpperCase().includes(termo),
       );
     }
+    if (filtros.codigo) out = out.filter((it) => it.code === filtros.codigo);
     if (filtros.prestadores.length) out = out.filter((it) => filtros.prestadores.includes(it.prest));
+    if (filtros.obra) out = out.filter((it) => it.obra === filtros.obra);
+    if (filtros.at) out = out.filter((it) => it.at === filtros.at);
+    if (filtros.disciplina) out = out.filter((it) => it.discs.includes(filtros.disciplina));
     if (filtros.analistas.length) out = out.filter((it) => filtros.analistas.includes(it.analyst));
+    if (filtros.criticidade === "crit") out = out.filter((it) => it.crit);
+    if (filtros.criticidade === "norm") out = out.filter((it) => !it.crit);
+    if (filtros.prazo) out = out.filter((it) => it.prazo === filtros.prazo);
+    if (filtros.fase === "analise") out = out.filter((it) => it.state === "EM ANÁLISE");
+    if (filtros.fase === "prest") out = out.filter((it) => estaAberto(it) && it.state !== "EM ANÁLISE");
+    if (filtros.statusLib === "pend") out = out.filter((it) => estaAberto(it) || !!it.sim);
+    if (filtros.statusLib === "lib") out = out.filter((it) => !!it.closed);
     if (filtros.apenasCriticas) out = out.filter((it) => it.crit);
     if (filtros.apenasVencidas) out = out.filter((it) => it.prazo === "Vencido");
     if (filtros.apenasPrioritarios) out = out.filter(ehPrioritario);
@@ -115,142 +129,135 @@ export function PainelGanttPrestadores({ linhasBrutas }: { linhasBrutas: LinhaBr
   function alternarSelecao(lista: string[], valor: string): string[] {
     return lista.includes(valor) ? lista.filter((v) => v !== valor) : [...lista, valor];
   }
-
   function adicionarFutura(entrada: Omit<EntregaFuturaEstado, "id">) {
     setFuturas((atual) => [...atual, { ...entrada, id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }]);
   }
   function removerFutura(id: string) {
     setFuturas((atual) => atual.filter((f) => f.id !== id));
   }
+  const setF = (p: Partial<FiltrosGanttEstado>) => setFiltros((f) => ({ ...f, ...p }));
+  const setU = (p: Partial<UiGanttEstado>) => setUi((u) => ({ ...u, ...p }));
+  function limparFiltros() { setFiltros({ ...FILTROS_PADRAO }); }
+  function restaurarPadrao() { setFiltros({ ...FILTROS_PADRAO }); setUi({ ...UI_PADRAO }); }
+
+  const baseBr = fmt(resultado.base);
+  const fimBr = fmt(resultado.hEnd);
 
   return (
-    <div className="mx-auto max-w-[1400px] px-8 py-10">
-      <div>
-        <h1 className="text-2xl font-semibold text-(--color-text)">Gantt de Prestadores — Fluxo de ATs e Paralelismo</h1>
-        <p className="mt-1 max-w-3xl text-sm text-(--color-text-weak)">
-          Horizonte de análises em andamento, sobrecarga por analista e projeção de documentos nos próximos meses —
-          considera o prazo real das ATs (SLA/hold) e projeta ciclos futuros pela taxa histórica de liberação por revisão.
-        </p>
-      </div>
+    <div className="gref">
+      <header className="top">
+        <div className="logo"><img alt="Tecnoplano" src="/tecnoplano_logo.png" /></div>
+        <div>
+          <h1>Gantt de ATs — Fluxo Prestador × Análise e Paralelismo</h1>
+          <div className="sub">Fonte: aba PROJ_PREST · {linhasBrutas.length} linhas{geradoEm ? ` · extraído em ${geradoEm}` : ""}</div>
+        </div>
+        <div className="right">
+          Data-base: <b>{baseBr}</b> · Horizonte até <b>{fimBr}</b>
+          <br />
+          <span>Cenário: <span className="badge-sc">{simulado ? "SIMULADO — inclui estimativas" : "ATUAL — só dados reais"}</span></span>
+        </div>
+      </header>
 
-      {/* filtros */}
-      <div className="mt-5 flex flex-wrap items-end gap-3 rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-4">
-        <label className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-(--color-text-dim)">Buscar (código, AT, obra)</span>
-          <input
-            value={filtros.busca}
-            onChange={(e) => setFiltros((f) => ({ ...f, busca: e.target.value }))}
-            placeholder="Ex.: P221 ou AT-0466"
-            className="w-56 rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-1.5 text-sm text-(--color-text) outline-none focus:border-(--color-navy) focus:ring-2 focus:ring-(--color-navy)/15"
-          />
-        </label>
-
-        <SeletorMultiplo
-          rotulo="Prestadores prioritários"
-          opcoes={todosPrestadores}
-          selecionados={filtros.prestadores}
-          onAlternar={(v) => setFiltros((f) => ({ ...f, prestadores: alternarSelecao(f.prestadores, v) }))}
-          onLimpar={() => setFiltros((f) => ({ ...f, prestadores: [] }))}
-        />
-
-        <SeletorMultiplo
-          rotulo="Analistas"
-          opcoes={todosAnalistas}
-          selecionados={filtros.analistas}
-          onAlternar={(v) => setFiltros((f) => ({ ...f, analistas: alternarSelecao(f.analistas, v) }))}
-          onLimpar={() => setFiltros((f) => ({ ...f, analistas: [] }))}
-        />
-
-        <label className="flex items-center gap-1.5 pb-1.5 text-sm text-(--color-text)">
-          <input type="checkbox" checked={filtros.apenasCriticas} onChange={(e) => setFiltros((f) => ({ ...f, apenasCriticas: e.target.checked }))} />
-          Só críticas
-        </label>
-        <label className="flex items-center gap-1.5 pb-1.5 text-sm text-(--color-text)">
-          <input type="checkbox" checked={filtros.apenasVencidas} onChange={(e) => setFiltros((f) => ({ ...f, apenasVencidas: e.target.checked }))} />
-          Só vencidas
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-(--color-text-dim)">Mostrar</span>
-          <div className="flex rounded-lg border border-(--color-border) p-0.5 text-sm">
-            <button
-              type="button"
-              onClick={() => setFiltros((f) => ({ ...f, apenasPrioritarios: false }))}
-              className={`rounded-md px-3 py-1 ${!filtros.apenasPrioritarios ? "bg-(--color-navy) text-white" : "text-(--color-text)"}`}
-            >
-              Todos
-            </button>
-            <button
-              type="button"
-              onClick={() => setFiltros((f) => ({ ...f, apenasPrioritarios: true }))}
-              className={`rounded-md px-3 py-1 ${filtros.apenasPrioritarios ? "bg-(--color-navy) text-white" : "text-(--color-text)"}`}
-            >
-              ★ Só prioritários
-            </button>
+      <div className="bar">
+        <div className="fld"><label>Data-base</label>
+          <input type="date" value={ui.base || baseISO} onChange={(e) => setU({ base: e.target.value })} />
+        </div>
+        <div className="fld"><label>Horizonte (dias)</label>
+          <input type="number" min={7} max={730} value={ui.horizonte} onChange={(e) => setU({ horizonte: Math.max(7, Math.min(730, Number(e.target.value) || 90)) })} />
+        </div>
+        <div className="fld"><label>SLA prestador padrão (du)</label>
+          <input type="number" min={1} max={120} value={ui.slaP} onChange={(e) => setU({ slaP: Math.max(1, Math.min(120, Number(e.target.value) || 10)) })} />
+        </div>
+        <div className="fld"><label>SLA análise padrão (du)</label>
+          <input type="number" min={1} max={120} value={ui.slaI} onChange={(e) => setU({ slaI: Math.max(1, Math.min(120, Number(e.target.value) || 10)) })} />
+        </div>
+        <div className="fld"><label>Cenário</label>
+          <Seg valor={ui.cenario} opcoes={[["atual", "Atual"], ["simulado", "Simulado"]]} onChange={(v) => setU({ cenario: v as UiGanttEstado["cenario"], mostrarEstimativas: v === "simulado" })} />
+        </div>
+        <div className="fld"><label>Projetos &gt; {params.oldMonths} meses</label>
+          <Seg valor={ui.incluirAntigos ? "1" : "0"} opcoes={[["0", "Excluídos"], ["1", "Incluídos"]]} onChange={(v) => setU({ incluirAntigos: v === "1" })} />
+        </div>
+        <div className="fld"><label>Buscar (código, AT, obra)</label>
+          <input value={filtros.busca} onChange={(e) => setF({ busca: e.target.value })} placeholder="Ex.: P221 ou AT-0466" style={{ width: 170 }} />
+        </div>
+        <SelectFiltro rotulo="Código" valor={filtros.codigo} opcoes={todosCodigos} onChange={(v) => setF({ codigo: v })} />
+        <SeletorMultiplo rotulo="Prestador" opcoes={todosPrestadores} selecionados={filtros.prestadores}
+          onAlternar={(v) => setF({ prestadores: alternarSelecao(filtros.prestadores, v) })} onLimpar={() => setF({ prestadores: [] })} />
+        <SelectFiltro rotulo="Projeto (obra)" valor={filtros.obra} opcoes={todasObras} onChange={(v) => setF({ obra: v })} />
+        <SelectFiltro rotulo="AT" valor={filtros.at} opcoes={todasAts} onChange={(v) => setF({ at: v })} />
+        <SelectFiltro rotulo="Disciplina" valor={filtros.disciplina} opcoes={todasDisciplinas} onChange={(v) => setF({ disciplina: v })} />
+        <SeletorMultiplo rotulo="Analista" opcoes={todosAnalistas} selecionados={filtros.analistas}
+          onAlternar={(v) => setF({ analistas: alternarSelecao(filtros.analistas, v) })} onLimpar={() => setF({ analistas: [] })} />
+        <SelectFiltro rotulo="Status liberação" valor={filtros.statusLib} semTodos
+          opcoes={[["pend", "Pendentes"], ["lib", "Liberadas"], ["todos", "Todos"]]} onChange={(v) => setF({ statusLib: v })} />
+        <SelectFiltro rotulo="Criticidade" valor={filtros.criticidade} opcoes={[["crit", "Críticas"], ["norm", "Normais"]]} onChange={(v) => setF({ criticidade: v })} />
+        <SelectFiltro rotulo="Situação do prazo" valor={filtros.prazo}
+          opcoes={["Vencido", "Próximo do vencimento", "Em dia", "HOLD", "Sem dados"]} onChange={(v) => setF({ prazo: v })} />
+        <SelectFiltro rotulo="Fase atual" valor={filtros.fase} opcoes={[["prest", "Com o prestador"], ["analise", "Em análise"]]} onChange={(v) => setF({ fase: v })} />
+        <SelectFiltro rotulo="Prioridade" valor={filtros.apenasPrioritarios ? "prio" : ""} opcoes={[["prio", "★ Só prioritários"]]} onChange={(v) => setF({ apenasPrioritarios: v === "prio" })} />
+        <div className="fld"><label>&nbsp;</label>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button className="btn sm" type="button" onClick={() => setDatasAbertas((a) => !a)}>Datas ▾</button>
+            <button className="btn sm" type="button" onClick={limparFiltros}>Limpar filtros</button>
+            <button className="btn sm gold" type="button" onClick={restaurarPadrao}>Restaurar padrão</button>
           </div>
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-(--color-text-dim)">Horizonte (dias)</span>
-          <input
-            type="number" min={14} max={240} value={ui.horizonte}
-            onChange={(e) => setUi((u) => ({ ...u, horizonte: Math.max(14, Math.min(240, Number(e.target.value) || 90)) }))}
-            className="w-20 rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-1.5 text-sm text-(--color-text) outline-none focus:border-(--color-navy) focus:ring-2 focus:ring-(--color-navy)/15"
-          />
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-(--color-text-dim)">Agrupar por</span>
-          <select
-            value={ui.agrupar}
-            onChange={(e) => setUi((u) => ({ ...u, agrupar: e.target.value as UiGanttEstado["agrupar"] }))}
-            className="rounded-lg border border-(--color-border) bg-(--color-bg) px-3 py-1.5 text-sm text-(--color-text) outline-none focus:border-(--color-navy) focus:ring-2 focus:ring-(--color-navy)/15"
-          >
-            <option value="prest">Prestador</option>
-            <option value="code">Código · prestador</option>
-            <option value="analyst">Analista</option>
-            <option value="none">Sem agrupamento</option>
-          </select>
-        </label>
-
-        <label className="flex items-center gap-1.5 pb-1.5 text-sm text-(--color-text)">
-          <input type="checkbox" checked={ui.mostrarEstimativas} onChange={(e) => setUi((u) => ({ ...u, mostrarEstimativas: e.target.checked }))} />
-          Mostrar ciclos estimados
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-(--color-text-dim)">Zoom</span>
-          <input
-            type="range" min={2} max={14} value={ui.zoom}
-            onChange={(e) => setUi((u) => ({ ...u, zoom: Number(e.target.value) }))}
-            className="w-24"
-          />
-        </label>
+        </div>
+        {datasAbertas && (
+          <div style={{ width: "100%" }} className="note">
+            Filtros por intervalo de datas (entrega prevista, retorno e conclusão da análise) chegam na próxima etapa.
+          </div>
+        )}
       </div>
 
-      {/* KPIs */}
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
-        <CartaoKpi titulo="ATs/itens no Gantt" valor={String(kpis.abertos)} destaque={kpis.simulados ? `+ ${kpis.simulados} simulados` : "pendentes conforme filtros"} />
-        <CartaoKpi titulo="ATs críticas" valor={String(kpis.criticas)} destaque={`REV. AT > ${params.critRev}`} cor={kpis.criticas ? "var(--color-red)" : undefined} />
-        <CartaoKpi titulo="★ Prioritários" valor={String(kpis.prioritarios)} destaque="lista de prioridades centralizada" cor={kpis.prioritarios ? "#B8890B" : undefined} />
-        <CartaoKpi
-          titulo="Vencidos / próximos"
-          valor={`${kpis.vencidos} / ${kpis.proximos}`}
-          destaque={`próximo = até ${params.prox} du`}
-          cor={kpis.vencidos ? "var(--color-red)" : undefined}
-        />
-        <CartaoKpi titulo="Projetos simultâneos" valor={String(kpis.projSimultaneosHoje)} destaque={kpis.picoProjetos.d != null ? `pico ${kpis.picoProjetos.v} em ${fmt(kpis.picoProjetos.d)}` : undefined} />
-        <CartaoKpi titulo="Pico semanal de carga" valor={`${kpis.picoSemanal.v.toFixed(0)} pr.`} destaque={kpis.picoSemanal.semana != null ? `semana de ${fmt(kpis.picoSemanal.semana)}` : undefined} />
-        <CartaoKpi
-          titulo="Conclusão estimada"
-          valor={kpis.conclusaoMediana != null ? fmt(kpis.conclusaoMediana) : "—"}
-          destaque={`sem novas reprovações: ${kpis.conclusaoSemNovasReprovacoes != null ? fmt(kpis.conclusaoSemNovasReprovacoes) : "—"}`}
-          cor="var(--color-gold)"
-        />
-      </div>
+      <main>
+        <div className="grid kpis" style={{ marginBottom: 12 }}>
+          <Kpi ico="📤" lbl="Com o prestador" val={String(kpis.comPrestador)} cls={kpis.comPrestadorAtrasados ? "amber" : ""}
+            det={kpis.comPrestadorAtrasados ? <b style={{ color: "#D64541" }}>{kpis.comPrestadorAtrasados} atrasados</b> : "nenhum atrasado"} />
+          <Kpi ico="🔎" lbl="Em análise na Tecnoplano" val={String(kpis.emAnalise)} cls={kpis.emAnaliseAtrasadas ? "amber" : ""}
+            det={kpis.emAnaliseAtrasadas ? <b style={{ color: "#D64541" }}>{kpis.emAnaliseAtrasadas} atrasadas</b> : "nenhuma atrasada"} />
+          <Kpi ico="★" lbl="Prioritários" val={String(kpis.prioritarios)} cls="gold"
+            det={<>{kpis.prioritarios} análises prioritárias abertas<br /><b style={{ color: kpis.prioritariosAtrasados ? "#D64541" : "inherit" }}>{kpis.prioritariosAtrasados} atrasadas</b></>} />
+          <Kpi ico="📈" lbl="Novas ATs previstas" val={kpis.simulados ? `≈${kpis.simulados}` : "—"} cls=""
+            det={kpis.simulados ? "estimadas pelo ritmo e entregas futuras" : "previsão desligada"} />
+          <Kpi ico="⚠" lbl="Atrasados ou críticos" val={<>{kpis.vencidos}<small> atrasados</small></>} cls={kpis.vencidos ? "red" : ""}
+            det={`${kpis.criticas} com muitas revisões (críticos) · próximos: ${kpis.proximos}`} />
+          <Kpi ico="📈" lbl="Semana mais cheia" val={kpis.picoSemanal.semana != null ? <>{kpis.picoSemanal.v.toFixed(0)}<small> pranchas</small></> : "—"} cls=""
+            det={kpis.picoSemanal.semana != null ? `semana de ${fmt(kpis.picoSemanal.semana)}` : ""} />
+          <Kpi ico="✓" lbl="Tudo liberado por volta de" val={kpis.conclusaoSemNovasReprovacoes != null ? fmt(kpis.conclusaoSemNovasReprovacoes) : "—"} cls="gold"
+            det={`se aprovado na próxima análise · com revisões prováveis: ${kpis.conclusaoMediana != null ? fmt(kpis.conclusaoMediana) : "—"}`} />
+        </div>
 
-      {/* Gantt */}
-      <div className="mt-4">
+        <div className="card" style={{ marginBottom: 10 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "12px 18px", alignItems: "flex-end" }}>
+            <div className="fld"><label>Mostrar</label>
+              <Seg grande valor={filtros.apenasPrioritarios ? "prio" : "all"} opcoes={[["all", "Todos"], ["prio", "★ Só prioritários"]]} onChange={(v) => setF({ apenasPrioritarios: v === "prio" })} />
+            </div>
+            <div className="fld"><label>Organizar por</label>
+              <Seg grande valor={ui.agrupar} opcoes={[["code", "Projeto"], ["prest", "Prestador"], ["analyst", "Analista"], ["sla", "Prazo (SLA)"]]} onChange={(v) => setU({ agrupar: v as UiGanttEstado["agrupar"] })} />
+            </div>
+            <div className="fld"><label>Zoom</label>
+              <Seg grande valor={String(ui.zoom)} opcoes={[["5", "Meses"], ["9", "Semanas"], ["16", "Dias"]]} onChange={(v) => setU({ zoom: Number(v) })} />
+            </div>
+            <div className="fld"><label>Revisões futuras</label>
+              <Seg grande valor={ui.mostrarEstimativas ? "1" : "0"} opcoes={[["0", "Não mostrar"], ["1", "Mostrar prováveis"]]} onChange={(v) => setU({ mostrarEstimativas: v === "1" })} />
+            </div>
+          </div>
+          <div className="legend" style={{ marginTop: 12 }}>
+            <span><i style={{ background: "#A3AEBF" }} />Com o prestador</span>
+            <span><i style={{ background: "#D5DBE5", border: "1px dashed #A3AEBF" }} />Com o prestador (data estimada)</span>
+            <span><i style={{ background: "#1F5BC4" }} />Em análise na Tecnoplano</span>
+            <span><i style={{ background: "#8DB0EA" }} />Análise de documento que ainda vai chegar</span>
+            <span><i style={{ background: "#D64541" }} />Atrasado</span>
+            <span><b className="okc">✓</b>Liberação</span>
+            <span><i style={{ background: "#C9B6E8" }} />Novas ATs previstas (ritmo)</span>
+            <span><i style={{ background: "#C9A227", width: 4 }} />Hoje</span>
+            <span><span className="star">★</span>Prioritário</span>
+          </div>
+          <div className="note" style={{ marginTop: 8 }}>
+            Clique no nome de um projeto para abrir ou fechar. Clique numa linha para ver o histórico. Passe o mouse sobre as barras para ver as datas.
+          </div>
+        </div>
+
         <GanttSvg
           itens={itensFiltrados}
           agregado={agregadoFiltrado}
@@ -261,70 +268,80 @@ export function PainelGanttPrestadores({ linhasBrutas }: { linhasBrutas: LinhaBr
           mostrarEstimativas={ui.mostrarEstimativas}
           zoom={ui.zoom}
         />
-      </div>
 
-      {/* entregas futuras simuladas */}
-      <PainelEntregasFuturas
-        futuras={futuras}
-        prestadores={todosPrestadores}
-        analistas={todosAnalistas}
-        onAdicionar={adicionarFutura}
-        onRemover={removerFutura}
-      />
+        <PainelEntregasFuturas
+          futuras={futuras}
+          prestadores={todosPrestadores}
+          analistas={todosAnalistas}
+          onAdicionar={adicionarFutura}
+          onRemover={removerFutura}
+        />
+      </main>
+    </div>
+  );
+}
+
+function Kpi({ ico, lbl, val, det, cls }: { ico: string; lbl: string; val: React.ReactNode; det: React.ReactNode; cls?: string }) {
+  return (
+    <div className={`card kpi ${cls || ""}`}>
+      <div className="lbl">{ico} {lbl}</div>
+      <div className="val">{val}</div>
+      <div className="det">{det}</div>
+    </div>
+  );
+}
+
+function Seg({ valor, opcoes, onChange, grande }: { valor: string; opcoes: [string, string][]; onChange: (v: string) => void; grande?: boolean }) {
+  return (
+    <div className={`seg ${grande ? "big" : ""}`}>
+      {opcoes.map(([v, t]) => (
+        <button key={v} type="button" className={v === valor ? "on" : ""} onClick={() => onChange(v)}>{t}</button>
+      ))}
+    </div>
+  );
+}
+
+function SelectFiltro({
+  rotulo, valor, opcoes, onChange, semTodos,
+}: { rotulo: string; valor: string; opcoes: (string | [string, string])[]; onChange: (v: string) => void; semTodos?: boolean }) {
+  return (
+    <div className="fld"><label>{rotulo}</label>
+      <select value={valor} onChange={(e) => onChange(e.target.value)}>
+        {!semTodos && <option value="">Todos</option>}
+        {opcoes.map((o) => (Array.isArray(o) ? <option key={o[0]} value={o[0]}>{o[1]}</option> : <option key={o} value={o}>{o}</option>))}
+      </select>
     </div>
   );
 }
 
 function SeletorMultiplo({
-  rotulo,
-  opcoes,
-  selecionados,
-  onAlternar,
-  onLimpar,
-}: {
-  rotulo: string;
-  opcoes: string[];
-  selecionados: string[];
-  onAlternar: (valor: string) => void;
-  onLimpar: () => void;
-}) {
+  rotulo, opcoes, selecionados, onAlternar, onLimpar,
+}: { rotulo: string; opcoes: string[]; selecionados: string[]; onAlternar: (valor: string) => void; onLimpar: () => void }) {
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState("");
   const filtradas = opcoes.filter((o) => o.toUpperCase().includes(busca.toUpperCase()));
-
   return (
-    <div className="relative flex flex-col gap-1">
-      <span className="text-[10px] font-semibold uppercase tracking-wide text-(--color-text-dim)">{rotulo}</span>
-      <button
-        type="button"
-        onClick={() => setAberto((a) => !a)}
-        className={`w-48 truncate rounded-lg border px-3 py-1.5 text-left text-sm ${
-          selecionados.length ? "border-(--color-gold) bg-(--color-surface-2)" : "border-(--color-border) bg-(--color-bg)"
-        } text-(--color-text)`}
-      >
-        {selecionados.length ? `${selecionados.length} selecionado(s)` : "Todos"}
-      </button>
-      {aberto && (
-        <div className="absolute top-[52px] z-20 flex max-h-72 w-72 flex-col rounded-lg border border-(--color-border) bg-(--color-surface-1) shadow-lg">
-          <div className="flex items-center gap-2 border-b border-(--color-border) p-2">
-            <input
-              value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar…" autoFocus
-              className="flex-1 rounded border border-(--color-border) bg-(--color-bg) px-2 py-1 text-xs text-(--color-text) outline-none"
-            />
-            <button type="button" onClick={onLimpar} className="text-xs font-medium text-(--color-navy) hover:underline">Limpar</button>
-            <button type="button" onClick={() => setAberto(false)} className="text-xs font-medium text-(--color-text-weak) hover:underline">Fechar</button>
+    <div className="fld"><label>{rotulo}</label>
+      <div className="ms">
+        <button type="button" className={selecionados.length ? "act" : ""} onClick={() => setAberto((a) => !a)}>
+          {selecionados.length ? `${selecionados.length} selecionado(s)` : "Todos"}
+        </button>
+        {aberto && (
+          <div className="pop">
+            <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar…" autoFocus />
+            <div className="acts">
+              <button type="button" className="btn sm" onClick={onLimpar}>Limpar</button>
+              <button type="button" className="btn sm" onClick={() => setAberto(false)}>Fechar</button>
+            </div>
+            <div className="lst">
+              {filtradas.map((o) => (
+                <label key={o}><input type="checkbox" checked={selecionados.includes(o)} onChange={() => onAlternar(o)} />{o}</label>
+              ))}
+              {!filtradas.length && <p className="note">Nenhum resultado.</p>}
+            </div>
           </div>
-          <div className="overflow-auto p-1">
-            {filtradas.map((o) => (
-              <label key={o} className="flex cursor-pointer items-start gap-2 rounded px-2 py-1 text-xs text-(--color-text) hover:bg-(--color-surface-2)">
-                <input type="checkbox" checked={selecionados.includes(o)} onChange={() => onAlternar(o)} className="mt-0.5" />
-                {o}
-              </label>
-            ))}
-            {!filtradas.length && <p className="px-2 py-2 text-xs text-(--color-text-dim)">Nenhum resultado.</p>}
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

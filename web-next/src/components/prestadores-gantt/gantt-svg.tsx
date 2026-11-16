@@ -48,7 +48,8 @@ type LinhaVisual =
 const AGRUPADORES: Record<AgrupamentoGantt, (it: ItemGantt) => string> = {
   code: (it) => `${it.code} · ${it.prest}`,
   prest: (it) => it.prest,
-  analyst: (it) => it.analyst,
+  analyst: (it) => `Analista: ${it.analyst}`,
+  sla: (it) => `SLA de análise ${it.slaI} dias úteis`,
   none: () => "",
 };
 
