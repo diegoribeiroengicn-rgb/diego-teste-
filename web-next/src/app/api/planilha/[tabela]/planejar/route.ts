@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { obterSessao } from "@/lib/session";
 import { areaPermitida } from "@/lib/permissoes";
 import { planejarImportacao } from "@/lib/planilha-analise";
+import { podeVerContratual } from "@/lib/prioridades";
 import type { TabelaPlanilha } from "@/lib/planilha-analise-calculo";
 
 function validarTabela(tabela: string): tabela is TabelaPlanilha {
@@ -32,6 +33,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tab
   try {
     const conteudo = Buffer.from(await arquivo.arrayBuffer());
     const plano = await planejarImportacao(tabela, conteudo);
+    // Divergências comparam a planilha com o prazo contratual — só Gestor/Admin.
+    if (plano.itens.some((i) => i.divergencia) && !(await podeVerContratual(sessao.id, sessao.perfil))) {
+      return NextResponse.json({ erro: "Esta planilha tem datas diferentes do prazo contratual. A validação dessas divergências é restrita a Gestor e Administrador." }, { status: 403 });
+    }
     return NextResponse.json({ plano });
   } catch (erro) {
     return NextResponse.json({ erro: erro instanceof Error ? erro.message : "Não foi possível ler a planilha." }, { status: 400 });

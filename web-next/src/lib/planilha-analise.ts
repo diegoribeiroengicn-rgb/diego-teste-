@@ -4,11 +4,15 @@ import {
   atualizarCessionario, atualizarPrestador, inserirCessionario, inserirPrestador,
   COLUNAS_CESSIONARIO, COLUNAS_PRESTADOR, type DadosCessionario, type DadosPrestador,
 } from "@/lib/analise";
+import { garantirEsquemaPrioridades } from "@/lib/esquema-prioridades";
+import { definirPrioridadeAnalise } from "@/lib/prioridades";
+import { detectarDivergencia, slaContratual, vencimentoContratual } from "@/lib/prazos-calculo";
+import { diasUteisEntre } from "@/lib/dias-uteis";
 import {
   chaveResolucao, itemAAjustar, normalizarLinha, normalizarNomeColuna, planejarLinhas, vazio,
   LINHA_CABECALHO, MAPA_COLUNAS_CESSIONARIOS, MAPA_COLUNAS_PRESTADORES,
   PADROES_SO_PARA_INSERCAO,
-  type ItemPlanoImportacao, type LinhaPlanilha, type PlanoImportacao, type TabelaPlanilha,
+  type DecisaoDivergencia, type ItemPlanoImportacao, type LinhaPlanilha, type PlanoImportacao, type TabelaPlanilha,
 } from "@/lib/planilha-analise-calculo";
 
 /** Importação por planilha — camada de servidor (leitura do .xlsx com
@@ -143,13 +147,132 @@ export async function planejarImportacao(tabela: TabelaPlanilha, conteudo: Buffe
   const { linhas, colunasNaoMapeadas } = await lerPlanilha(conteudo, tabela);
   const { ativos, arquivados } = await buscarAtivosEArquivados(tabela);
   const origem = tabela === "prestadores" ? "Prestadores" : "Cessionários";
-  return planejarLinhas(
+  const plano = planejarLinhas(
     linhas, colunasNaoMapeadas, origem, "codigo", CAMPO_NOME_ENTIDADE[tabela], CAMPO_NOME_OBRA[tabela],
     ativos, arquivados, COLUNAS_TABELA[tabela],
   );
+  await anexarDivergencias(tabela, plano);
+  return plano;
+}
+
+const s10 = (v: unknown) => (v == null || v === "" ? null : String(v).slice(0, 10));
+
+/** Cada linha da planilha é uma análise: compara a data de entrega com o
+ * prazo contratual (ou, se a análise já tem prioridade, com o vencimento
+ * operacional dela) e marca no item as divergências que o usuário precisa
+ * decidir. Divergências já decididas para a mesma data não voltam a ser
+ * perguntadas. */
+async function anexarDivergencias(tabela: TabelaPlanilha, plano: PlanoImportacao): Promise<void> {
+  await garantirEsquemaPrioridades();
+  const pool = obterPool();
+  const ids = plano.itens.map((i) => i.existenteId).filter((x): x is number => x != null);
+  const [{ rows: pri }, { rows: dec }] = await Promise.all([
+    pool.query("SELECT registro_id, vencimento_operacional FROM prioridades_operacionais WHERE tipo='ANALISE' AND tabela=$1 AND ativo=1 AND registro_id = ANY($2)", [tabela, ids]),
+    pool.query("SELECT registro_id, data_planilha FROM divergencias_data_decididas WHERE tabela=$1 AND registro_id = ANY($2)", [tabela, ids]),
+  ]);
+  const prioPorId = new Map(pri.map((r) => [Number(r.registro_id), String(r.vencimento_operacional)]));
+  const decididas = new Set(dec.map((r) => `${r.registro_id}|${r.data_planilha}`));
+  const nomeEntidade = CAMPO_NOME_ENTIDADE[tabela];
+
+  for (const item of plano.itens) {
+    if (item.tipo === "arquivado" || item.tipo === "inconsistente") continue;
+    const n = item.dadosNovos, ex = item.existente ?? {};
+    const pick = (k: string) => (n[k] != null && n[k] !== "" ? n[k] : ex[k]);
+    const dataPlanilha = s10(n.data_limite);
+    const entrada = s10(pick("data_solicitacao"));
+    if (!dataPlanilha || !entrada) continue;
+    if (item.existenteId != null && decididas.has(`${item.existenteId}|${dataPlanilha}`)) {
+      // Já decidido para esta mesma data: não pergunta de novo, e a data da
+      // planilha também não volta a sobrescrever o prazo já definido.
+      delete item.conflitos.data_limite;
+      delete item.preenchimentos.data_limite;
+      continue;
+    }
+    const revisao = (pick("revisao") as number | null) ?? 0;
+    const tipo = (pick("tipo") as string | null) ?? null;
+    const base = { entrada, disciplina: (pick("disciplina") as string | null) ?? null, revisao, entidade: String(pick(nomeEntidade) ?? "") };
+
+    const operacionalAtual = item.existenteId != null ? prioPorId.get(item.existenteId) : undefined;
+    if (operacionalAtual) {
+      if (operacionalAtual === dataPlanilha) continue;
+      const sla = slaContratual(tabela, tipo, revisao);
+      const venc = vencimentoContratual(entrada, sla)!;
+      item.divergencia = {
+        ...base, origem: "REIMPORTACAO", slaContratualDias: sla, vencimentoContratual: venc, dataPlanilha,
+        diferencaDiasUteis: dataPlanilha >= venc ? diasUteisEntre(venc, dataPlanilha) - 1 : -(diasUteisEntre(dataPlanilha, venc) - 1),
+        vencimentoOperacionalAtual: operacionalAtual,
+      };
+    } else {
+      const d = detectarDivergencia({
+        tabela, tipo, revisao, data_solicitacao: entrada, data_limite: dataPlanilha,
+        status_analise: String(pick("status_analise") ?? ""), hold_inicio: s10(pick("hold_inicio")), hold_fim: s10(pick("hold_fim")),
+      });
+      if (!d) continue;
+      item.divergencia = {
+        ...base, origem: "SLA", slaContratualDias: d.contratualSla, vencimentoContratual: d.vencimentoContratual,
+        dataPlanilha: d.dataPlanilha, diferencaDiasUteis: d.diferencaDiasUteis,
+      };
+    }
+    // A data de entrega passa a ser tratada pela decisão, não como conflito comum.
+    delete item.conflitos.data_limite;
+    delete item.preenchimentos.data_limite;
+  }
+}
+
+
+/** Grava a decisão tomada para a divergência (para não perguntar de novo
+ * sobre a mesma data) e preserva a data original da planilha no histórico. */
+async function registrarDecisaoDivergencia(
+  tabela: TabelaPlanilha, registroId: number, dataPlanilha: string, decisao: "SIM" | "NAO" | "MANTER", usuario: string,
+): Promise<void> {
+  const pool = obterPool();
+  const agora = new Date().toISOString();
+  // "Manter prioridade" não é lembrado: se a planilha continuar divergindo, volta a ser sinalizado.
+  if (decisao !== "MANTER") await pool.query(
+    `INSERT INTO divergencias_data_decididas (tabela, registro_id, data_planilha, decisao, decidido_em, decidido_por)
+     VALUES ($1,$2,$3,$4,$5,$6)
+     ON CONFLICT (tabela, registro_id, data_planilha) DO UPDATE SET decisao = EXCLUDED.decisao, decidido_em = EXCLUDED.decidido_em, decidido_por = EXCLUDED.decidido_por`,
+    [tabela, registroId, dataPlanilha, decisao, agora, usuario],
+  );
+  await pool.query(
+    "INSERT INTO historico_edicoes (tabela, registro_id, campo, valor_anterior, valor_novo, usuario, data_hora) VALUES ($1,$2,'data_entrega_planilha',NULL,$3,$4,$5)",
+    [tabela, registroId, `${dataPlanilha} (${decisao === "SIM" ? "prioridade" : decisao === "NAO" ? "SLA padrão" : "prioridade mantida"})`, usuario, agora],
+  );
+}
+
+/** Aplica a decisão sobre uma análise já gravada (id conhecido). */
+async function aplicarDecisaoDivergencia(
+  tabela: TabelaPlanilha, id: number, item: ItemPlanoImportacao, dec: DecisaoDivergencia, usuario: string, relatorio: RelatorioImportacao,
+): Promise<void> {
+  const div = item.divergencia!;
+  const virarPrioridade = div.origem === "SLA" ? !!dec.prioritaria : !!dec.substituir;
+  if (virarPrioridade) {
+    await definirPrioridadeAnalise({
+      tabela, registroId: id, origem: "IMPORTACAO", dataEntregaOperacional: dec.dataOperacional || div.dataPlanilha,
+      justificativa: dec.justificativa ?? null, dataPlanilhaOriginal: div.dataPlanilha,
+    }, usuario);
+    relatorio.prioridadesCriadas++;
+    await registrarDecisaoDivergencia(tabela, id, div.dataPlanilha, "SIM", usuario);
+  } else if (div.origem === "SLA") {
+    relatorio.divergenciasNoPadrao++;
+    await registrarDecisaoDivergencia(tabela, id, div.dataPlanilha, "NAO", usuario);
+  } else {
+    relatorio.prioridadesPreservadas++;
+    await registrarDecisaoDivergencia(tabela, id, div.dataPlanilha, "MANTER", usuario);
+  }
+}
+
+/** Data limite a gravar na linha antes da decisão: nunca a data divergente
+ * da planilha sem confirmação de prioridade. `undefined` = manter a atual. */
+function dataLimitePelaDecisao(item: ItemPlanoImportacao, dec: DecisaoDivergencia): string | undefined {
+  const div = item.divergencia;
+  if (!div) return undefined;
+  if (div.origem === "SLA") return dec.prioritaria ? div.dataPlanilha : div.vencimentoContratual;
+  return dec.substituir ? (dec.dataOperacional || div.dataPlanilha) : undefined;
 }
 
 export type ResolucoesConflito = Record<string, Record<string, "sistema" | "planilha">>;
+export type DecisoesDivergencia = Record<string, DecisaoDivergencia>;
 
 export type RelatorioImportacao = {
   origem: string;
@@ -162,6 +285,10 @@ export type RelatorioImportacao = {
   inconsistentes: number;
   /** Registros já cadastrados cujo número de Item foi igualado ao da planilha. */
   itensAjustados: number;
+  /** Divergências de data: prioridades criadas, mantidas no SLA padrão, preservadas na reimportação. */
+  prioridadesCriadas: number;
+  divergenciasNoPadrao: number;
+  prioridadesPreservadas: number;
   erros: string[];
 };
 
@@ -179,10 +306,12 @@ export type RelatorioImportacao = {
  * em si nunca grava nada). */
 export async function executarImportacao(
   tabela: TabelaPlanilha, plano: PlanoImportacao, resolucoesConflito: ResolucoesConflito, usuario: string,
+  decisoes: DecisoesDivergencia = {},
 ): Promise<RelatorioImportacao> {
   const relatorio: RelatorioImportacao = {
     origem: plano.origem, lidos: plano.itens.length, novos: 0, atualizados: 0, conflitosTratados: 0,
-    ignoradosSemMudanca: 0, ignoradosArquivados: 0, inconsistentes: 0, itensAjustados: 0, erros: [],
+    ignoradosSemMudanca: 0, ignoradosArquivados: 0, inconsistentes: 0, itensAjustados: 0,
+    prioridadesCriadas: 0, divergenciasNoPadrao: 0, prioridadesPreservadas: 0, erros: [],
   };
 
   const colunasTabela = COLUNAS_TABELA[tabela];
@@ -204,7 +333,15 @@ export async function executarImportacao(
         await obterPool().query(`UPDATE ${tabela} SET item = $1 WHERE id = $2`, [itemPlanilha, item.existenteId]);
         relatorio.itensAjustados++;
       }
+      const decisao: DecisaoDivergencia = item.divergencia ? decisoes[chaveResolucao(item)] ?? {} : {};
       if (item.tipo === "sem_mudanca") {
+        if (item.divergencia && item.existenteId != null) {
+          const novaData = dataLimitePelaDecisao(item, decisao);
+          if (novaData && novaData !== String(item.existente.data_limite ?? "").slice(0, 10) && !(item.divergencia.origem === "SLA" && decisao.prioritaria)) {
+            await obterPool().query(`UPDATE ${tabela} SET data_limite = $1 WHERE id = $2`, [novaData, item.existenteId]);
+          }
+          await aplicarDecisaoDivergencia(tabela, item.existenteId, item, decisao, usuario, relatorio);
+        }
         relatorio.ignoradosSemMudanca++;
         continue;
       }
@@ -215,9 +352,13 @@ export async function executarImportacao(
           if (colunasTabela.includes(campo) && vazio(campos[campo])) campos[campo] = padrao;
         }
         const itemNovo = typeof item.itemOrigem === "number" ? item.itemOrigem : null;
-        if (tabela === "prestadores") await inserirPrestador(campos as unknown as DadosPrestador, usuario, itemNovo);
-        else await inserirCessionario(campos as unknown as DadosCessionario, usuario, itemNovo);
+        const dataDecidida = dataLimitePelaDecisao(item, decisao);
+        if (dataDecidida) campos.data_limite = dataDecidida;
+        const novoId = tabela === "prestadores"
+          ? await inserirPrestador(campos as unknown as DadosPrestador, usuario, itemNovo)
+          : await inserirCessionario(campos as unknown as DadosCessionario, usuario, itemNovo);
         relatorio.novos++;
+        if (item.divergencia) await aplicarDecisaoDivergencia(tabela, novoId, item, decisao, usuario, relatorio);
         continue;
       }
 
@@ -231,8 +372,24 @@ export async function executarImportacao(
         final[campo] = escolhas[campo] === "sistema" ? valorSistema : valorPlanilha;
         conflitosAqui++;
       }
+      if (item.divergencia) {
+        const dataDecidida = dataLimitePelaDecisao(item, decisao);
+        if (dataDecidida) final.data_limite = dataDecidida;
+        // Prioridade existente mantida: preserva o vencimento operacional atual.
+        else final.data_limite = item.existente.data_limite;
+      }
+      // Análise com prioridade ativa: a planilha não sobrescreve o prazo operacional
+      // (data limite e SLA) sem a confirmação explícita da divergência.
+      const { rows: priAtiva } = await obterPool().query(
+        "SELECT 1 FROM prioridades_operacionais WHERE tipo='ANALISE' AND tabela=$1 AND registro_id=$2 AND ativo=1", [tabela, item.existenteId],
+      );
+      if (priAtiva.length && !(item.divergencia && decisao.substituir)) {
+        final.data_limite = item.existente.data_limite;
+        final.sla_dias = item.existente.sla_dias;
+      }
       if (tabela === "prestadores") await atualizarPrestador(item.existenteId!, final as unknown as DadosPrestador, usuario);
       else await atualizarCessionario(item.existenteId!, final as unknown as DadosCessionario, usuario);
+      if (item.divergencia) await aplicarDecisaoDivergencia(tabela, item.existenteId!, item, decisao, usuario, relatorio);
       relatorio.atualizados++;
       relatorio.conflitosTratados += conflitosAqui;
     } catch (erro) {

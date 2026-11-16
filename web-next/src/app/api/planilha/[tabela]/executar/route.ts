@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { obterSessao } from "@/lib/session";
 import { areaPermitida } from "@/lib/permissoes";
 import { registrarAtividade } from "@/lib/atividades";
-import { executarImportacao, registrarImportacaoPlanilha, type ResolucoesConflito } from "@/lib/planilha-analise";
+import { executarImportacao, registrarImportacaoPlanilha, type DecisoesDivergencia, type ResolucoesConflito } from "@/lib/planilha-analise";
+import { podeVerContratual } from "@/lib/prioridades";
 import type { PlanoImportacao, TabelaPlanilha } from "@/lib/planilha-analise-calculo";
 
 function validarTabela(tabela: string): tabela is TabelaPlanilha {
@@ -25,12 +26,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tab
     return NextResponse.json({ erro: "Acesso não autorizado à Atualização por Planilha." }, { status: 403 });
   }
 
-  const corpo = (await req.json()) as { plano?: PlanoImportacao; resolucoesConflito?: ResolucoesConflito; nomeArquivo?: string };
+  const corpo = (await req.json()) as { plano?: PlanoImportacao; resolucoesConflito?: ResolucoesConflito; decisoesDivergencia?: DecisoesDivergencia; nomeArquivo?: string };
   if (!corpo.plano) {
     return NextResponse.json({ erro: "Plano de importação ausente — refaça o envio da planilha." }, { status: 400 });
   }
 
-  const relatorio = await executarImportacao(tabela, corpo.plano, corpo.resolucoesConflito ?? {}, sessao.username);
+  if (corpo.plano.itens.some((i) => i.divergencia) && !(await podeVerContratual(sessao.id, sessao.perfil))) {
+    return NextResponse.json({ erro: "Divergências de prazo só podem ser validadas por Gestor ou Administrador." }, { status: 403 });
+  }
+  const relatorio = await executarImportacao(tabela, corpo.plano, corpo.resolucoesConflito ?? {}, sessao.username, corpo.decisoesDivergencia ?? {});
   await registrarImportacaoPlanilha(sessao.username, corpo.nomeArquivo || "planilha.xlsx", relatorio);
   void registrarAtividade(sessao.username, sessao.perfil, "IMPORTACAO_PLANILHA", tabela, `${relatorio.novos} novos, ${relatorio.atualizados} atualizados`);
 

@@ -30,6 +30,16 @@ const SQL = [
    )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS ux_prioridade_analise_ativa ON prioridades_operacionais (tabela, registro_id) WHERE tipo = 'ANALISE' AND ativo = 1`,
   `CREATE INDEX IF NOT EXISTS ix_prioridade_codigo ON prioridades_operacionais (tabela, codigo, tipo) WHERE ativo = 1`,
+  `CREATE TABLE IF NOT EXISTS divergencias_data_decididas (
+     id BIGSERIAL PRIMARY KEY,
+     tabela TEXT NOT NULL,
+     registro_id BIGINT NOT NULL,
+     data_planilha TEXT NOT NULL,
+     decisao TEXT NOT NULL,
+     decidido_em TEXT NOT NULL,
+     decidido_por TEXT NOT NULL,
+     UNIQUE (tabela, registro_id, data_planilha)
+   )`,
   `ALTER TABLE cessionarios ADD COLUMN IF NOT EXISTS nivel_prioridade BIGINT`,
 ];
 

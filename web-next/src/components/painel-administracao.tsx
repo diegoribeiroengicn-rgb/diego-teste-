@@ -18,7 +18,7 @@ import type {
   Usuario,
 } from "@/lib/administracao";
 import type { PermissoesUsuario } from "@/lib/permissoes";
-import { chaveResolucao, resumoPlano, type ItemPlanoImportacao, type PlanoImportacao, type TabelaPlanilha } from "@/lib/planilha-analise-calculo";
+import { chaveResolucao, resumoPlano, type DecisaoDivergencia, type ItemPlanoImportacao, type PlanoImportacao, type TabelaPlanilha } from "@/lib/planilha-analise-calculo";
 import type { ImportacaoHistorico, RelatorioImportacao, ResolucoesConflito } from "@/lib/planilha-analise";
 
 function formatarDataHora(valor: string | null): string {
@@ -644,10 +644,14 @@ function SecaoHistorico() {
 const botaoPrimario = "rounded-full bg-(--color-navy) px-4 py-1.5 text-xs font-medium text-white disabled:opacity-60";
 const botaoSecundario = "rounded-full border border-(--color-border) px-4 py-1.5 text-xs font-medium text-(--color-text) hover:bg-(--color-surface-2)";
 
+const dataBr = (iso: string) => (iso ? iso.slice(0, 10).split("-").reverse().join("/") : "—");
+
 function UploadPlanilha({ tabela, titulo, nomeAba }: { tabela: TabelaPlanilha; titulo: string; nomeAba: string }) {
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [plano, setPlano] = useState<PlanoImportacao | null>(null);
   const [resolucoes, setResolucoes] = useState<ResolucoesConflito>({});
+  const [decisoes, setDecisoes] = useState<Record<string, DecisaoDivergencia>>({});
+  const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
   const [relatorio, setRelatorio] = useState<RelatorioImportacao | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -656,6 +660,8 @@ function UploadPlanilha({ tabela, titulo, nomeAba }: { tabela: TabelaPlanilha; t
     setArquivo(null);
     setPlano(null);
     setResolucoes({});
+    setDecisoes({});
+    setSelecionadas(new Set());
     setRelatorio(null);
     setErro(null);
   }
@@ -687,7 +693,7 @@ function UploadPlanilha({ tabela, titulo, nomeAba }: { tabela: TabelaPlanilha; t
       const resposta = await fetch(`/api/planilha/${tabela}/executar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plano, resolucoesConflito: resolucoes, nomeArquivo: arquivo?.name }),
+        body: JSON.stringify({ plano, resolucoesConflito: resolucoes, decisoesDivergencia: decisoes, nomeArquivo: arquivo?.name }),
       });
       const corpo = await resposta.json().catch(() => null);
       if (!resposta.ok) {
@@ -707,9 +713,22 @@ function UploadPlanilha({ tabela, titulo, nomeAba }: { tabela: TabelaPlanilha; t
   const resumo = plano ? resumoPlano(plano) : null;
   const itensComConflito = plano?.itens.filter((i: ItemPlanoImportacao) => Object.keys(i.conflitos).length > 0) ?? [];
   const inconsistentes = plano?.itens.filter((i: ItemPlanoImportacao) => i.tipo === "inconsistente") ?? [];
+  const divergentes = plano?.itens.filter((i: ItemPlanoImportacao) => i.divergencia) ?? [];
+  const decidir = (chave: string, d: Partial<DecisaoDivergencia>) => setDecisoes((a) => ({ ...a, [chave]: { ...a[chave], ...d } }));
+  const alternarSel = (chave: string) => setSelecionadas((a) => { const n = new Set(a); if (n.has(chave)) n.delete(chave); else n.add(chave); return n; });
+  function aplicarEmLote(sim: boolean) {
+    setDecisoes((a) => {
+      const n = { ...a };
+      for (const chave of selecionadas) {
+        const it = divergentes.find((x) => chaveResolucao(x) === chave);
+        n[chave] = it?.divergencia?.origem === "REIMPORTACAO" ? { ...n[chave], substituir: sim } : { ...n[chave], prioritaria: sim };
+      }
+      return n;
+    });
+  }
 
   return (
-    <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-6">
+    <div className={`rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-6 ${plano ? "lg:col-span-2" : ""}`}>
       <p className="text-sm font-semibold text-(--color-text)">{titulo}</p>
       <p className="mt-1 text-xs text-(--color-text-weak)">
         Lê a aba &quot;{nomeAba}&quot; da planilha oficial. Correspondência por código + disciplina + revisão + N° AT —
@@ -752,6 +771,79 @@ function UploadPlanilha({ tabela, titulo, nomeAba }: { tabela: TabelaPlanilha; t
             <p className="mt-3 text-xs text-(--color-orange)">
               Colunas da planilha sem correspondência conhecida (ignoradas): {plano.colunasNaoMapeadas.join(", ")}
             </p>
+          )}
+
+          {divergentes.length > 0 && (
+            <div className="mt-4 rounded-xl border border-(--color-border) bg-(--color-surface-2) p-3">
+              <p className="text-xs font-semibold text-(--color-text)">Datas de entrega diferentes do prazo — {divergentes.length} análise(s) para validar</p>
+              <p className="mt-1 text-xs text-(--color-text-weak)">
+                Cada linha da planilha é uma análise individual (projeto, disciplina e revisão). Se a data da planilha for uma prioridade, ela vira o prazo
+                operacional <b>só daquela análise</b> e o prazo contratual continua preservado. Se não for, a análise segue o SLA padrão aplicável — a data
+                informada fica registrada apenas para auditoria. Nada é considerado prioridade sem a sua confirmação.
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <button type="button" className={botaoSecundario} onClick={() => setSelecionadas(new Set(divergentes.map(chaveResolucao)))}>Selecionar todas</button>
+                <button type="button" className={botaoSecundario} onClick={() => setSelecionadas(new Set())}>Limpar seleção</button>
+                <span className="text-(--color-text-weak)">{selecionadas.size} selecionada(s):</span>
+                <button type="button" className={botaoPrimario} disabled={!selecionadas.size} onClick={() => aplicarEmLote(true)}>Sim, definir prioridade</button>
+                <button type="button" className={botaoSecundario} disabled={!selecionadas.size} onClick={() => aplicarEmLote(false)}>Não, manter prazo padrão</button>
+              </div>
+              <div className="mt-2 overflow-x-auto rounded-lg border border-(--color-border) bg-(--color-surface-1)">
+                <table className="w-full text-xs">
+                  <thead className="bg-(--color-surface-2) text-left text-(--color-text-weak)">
+                    <tr>
+                      {["", "Projeto", "Prestador/Cessionário", "Disciplina", "Rev.", "Entrada", "Venc. contratual", "Data da planilha", "Diferença", "Prioridade?", "Venc. operacional", "Observação"].map((h) => (
+                        <th key={h} className="whitespace-nowrap px-2.5 py-2 font-medium">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {divergentes.map((item: ItemPlanoImportacao) => {
+                      const chave = chaveResolucao(item);
+                      const dv = item.divergencia!;
+                      const d = decisoes[chave] ?? {};
+                      const sim = dv.origem === "SLA" ? !!d.prioritaria : !!d.substituir;
+                      const dif = dv.diferencaDiasUteis;
+                      return (
+                        <tr key={chave} className="border-t border-(--color-border) align-top">
+                          <td className="px-2.5 py-2"><input type="checkbox" checked={selecionadas.has(chave)} onChange={() => alternarSel(chave)} /></td>
+                          <td className="whitespace-nowrap px-2.5 py-2 font-medium text-(--color-text)">{String(item.dadosNovos.codigo ?? item.identificacao)}</td>
+                          <td className="px-2.5 py-2">{dv.entidade}</td>
+                          <td className="px-2.5 py-2">{dv.disciplina ?? "—"}</td>
+                          <td className="px-2.5 py-2">{dv.revisao ?? "—"}</td>
+                          <td className="whitespace-nowrap px-2.5 py-2">{dataBr(dv.entrada)}</td>
+                          <td className="whitespace-nowrap px-2.5 py-2">{dataBr(dv.vencimentoContratual)} <span className="text-(--color-text-weak)">({dv.slaContratualDias} du)</span></td>
+                          <td className="whitespace-nowrap px-2.5 py-2">{dataBr(dv.dataPlanilha)}</td>
+                          <td className="whitespace-nowrap px-2.5 py-2">{dif > 0 ? `+${dif}` : dif} du</td>
+                          <td className="px-2.5 py-2">
+                            {dv.origem === "SLA" ? (
+                              <div className="flex flex-col gap-1">
+                                <label className="flex items-center gap-1 whitespace-nowrap"><input type="radio" checked={sim} onChange={() => decidir(chave, { prioritaria: true })} />Sim, definir como prioridade</label>
+                                <label className="flex items-center gap-1 whitespace-nowrap"><input type="radio" checked={!sim} onChange={() => decidir(chave, { prioritaria: false })} />Não, manter o prazo contratual</label>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-1">
+                                <span className="text-(--color-text-weak)">Já tem prioridade (venc. operacional {dataBr(dv.vencimentoOperacionalAtual ?? "")})</span>
+                                <label className="flex items-center gap-1 whitespace-nowrap"><input type="radio" checked={!sim} onChange={() => decidir(chave, { substituir: false })} />Manter a prioridade atual</label>
+                                <label className="flex items-center gap-1 whitespace-nowrap"><input type="radio" checked={sim} onChange={() => decidir(chave, { substituir: true })} />Substituir pela data da planilha</label>
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-2.5 py-2">
+                            <input type="date" disabled={!sim} value={d.dataOperacional ?? dv.dataPlanilha} onChange={(e) => decidir(chave, { dataOperacional: e.target.value })}
+                              className="rounded-md border border-(--color-border) bg-(--color-bg) px-1.5 py-1 disabled:opacity-50" />
+                          </td>
+                          <td className="px-2.5 py-2">
+                            <input type="text" placeholder="Justificativa (opcional)" disabled={!sim} value={d.justificativa ?? ""} onChange={(e) => decidir(chave, { justificativa: e.target.value })}
+                              className="w-44 rounded-md border border-(--color-border) bg-(--color-bg) px-1.5 py-1 disabled:opacity-50" />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
 
           {itensComConflito.length > 0 && (
@@ -832,7 +924,10 @@ function UploadPlanilha({ tabela, titulo, nomeAba }: { tabela: TabelaPlanilha; t
             Importação concluída — {relatorio.lidos} lidos · {relatorio.novos} novos · {relatorio.atualizados} atualizados
             ({relatorio.conflitosTratados} conflitos tratados) · {relatorio.ignoradosSemMudanca} sem mudança ·
             {" "}{relatorio.ignoradosArquivados} já arquivados · {relatorio.inconsistentes} com inconsistência
-            {relatorio.itensAjustados > 0 ? ` · ${relatorio.itensAjustados} com n° de Item igualado ao da planilha` : ""}.
+            {relatorio.itensAjustados > 0 ? ` · ${relatorio.itensAjustados} com n° de Item igualado ao da planilha` : ""}
+            {relatorio.prioridadesCriadas > 0 ? ` · ${relatorio.prioridadesCriadas} prioridade(s) definida(s)` : ""}
+            {relatorio.divergenciasNoPadrao > 0 ? ` · ${relatorio.divergenciasNoPadrao} divergência(s) mantida(s) no SLA padrão` : ""}
+            {relatorio.prioridadesPreservadas > 0 ? ` · ${relatorio.prioridadesPreservadas} prioridade(s) preservada(s)` : ""}.
           </p>
           {relatorio.erros.length > 0 && (
             <div className="mt-3">
