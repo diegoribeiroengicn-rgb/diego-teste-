@@ -1,4 +1,5 @@
 import { obterPool } from "@/lib/db";
+import { garantirEsquemaPrioridades } from "@/lib/esquema-prioridades";
 import { calcularHoldDias, diasUteisDecorridos, emHold, saldoDiasUteis } from "@/lib/dias-uteis";
 import { classificarEntregaPrazo, diasUteisDiferenca, statusConcluidoEntrega, type Origem } from "@/lib/kpis-prazo-calculo";
 import type { LinhaBaseGestor } from "@/lib/visao-gestor-calculo";
@@ -91,6 +92,7 @@ function enriquecerLinha(row: LinhaBanco, origem: Origem): LinhaBaseGestor {
  * Gestor — mesma base de gat/visao_gestor.py::montar_base_combinada,
  * já com as colunas de prazo da mesma engine dos KPIs de Prazo. */
 export async function buscarBaseVisaoGestor(): Promise<LinhaBaseGestor[]> {
+  await garantirEsquemaPrioridades();
   const pool = obterPool();
   const [prestadores, cessionarios] = await Promise.all([
     pool.query<LinhaBanco>(
@@ -103,7 +105,7 @@ export async function buscarBaseVisaoGestor(): Promise<LinhaBaseGestor[]> {
     pool.query<LinhaBanco>(
       `SELECT id, codigo, cessionario AS nome_entidade, disciplina, revisao, num_at, responsavel, status_analise,
               data_solicitacao, data_limite, data_analise, hold_inicio, hold_fim, sla_dias, sla_reduzido,
-              NULL::int AS nivel_prioridade, tipo
+              nivel_prioridade, tipo
        FROM cessionarios WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),

@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { LinhaLocalizacao } from "@/lib/localizacao-ats-calculo";
 import type { Atividade } from "@/lib/atividades";
 import {
-  ROTULO_VER, DIAS_SEM_MOVIMENTO, REVISOES_CRITICAS, calcularIndicadores, cargaPorAnalista, distribuicaoSla, filtrarLinhas, percentualSla,
+  ROTULO_VER, DIAS_SEM_MOVIMENTO, REVISOES_CRITICAS, calcularIndicadores, cargaPorAnalista, distribuicaoSla, filtrarLinhas, indicadoresContratuais, indicadoresPrioridade, percentualSla,
   recentes, selecionar, ultimaMovimentacao, type ChaveVer, type FiltrosPainel, type LinhaDistribuicao,
 } from "@/lib/painel-governanca-calculo";
 import { STATUS_ANALISE_OPCOES } from "@/lib/administracao-calculo";
@@ -128,13 +128,16 @@ function TabelaDistribuicao({ titulo, dados, hrefLinha }: { titulo: string; dado
 const input = "rounded-full border border-(--color-border) bg-(--color-bg) px-3 py-1.5 text-xs text-(--color-text) outline-none focus:border-(--color-navy)";
 
 export function PainelGovernanca({
-  primeiroNome, linhas, filtros, ver, busca, atividades, agora,
+  primeiroNome, linhas, filtros, ver, busca, atividades, agora, verContratual,
 }: {
-  primeiroNome: string; linhas: LinhaLocalizacao[]; filtros: FiltrosPainel; ver: ChaveVer | null; busca: string; atividades: Atividade[]; agora: number;
+  verContratual: boolean; primeiroNome: string; linhas: LinhaLocalizacao[]; filtros: FiltrosPainel; ver: ChaveVer | null; busca: string; atividades: Atividade[]; agora: number;
 }) {
   const base = filtrarLinhas(linhas, filtros);
   const ind = calcularIndicadores(base, agora);
   const pctSla = percentualSla(base);
+  const prio = indicadoresPrioridade(base);
+  // Prazo contratual: calculado só para Gestor/Admin — o analista nunca recebe esses números.
+  const contratuais = verContratual ? indicadoresContratuais(base) : null;
   const porDisciplina = distribuicaoSla(base, "disciplina");
   const porAnalista = distribuicaoSla(base, "responsavel");
   const equipe = cargaPorAnalista(base);
@@ -152,11 +155,11 @@ export function PainelGovernanca({
 
   const alertas: { rotulo: string; chave: ChaveVer; n: number; tom: string }[] = [
     { rotulo: "Documentos com SLA vencido", chave: "sla_vencido", n: ind.sla_vencido.analises, tom: "red" },
-    { rotulo: "Próximos do vencimento (até 2 dias úteis)", chave: "sla_proximo", n: ind.sla_proximo.analises, tom: "orange" },
+    { rotulo: "Próximos do vencimento (até 2 dias úteis)", chave: "sla_proximo", n: ind.sla_proximo.analises, tom: "info" },
     { rotulo: "Pendências críticas (prioritárias com SLA vencido)", chave: "criticos", n: ind.criticos.analises, tom: "red" },
-    { rotulo: "Documentos em HOLD", chave: "hold", n: ind.hold.analises, tom: "orange" },
-    { rotulo: `Sem movimentação há mais de ${DIAS_SEM_MOVIMENTO} dias`, chave: "sem_movimento", n: ind.sem_movimento.analises, tom: "orange" },
-    { rotulo: `Com mais de ${REVISOES_CRITICAS} revisões`, chave: "revisoes", n: ind.revisoes.analises, tom: "orange" },
+    { rotulo: "Documentos em HOLD", chave: "hold", n: ind.hold.analises, tom: "info" },
+    { rotulo: `Sem movimentação há mais de ${DIAS_SEM_MOVIMENTO} dias`, chave: "sem_movimento", n: ind.sem_movimento.analises, tom: "info" },
+    { rotulo: `Com mais de ${REVISOES_CRITICAS} revisões`, chave: "revisoes", n: ind.revisoes.analises, tom: "info" },
   ];
 
   return (
@@ -187,10 +190,10 @@ export function PainelGovernanca({
         <Cartao titulo="Documentos recebidos" valor={String(ind.recebidos.documentos)} detalhe={`${ind.recebidos.analises} análises (ATs/disciplinas)`} destino={go("recebidos")} ativo={ver === "recebidos"} />
         <Cartao titulo="Aguardando análise" valor={String(ind.aguardando.analises)} detalhe={`${ind.aguardando.documentos} documentos`} destino={go("aguardando")} ativo={ver === "aguardando"} />
         <Cartao titulo="Em revisão" valor={String(ind.revisao.analises)} detalhe="reenvios (REV ≥ 1) em aberto" destino={go("revisao")} ativo={ver === "revisao"} />
-        <Cartao titulo="Análises concluídas" valor={String(ind.concluidas.analises)} detalhe={`${ind.concluidas.documentos} documentos`} tom="green" destino={go("concluidas")} ativo={ver === "concluidas"} />
+        <Cartao titulo="Análises concluídas" valor={String(ind.concluidas.analises)} detalhe={`${ind.concluidas.documentos} documentos`} destino={go("concluidas")} ativo={ver === "concluidas"} />
         <Cartao titulo="SLA vencido" valor={String(ind.sla_vencido.analises)} detalhe={`${ind.sla_vencido.documentos} documentos`} tom="red" destino={go("sla_vencido")} ativo={ver === "sla_vencido"} />
-        <Cartao titulo="Próximos do vencimento" valor={String(ind.sla_proximo.analises)} detalhe="até 2 dias úteis" tom="orange" destino={go("sla_proximo")} ativo={ver === "sla_proximo"} />
-        <Cartao titulo="Em HOLD" valor={String(ind.hold.analises)} detalhe={`${ind.hold.documentos} documentos`} tom="orange" destino={go("hold")} ativo={ver === "hold"} />
+        <Cartao titulo="Próximos do vencimento" valor={String(ind.sla_proximo.analises)} detalhe="até 2 dias úteis" destino={go("sla_proximo")} ativo={ver === "sla_proximo"} />
+        <Cartao titulo="Em HOLD" valor={String(ind.hold.analises)} detalhe={`${ind.hold.documentos} documentos`} destino={go("hold")} ativo={ver === "hold"} />
       </div>
 
       {ver && (
@@ -201,10 +204,23 @@ export function PainelGovernanca({
         </Secao>
       )}
 
+      <Secao titulo="Prioridades" nota="Contagem por prestador, cessionário e projeto distintos — um prestador com três análises prioritárias conta como 1 prestador e 3 análises. Segue os filtros acima; projetos arquivados ficam de fora.">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Cartao titulo="Prestadores prioritários" valor={String(prio.prestadoresPrioritarios)} detalhe="marcados como prioritários" destino="/prestadores/projetos" />
+          <Cartao titulo="Prestadores com SLA reduzido" valor={String(prio.prestadoresSlaReduzido)} detalhe="com análise prioritária em aberto" destino={go("prioritarias", { modulo: "prestadores" })} />
+          <Cartao titulo="Projetos/documentos prioritários" valor={String(prio.documentosPrioritarios)} detalhe="marcados como prioritários" destino="/prestadores/projetos" />
+          <Cartao titulo="Análises prioritárias" valor={String(prio.analisesPrioritarias)} detalhe={`${prio.disciplinasComPrioridade} disciplina(s)`} destino={go("prioritarias")} ativo={ver === "prioritarias"} />
+          <Cartao titulo="Cessionários prioritários" valor={String(prio.cessionariosPrioritarios)} detalhe="marcados como prioritários" destino="/cessionarios/projetos" />
+          <Cartao titulo="Cessionários com demanda prioritária" valor={String(prio.cessionariosComDemandaPrioritaria)} detalhe="análises prioritárias em aberto" destino={go("prioritarias", { modulo: "cessionarios" })} />
+          <Cartao titulo="Prestadores envolvidos" valor={String(prio.consolidado.prestadoresEnvolvidos)} detalhe="distintos, em qualquer tipo de prioridade" destino={go("prioritarias", { modulo: "prestadores" })} />
+          <Cartao titulo="Cessionários envolvidos" valor={String(prio.consolidado.cessionariosEnvolvidos)} detalhe={`${prio.consolidado.demandasPrioritarias} demanda(s) prioritária(s) no total`} destino={go("prioritarias", { modulo: "cessionarios" })} />
+        </div>
+      </Secao>
+
       <Secao titulo="Controle de SLA" nota="Análises em aberto (EM ANÁLISE) pelo prazo de 10 dias úteis, ou 5 dias nos projetos com SLA reduzido — a mesma regra das demais telas.">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Cartao titulo="Dentro do prazo" valor={String(Math.max(0, ind.aguardando.analises - ind.sla_vencido.analises - ind.sla_proximo.analises))} tom="green" destino={go("aguardando")} />
-          <Cartao titulo="Próximos do vencimento" valor={String(ind.sla_proximo.analises)} tom="orange" destino={go("sla_proximo")} />
+          <Cartao titulo="Próximos do vencimento" valor={String(ind.sla_proximo.analises)} destino={go("sla_proximo")} />
           <Cartao titulo="Prazo vencido" valor={String(ind.sla_vencido.analises)} tom="red" destino={go("sla_vencido")} />
           <Cartao titulo="Cumprimento do SLA" valor={pctSla == null ? "—" : `${pctSla}%`} detalhe="concluídas entregues no prazo" tom={pctSla != null && pctSla < 80 ? "red" : "green"} destino={go("concluidas")} />
         </div>
@@ -214,14 +230,25 @@ export function PainelGovernanca({
         </div>
       </Secao>
 
+      {contratuais && (
+        <Secao titulo="Prazo operacional x contratual" nota="Visível apenas para Gestor e Administrador. Análises concluídas: o prazo contratual vem da regra do contrato (Prestadores 10 du; Cessionários por tipo e revisão) e nunca é alterado pela prioridade.">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Cartao titulo="Concluídas avaliadas" valor={String(contratuais.concluidas)} destino={go("concluidas")} />
+            <Cartao titulo="Operacional cumprido" valor={contratuais.concluidas ? `${Math.round((1000 * contratuais.operacionalCumprido) / contratuais.concluidas) / 10}%` : "—"} detalhe={`${contratuais.operacionalCumprido} de ${contratuais.concluidas}`} destino={go("concluidas")} />
+            <Cartao titulo="Contratual cumprido" valor={contratuais.concluidas ? `${Math.round((1000 * contratuais.contratualCumprido) / contratuais.concluidas) / 10}%` : "—"} detalhe={`${contratuais.contratualCumprido} de ${contratuais.concluidas}`} destino={go("concluidas")} />
+            <Cartao titulo="Atraso contratual" valor={String(contratuais.contratualDescumprido)} tom={contratuais.contratualDescumprido ? "red" : undefined} detalhe={`${contratuais.soOperacionalDescumprido} só operacional (contrato cumprido)`} destino={go("concluidas")} />
+          </div>
+        </Secao>
+      )}
+
       <Secao titulo="Documentos e revisões">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
           <Cartao titulo="Aguardando análise" valor={String(ind.aguardando.analises)} destino={go("aguardando")} />
           <Cartao titulo="Em revisão" valor={String(ind.revisao.analises)} destino={go("revisao")} />
-          <Cartao titulo="Liberados" valor={String(ind.liberados.analises)} tom="green" destino={go("liberados")} />
-          <Cartao titulo="Não liberados" valor={String(ind.nao_liberados.analises)} tom="red" destino={go("nao_liberados")} />
-          <Cartao titulo="Em HOLD" valor={String(ind.hold.analises)} tom="orange" destino={go("hold")} />
-          <Cartao titulo={`Mais de ${REVISOES_CRITICAS} revisões`} valor={String(ind.revisoes.analises)} tom={ind.revisoes.analises ? "red" : "navy"} detalhe="em aberto — situação crítica" destino={go("revisoes")} />
+          <Cartao titulo="Liberados" valor={String(ind.liberados.analises)} destino={go("liberados")} />
+          <Cartao titulo="Não liberados" valor={String(ind.nao_liberados.analises)} destino={go("nao_liberados")} />
+          <Cartao titulo="Em HOLD" valor={String(ind.hold.analises)} destino={go("hold")} />
+          <Cartao titulo={`Mais de ${REVISOES_CRITICAS} revisões`} valor={String(ind.revisoes.analises)} detalhe="análises em aberto" destino={go("revisoes")} />
         </div>
       </Secao>
 
@@ -256,9 +283,9 @@ export function PainelGovernanca({
       <Secao titulo="Alertas operacionais">
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
           {alertas.map((a) => (
-            <Link key={a.chave} href={go(a.chave)} className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm hover:bg-(--color-surface-2) ${a.n && a.tom === "red" ? "border-(--color-red)/40 bg-(--color-red-bg)" : a.n ? "border-(--color-orange)/40 bg-(--color-orange-bg)" : "border-(--color-border) bg-(--color-surface-1)"}`}>
+            <Link key={a.chave} href={go(a.chave)} className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm hover:bg-(--color-surface-2) ${a.n && a.tom === "red" ? "border-(--color-red)/40 bg-(--color-red-bg)" : "border-(--color-border) bg-(--color-surface-1)"}`}>
               <span className="text-(--color-text)">{a.rotulo}</span>
-              <span className={`text-lg font-semibold tabular-nums ${a.n ? (a.tom === "red" ? "text-(--color-red)" : "text-(--color-orange)") : "text-(--color-text-dim)"}`}>{a.n}</span>
+              <span className={`text-lg font-semibold tabular-nums ${a.n ? (a.tom === "red" ? "text-(--color-red)" : "text-(--color-navy)") : "text-(--color-text-dim)"}`}>{a.n}</span>
             </Link>
           ))}
         </div>

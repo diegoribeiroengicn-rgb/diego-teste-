@@ -20,6 +20,10 @@ export type LinhaLocalizacao = LinhaRevisao & {
    * `lista-prioridades.ts` (não duplica os rótulos, só o valor cru). */
   nivelPrioridade: number | null;
   slaReduzido: boolean;
+  /** Projeto/documento marcado como prioritário (marcador independente). */
+  prioDocumento: boolean;
+  /** Prestador/cessionário marcado como prioritário (marcador independente). */
+  prioPrestador: boolean;
 };
 
 export type LinhaLocalizacaoMarcada = LinhaLocalizacao & { chaveProjeto: string; maisRecente: boolean };

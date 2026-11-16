@@ -1,5 +1,6 @@
 import type { LinhaLocalizacao } from "@/lib/localizacao-ats-calculo";
 import { textoSemAcentos } from "@/lib/revisoes-calculo";
+import { slaContratual, vencimentoContratual } from "@/lib/prazos-calculo";
 
 /** Painel de Governança (tela inicial). Tudo aqui parte das mesmas linhas
  * já enriquecidas de `buscarLinhasLocalizacao` — o SLA (`statusEntregaCalc`,
@@ -20,13 +21,13 @@ export type FiltrosPainel = {
 
 export type ChaveVer =
   | "projetos" | "recebidos" | "aguardando" | "revisao" | "concluidas" | "sla_vencido" | "sla_proximo" | "hold"
-  | "liberados" | "nao_liberados" | "revisoes" | "sem_movimento" | "criticos" | "carteira";
+  | "liberados" | "nao_liberados" | "revisoes" | "sem_movimento" | "criticos" | "carteira" | "prioritarias";
 
 export const ROTULO_VER: Record<ChaveVer, string> = {
   projetos: "Projetos ativos", recebidos: "Documentos recebidos", aguardando: "Aguardando análise", revisao: "Em revisão",
   concluidas: "Análises concluídas", sla_vencido: "SLA vencido", sla_proximo: "Próximos do vencimento", hold: "Em HOLD",
   liberados: "Liberados", nao_liberados: "Não liberados", revisoes: "Com mais de duas revisões", sem_movimento: "Sem movimentação recente",
-  criticos: "Pendências críticas (prioritárias vencidas)", carteira: "Carteira do analista",
+  criticos: "Pendências críticas (prioritárias vencidas)", carteira: "Carteira do analista", prioritarias: "Análises prioritárias",
 };
 
 export function filtrarLinhas(linhas: LinhaLocalizacao[], f: FiltrosPainel): LinhaLocalizacao[] {
@@ -59,6 +60,9 @@ export function semMovimento(l: LinhaLocalizacao, hoje: number): boolean {
   return Number.isFinite(t) && hoje - t > DIAS_SEM_MOVIMENTO * 86400000;
 }
 
+/** Análise com prioridade própria (nível ou SLA reduzido) — nunca herdada do projeto ou do prestador. */
+export const analisePrioritaria = (l: LinhaLocalizacao) => pendente(l) && (l.nivelPrioridade != null || l.slaReduzido);
+
 const PREDICADOS: Record<Exclude<ChaveVer, "carteira" | "sem_movimento">, (l: LinhaLocalizacao) => boolean> = {
   projetos: pendente,
   recebidos: () => true,
@@ -72,6 +76,7 @@ const PREDICADOS: Record<Exclude<ChaveVer, "carteira" | "sem_movimento">, (l: Li
   nao_liberados: (l) => l.statusAnalise === "NÃO LIBERADO",
   revisoes: (l) => pendente(l) && l.revisao > REVISOES_CRITICAS,
   criticos: (l) => l.nivelPrioridade != null && slaVencido(l),
+  prioritarias: analisePrioritaria,
 };
 
 export function selecionar(linhas: LinhaLocalizacao[], ver: ChaveVer, hoje: number): LinhaLocalizacao[] {
@@ -145,4 +150,77 @@ export function recentes(linhas: LinhaLocalizacao[], limite: number): LinhaLocal
   return [...linhas]
     .sort((a, b) => (ultimaMovimentacao(b) || "").localeCompare(ultimaMovimentacao(a) || "") || b.id - a.id)
     .slice(0, limite);
+}
+
+
+export type IndicadoresPrioridade = {
+  prestadoresPrioritarios: number;
+  prestadoresSlaReduzido: number;
+  documentosPrioritarios: number;
+  analisesPrioritarias: number;
+  disciplinasComPrioridade: number;
+  cessionariosPrioritarios: number;
+  cessionariosComDemandaPrioritaria: number;
+  consolidado: { prestadoresEnvolvidos: number; cessionariosEnvolvidos: number; demandasPrioritarias: number };
+};
+
+/** Indicadores de prioridade sobre as linhas JÁ filtradas (filtros do painel)
+ * e só de projetos ativos (arquivados nunca chegam aqui). Contagem por
+ * entidade DISTINTA: um prestador com três análises prioritárias é 1
+ * prestador e 3 análises. */
+export function indicadoresPrioridade(linhas: LinhaLocalizacao[]): IndicadoresPrioridade {
+  const ativas = linhas.filter(pendente);
+  const distintos = (ls: LinhaLocalizacao[]) => new Set(ls.map((l) => (l.nome || "").trim().toUpperCase()).filter(Boolean)).size;
+  const prest = ativas.filter((l) => l.modulo === "prestadores");
+  const cess = ativas.filter((l) => l.modulo === "cessionarios");
+  const analises = ativas.filter(analisePrioritaria);
+  const analisesPrest = analises.filter((l) => l.modulo === "prestadores");
+  const analisesCess = analises.filter((l) => l.modulo === "cessionarios");
+  const docs = new Set(ativas.filter((l) => l.prioDocumento).map((l) => `${l.modulo}|${l.codigo}`));
+  const envolvidos = (ls: LinhaLocalizacao[]) => ls.filter((l) => l.prioPrestador || l.prioDocumento || analisePrioritaria(l));
+  return {
+    prestadoresPrioritarios: distintos(prest.filter((l) => l.prioPrestador)),
+    prestadoresSlaReduzido: distintos(analisesPrest),
+    documentosPrioritarios: docs.size,
+    analisesPrioritarias: analises.length,
+    disciplinasComPrioridade: new Set(analises.map((l) => textoSemAcentos(l.disciplina).toUpperCase()).filter(Boolean)).size,
+    cessionariosPrioritarios: distintos(cess.filter((l) => l.prioPrestador)),
+    cessionariosComDemandaPrioritaria: distintos(analisesCess),
+    consolidado: {
+      prestadoresEnvolvidos: distintos(envolvidos(prest)),
+      cessionariosEnvolvidos: distintos(envolvidos(cess)),
+      demandasPrioritarias: analises.length,
+    },
+  };
+}
+
+export type IndicadoresContratuais = {
+  concluidas: number;
+  operacionalCumprido: number;
+  contratualCumprido: number;
+  /** Operacional descumprido mas contratual cumprido — NÃO é atraso contratual. */
+  soOperacionalDescumprido: number;
+  contratualDescumprido: number;
+};
+
+/** Cumprimento do prazo operacional x contratual das análises concluídas.
+ * Só deve ser calculado/enviado a Gestor e Administrador. O contratual vem
+ * sempre da regra (10 du Prestadores; Cessionários por tipo e revisão),
+ * nunca do prazo operacional. */
+export function indicadoresContratuais(linhas: LinhaLocalizacao[]): IndicadoresContratuais {
+  const out: IndicadoresContratuais = { concluidas: 0, operacionalCumprido: 0, contratualCumprido: 0, soOperacionalDescumprido: 0, contratualDescumprido: 0 };
+  for (const l of linhas) {
+    if (!STATUS_CONCLUIDOS.has(l.statusAnalise) || !l.dataSolicitacao || !l.dataAnalise) continue;
+    const venc = vencimentoContratual(l.dataSolicitacao, slaContratual(l.modulo, l.modulo === "cessionarios" ? l.obra : null, l.revisao));
+    const entrega = l.dataAnalise.slice(0, 10);
+    if (!venc) continue;
+    const op = !l.dataLimite || entrega <= l.dataLimite.slice(0, 10);
+    const ct = entrega <= venc;
+    out.concluidas++;
+    if (op) out.operacionalCumprido++;
+    if (ct) out.contratualCumprido++;
+    if (!op && ct) out.soOperacionalDescumprido++;
+    if (!ct) out.contratualDescumprido++;
+  }
+  return out;
 }

@@ -1,4 +1,5 @@
 import { obterPool } from "@/lib/db";
+import { garantirEsquemaPrioridades } from "@/lib/esquema-prioridades";
 import { calcularHoldDias, diasUteisDecorridos, emHold, saldoDiasUteis } from "@/lib/dias-uteis";
 import type { LinhaCargaAnalista } from "@/lib/analistas-sobrecarga-calculo";
 
@@ -59,6 +60,7 @@ function enriquecerLinha(row: LinhaBanco, origem: "prestadores" | "cessionarios"
  * lib/visao-gestor.ts e lib/alertas-engine.ts, com consulta própria para
  * não acoplar este indicador a esses outros módulos. */
 export async function buscarLinhasCargaAnalistas(): Promise<LinhaCargaAnalista[]> {
+  await garantirEsquemaPrioridades();
   const pool = obterPool();
   const [prestadores, cessionarios] = await Promise.all([
     pool.query<LinhaBanco>(
@@ -69,7 +71,7 @@ export async function buscarLinhasCargaAnalistas(): Promise<LinhaCargaAnalista[]
     ),
     pool.query<LinhaBanco>(
       `SELECT responsavel, status_analise, data_solicitacao, data_analise, hold_inicio, hold_fim,
-              sla_dias, sla_reduzido, NULL::int AS nivel_prioridade, revisao, tipo
+              sla_dias, sla_reduzido, nivel_prioridade, revisao, tipo
        FROM cessionarios WHERE status_analise != $1 AND arquivado_em IS NULL`,
       [STATUS_CANCELADO],
     ),
