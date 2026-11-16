@@ -7,7 +7,7 @@ const COR_CLASSIFICACAO: Record<string, string> = {
   EXCELENTE: "#16A34A",
   BOM: "#65A30D",
   REGULAR: "#D97706",
-  BAIXO: "#EA580C",
+  BAIXO: "#5B6B82",
   "CRÍTICO": "#DC2626",
 };
 

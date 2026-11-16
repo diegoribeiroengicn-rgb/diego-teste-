@@ -12,7 +12,7 @@ import { SequenciaProjeto } from "@/components/painel-linha-tempo";
 import { MESES_PT } from "@/lib/meses";
 
 const COR_BADGE_STATUS: Record<string, string> = {
-  "EM ANÁLISE": "var(--color-orange)",
+  "EM ANÁLISE": "var(--color-blue-2)",
   "EM HOLD": "var(--color-sky)",
   LIBERADO: "var(--color-green)",
   "LIBERADO C/ REST.": "var(--color-green)",
