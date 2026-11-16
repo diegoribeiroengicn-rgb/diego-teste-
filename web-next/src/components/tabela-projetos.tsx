@@ -2,6 +2,9 @@ import Link from "next/link";
 import { BuscaAnalista } from "@/components/busca-analista";
 import { BotaoDarBaixa } from "@/components/dar-baixa";
 import { BotaoTratativaHold } from "@/components/tratativa-hold";
+import { BotaoPrioridade } from "@/components/prioridade-analise";
+import { BotaoArquivarProjeto } from "@/components/arquivar-projeto";
+import type { ContagemProjetosSituacao } from "@/lib/arquivo";
 import { FiltrosProjetos, type ValoresFiltrosProjetos } from "@/components/filtros-projetos";
 import { PaginacaoProjetos } from "@/components/paginacao-projetos";
 import type { Projeto } from "@/lib/projetos";
@@ -46,6 +49,9 @@ export function TabelaProjetos({
   tamanhosPagina,
   disciplinas,
   filtros,
+  podeArquivar,
+  arquivados,
+  contagemProjetos,
 }: {
   titulo: string;
   colunaEntidade: string;
@@ -56,6 +62,11 @@ export function TabelaProjetos({
   temAnalistaProprio: boolean;
   podeCadastrar?: boolean;
   podeEditar?: boolean;
+  /** Pode arquivar/desarquivar projetos (área Arquivo + perfil). */
+  podeArquivar?: boolean;
+  /** Visão de consulta dos projetos arquivados. */
+  arquivados?: boolean;
+  contagemProjetos?: ContagemProjetosSituacao;
   /** Em Análise e Em HOLD usam cartões em vez de tabela — mais fácil de
    * escanear quando o volume de análises em aberto é grande. Projetos
    * (lista completa, todos os status) continua em tabela. */
@@ -119,8 +130,21 @@ export function TabelaProjetos({
       <div className="mt-6 flex flex-wrap gap-3">
         <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) px-5 py-4">
           <p className="text-2xl font-semibold tabular-nums text-(--color-text)">{modoCompleto ? total : projetos.length}</p>
-          <p className="text-xs text-(--color-text-weak)">no total</p>
+          <p className="text-xs text-(--color-text-weak)">{arquivados ? "análises arquivadas" : "análises ativas"}</p>
         </div>
+        {modoCompleto && contagemProjetos && (
+          <div className="flex items-center gap-4 rounded-2xl border border-(--color-border) bg-(--color-surface-1) px-5 py-4 text-xs text-(--color-text-weak)">
+            <span title="Projetos (códigos) já cadastrados, ativos e arquivados"><b className="text-base tabular-nums text-(--color-text)">{contagemProjetos.historico}</b> projetos no histórico</span>
+            <span><b className="text-base tabular-nums text-(--color-text)">{contagemProjetos.ativos}</b> ativos</span>
+            <span><b className="text-base tabular-nums text-(--color-text)">{contagemProjetos.arquivados}</b> arquivados</span>
+          </div>
+        )}
+        {modoCompleto && (
+          <div className="flex items-center gap-1 rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-1.5 text-xs font-medium">
+            <Link href="?" className={`rounded-full px-3 py-1.5 ${!arquivados ? "bg-(--color-navy) text-white" : "text-(--color-text-weak) hover:bg-(--color-surface-2)"}`}>Ativos</Link>
+            <Link href="?arq=1" className={`rounded-full px-3 py-1.5 ${arquivados ? "bg-(--color-navy) text-white" : "text-(--color-text-weak) hover:bg-(--color-surface-2)"}`}>Arquivados</Link>
+          </div>
+        )}
         {/* Em modo completo os chips por status refletiriam só a página
             carregada (não a base filtrada inteira), o que seria enganoso —
             por isso só aparecem no modo antigo (sempre com todos os
@@ -206,7 +230,7 @@ export function TabelaProjetos({
               {projetos.map((p) => (
                 <tr key={p.id} className="border-t border-(--color-border) first:border-0 hover:bg-(--color-surface-2)/60">
                   <td className="px-3 py-3 tabular-nums text-(--color-text-weak)">{p.item ?? "—"}</td>
-                  <td className="px-3 py-3 font-medium text-(--color-text)">{p.codigo}</td>
+                  <td className="px-3 py-3 font-medium text-(--color-text)">{p.nivel_prioridade ? <span className="mr-1 text-[#B8890B]" title={`Prioridade nível ${p.nivel_prioridade}`}>★</span> : null}{p.codigo}</td>
                   <td className="px-3 py-3 text-(--color-text)">{p.entidade}</td>
                   <td className="px-3 py-3 text-(--color-text-weak)">{p.disciplina}</td>
                   <td className="px-3 py-3 text-(--color-text-weak)">R{String(p.revisao).padStart(2, "0")}</td>
@@ -220,21 +244,29 @@ export function TabelaProjetos({
                   <td className="px-3 py-3 text-(--color-text-weak)">{p.responsavel || "—"}</td>
                   <td className="px-3 py-3">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      {podeEditar && (
-                        <Link
-                          href={`/${tabela}/analise/${p.id}`}
-                          className="whitespace-nowrap rounded-full border border-(--color-border) px-3 py-1 text-xs font-medium text-(--color-text) hover:bg-(--color-surface-2)"
-                        >
-                          Editar
-                        </Link>
+                      {arquivados ? (
+                        podeArquivar && <BotaoArquivarProjeto codigo={p.codigo} arquivado />
+                      ) : (
+                        <>
+                          {podeEditar && (
+                            <Link
+                              href={`/${tabela}/analise/${p.id}`}
+                              className="whitespace-nowrap rounded-full border border-(--color-border) px-3 py-1 text-xs font-medium text-(--color-text) hover:bg-(--color-surface-2)"
+                            >
+                              Editar
+                            </Link>
+                          )}
+                          {podeEditar && modoCompleto && <BotaoPrioridade tabela={tabela} id={p.id} nivelAtual={p.nivel_prioridade} />}
+                          {p.status_analise === "EM HOLD" && (
+                            <BotaoTratativaHold
+                              tabela={tabela} projetoId={p.id} nomeEntidade={p.entidade} codigo={p.codigo}
+                              disciplina={p.disciplina} numAt={p.num_at}
+                            />
+                          )}
+                          <BotaoDarBaixa tabela={tabela} projetoId={p.id} statusAtual={p.status_analise} />
+                          {podeArquivar && modoCompleto && <BotaoArquivarProjeto codigo={p.codigo} arquivado={false} />}
+                        </>
                       )}
-                      {p.status_analise === "EM HOLD" && (
-                        <BotaoTratativaHold
-                          tabela={tabela} projetoId={p.id} nomeEntidade={p.entidade} codigo={p.codigo}
-                          disciplina={p.disciplina} numAt={p.num_at}
-                        />
-                      )}
-                      <BotaoDarBaixa tabela={tabela} projetoId={p.id} statusAtual={p.status_analise} />
                     </div>
                   </td>
                 </tr>

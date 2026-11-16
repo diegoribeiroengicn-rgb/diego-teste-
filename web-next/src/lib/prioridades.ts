@@ -142,3 +142,58 @@ export async function historicoPrioridade(tabela: TabelaPrazo, registroId: numbe
   );
   return rows;
 }
+
+// ---------------------------------------------------------------------------
+// Prioridade de PRESTADOR e de DOCUMENTO/PROJETO — marcadores independentes:
+// não geram prioridade em nenhuma análise (a prioridade da análise é sempre
+// registrada individualmente). Aparecem como ☆ nos Gantts e nos indicadores.
+// ---------------------------------------------------------------------------
+
+export type TipoMarcador = "PRESTADOR" | "DOCUMENTO";
+
+export async function definirMarcadorPrioridade(
+  tipo: TipoMarcador, tabela: TabelaPrazo, chave: string, justificativa: string | null, origem: OrigemPrioridade, usuario: string,
+): Promise<void> {
+  await garantirEsquemaPrioridades();
+  const pool = obterPool();
+  const k = chave.trim();
+  if (!k) throw new Error("Informe o projeto ou o prestador.");
+  const agora = new Date().toISOString();
+  const { rows } = await pool.query("SELECT id FROM prioridades_operacionais WHERE tipo=$1 AND tabela=$2 AND codigo=$3 AND ativo=1", [tipo, tabela, k]);
+  if (rows[0]) {
+    await pool.query("UPDATE prioridades_operacionais SET justificativa=$1, atualizado_em=$2, atualizado_por=$3 WHERE id=$4", [justificativa, agora, usuario, rows[0].id]);
+  } else {
+    await pool.query(
+      `INSERT INTO prioridades_operacionais (tipo, tabela, codigo, origem, justificativa, criado_em, criado_por) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [tipo, tabela, k, origem, justificativa, agora, usuario],
+    );
+  }
+  await historico(tabela, 0, `prioridade_${tipo.toLowerCase()}`, null, `${k}: definida`, usuario);
+}
+
+export async function removerMarcadorPrioridade(tipo: TipoMarcador, tabela: TabelaPrazo, chave: string, usuario: string): Promise<void> {
+  await garantirEsquemaPrioridades();
+  const agora = new Date().toISOString();
+  const { rowCount } = await obterPool().query(
+    "UPDATE prioridades_operacionais SET ativo=0, removido_em=$1, removido_por=$2 WHERE tipo=$3 AND tabela=$4 AND codigo=$5 AND ativo=1",
+    [agora, usuario, tipo, tabela, chave.trim()],
+  );
+  if (rowCount) await historico(tabela, 0, `prioridade_${tipo.toLowerCase()}`, `${chave}: definida`, null, usuario);
+}
+
+export type MarcadoresPrioridade = { documentos: string[]; prestadores: string[] };
+
+export async function marcadoresPrioridade(tabela: TabelaPrazo): Promise<MarcadoresPrioridade> {
+  await garantirEsquemaPrioridades();
+  const { rows } = await obterPool().query("SELECT tipo, codigo FROM prioridades_operacionais WHERE tabela=$1 AND tipo IN ('DOCUMENTO','PRESTADOR') AND ativo=1", [tabela]);
+  return {
+    documentos: rows.filter((r) => r.tipo === "DOCUMENTO").map((r) => String(r.codigo)),
+    prestadores: rows.filter((r) => r.tipo === "PRESTADOR").map((r) => String(r.codigo)),
+  };
+}
+
+/** Marcadores ativos de um projeto/prestador (para o pop-up da listagem). */
+export async function marcadoresDaAnalise(tabela: TabelaPrazo, codigo: string | null, entidade: string | null) {
+  const m = await marcadoresPrioridade(tabela);
+  return { documento: !!codigo && m.documentos.includes(codigo), prestador: !!entidade && m.prestadores.includes(entidade) };
+}

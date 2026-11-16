@@ -1,4 +1,6 @@
 import { buscarProjetosPaginado, listarDisciplinasDistintas } from "@/lib/projetos";
+import { contarProjetosPorSituacao } from "@/lib/arquivo";
+import { perfilPodeArquivarERestaurar } from "@/lib/arquivo-calculo";
 import { obterSessao } from "@/lib/session";
 import { areaPermitida } from "@/lib/permissoes";
 import { TabelaProjetos } from "@/components/tabela-projetos";
@@ -10,7 +12,7 @@ const LIMITE_MAXIMO = 2000;
 export default async function PaginaProjetosPrestadores({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; codigo?: string; entidade?: string; status?: string; disciplina?: string; de?: string; ate?: string; ordem?: string; tamanho?: string; limite?: string }>;
+  searchParams: Promise<{ q?: string; codigo?: string; entidade?: string; status?: string; disciplina?: string; de?: string; ate?: string; ordem?: string; arq?: string; tamanho?: string; limite?: string }>;
 }) {
   const sessao = await obterSessao();
   const sp = await searchParams;
@@ -29,14 +31,17 @@ export default async function PaginaProjetosPrestadores({
     dataLimiteAte: (sp.ate || "").trim(),
     analistaProprio: sessao?.analistaVinculado || null,
     ordem: sp.ordem === "item" || sp.ordem === "item_desc" ? sp.ordem : "",
+    arquivados: sp.arq === "1",
     limite,
   };
   const podeCadastrar = sessao ? await areaPermitida(sessao.id, sessao.perfil, "prestadores.cadastrar") : false;
   const podeEditar = sessao ? await areaPermitida(sessao.id, sessao.perfil, "prestadores.editar") : false;
+  const podeArquivar = sessao ? (await areaPermitida(sessao.id, sessao.perfil, "arquivo")) && perfilPodeArquivarERestaurar(sessao.perfil) : false;
 
-  const [{ projetos, total }, disciplinas] = await Promise.all([
+  const [{ projetos, total }, disciplinas, contagemProjetos] = await Promise.all([
     buscarProjetosPaginado("prestadores", filtro),
     listarDisciplinasDistintas("prestadores"),
+    contarProjetosPorSituacao("prestadores"),
   ]);
 
   return (
@@ -55,6 +60,9 @@ export default async function PaginaProjetosPrestadores({
       temAnalistaProprio={!!sessao?.analistaVinculado}
       podeCadastrar={podeCadastrar}
       podeEditar={podeEditar}
+      podeArquivar={podeArquivar}
+      arquivados={sp.arq === "1"}
+      contagemProjetos={contagemProjetos}
     />
   );
 }

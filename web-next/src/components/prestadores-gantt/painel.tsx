@@ -50,7 +50,9 @@ function salvarEstado(dados: { filtros: FiltrosGanttEstado; ui: UiGanttEstado; f
   }
 }
 
-export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBrutas: LinhaBrutaGantt[]; geradoEm?: string }) {
+export function PainelGanttPrestadores({ linhasBrutas, geradoEm, marcadores, podeDefinirPrioridade }: {
+  linhasBrutas: LinhaBrutaGantt[]; geradoEm?: string; marcadores: { documentos: string[]; prestadores: string[] }; podeDefinirPrioridade: boolean;
+}) {
   const [filtros, setFiltros] = useState<FiltrosGanttEstado>(
     () => ({ ...FILTROS_PADRAO, ...carregarEstadoSalvo().filtros }),
   );
@@ -244,11 +246,11 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
   }
   const setF = (p: Partial<FiltrosGanttEstado>) => setFiltros((f) => ({ ...f, ...p }));
   const setU = (p: Partial<UiGanttEstado>) => setUi((u) => ({ ...u, ...p }));
-  async function definirPrioridade(codigo: string, nivel: number | null): Promise<string | null> {
+  async function definirMarcador(tipo: "DOCUMENTO" | "PRESTADOR", chave: string, ativo: boolean): Promise<string | null> {
     try {
-      const r = await fetch("/api/prioridades-prestador", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ codigo, nivel }) });
+      const r = await fetch("/api/prioridades/marcador", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tipo, tabela: "prestadores", chave, ativo, origem: "GESTAO" }) });
       const corpo = await r.json().catch(() => ({}));
-      if (!r.ok) return corpo.erro ?? "Não foi possível definir a prioridade.";
+      if (!r.ok) return corpo.erro ?? "Não foi possível salvar a prioridade.";
       router.refresh();
       return null;
     } catch {
@@ -430,6 +432,7 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
             mostrarEstimativas={ui.mostrarEstimativas}
             zoom={ui.zoom}
             abertos={gruposAbertos}
+            marcadores={marcadores}
             onAlternarGrupo={(g) => setGruposAbertos((a) => { const n = new Set(a); if (n.has(g)) n.delete(g); else n.add(g); return n; })}
             onGrupos={setGruposDisponiveis}
           />
@@ -446,7 +449,7 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
       <PremissasDialog
         aberto={editandoPremissas} onFechar={() => setEditandoPremissas(false)}
         nomeCenario={cenAtivo != null && cenarios[cenAtivo] ? ` · cenário: ${cenarios[cenAtivo].nome}` : " · cenário atual (não salvo)"}
-        premissas={premissas} setPremissas={setPremissas} ui={ui} setUi={setUi} hist={hist} itens={modelo.items} onDefinirPrioridade={definirPrioridade} abaInicial={abaPremissas}
+        premissas={premissas} setPremissas={setPremissas} ui={ui} setUi={setUi} hist={hist} itens={modelo.items} marcadores={marcadores} podeDefinir={podeDefinirPrioridade} onDefinirMarcador={definirMarcador} abaInicial={abaPremissas}
       />
     </div>
   );

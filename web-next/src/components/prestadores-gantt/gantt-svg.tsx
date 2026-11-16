@@ -59,7 +59,7 @@ const AGRUPADORES: Record<AgrupamentoGantt, (it: ItemGantt) => string> = {
 type Grupo = { g: string; its: ItemGantt[] };
 
 export function GanttSvg({
-  itens, agregado, base, hEnd, cal, agrupar, mostrarEstimativas, zoom, abertos, onAlternarGrupo, onGrupos,
+  itens, agregado, base, hEnd, cal, agrupar, mostrarEstimativas, zoom, abertos, marcadores, onAlternarGrupo, onGrupos,
 }: {
   itens: ItemGantt[];
   agregado: AgregadoGantt;
@@ -70,11 +70,16 @@ export function GanttSvg({
   mostrarEstimativas: boolean;
   zoom: number;
   abertos: Set<string>;
+  marcadores: { documentos: string[]; prestadores: string[] };
   onAlternarGrupo: (g: string) => void;
   onGrupos: (nomes: string[]) => void;
 }) {
   const [dica, setDica] = useState<{ x: number; y: number; html: string } | null>(null);
   const [aberto, setAberto] = useState<ItemGantt | null>(null);
+  const docsPrio = useMemo(() => new Set(marcadores.documentos), [marcadores]);
+  const prestPrio = useMemo(() => new Set(marcadores.prestadores), [marcadores]);
+  // ☆ = projeto/prestador marcado como prioritário (independente da ★ da análise).
+  const marcaGrupo = (G: Grupo) => G.its.some((i) => docsPrio.has(i.code) || prestPrio.has(i.prest));
   const dlgRef = useRef<HTMLDialogElement>(null);
 
   const px = zoom || 9;
@@ -186,7 +191,7 @@ export function GanttSvg({
                   <div key={`g-${l.G.g}`} className={`grow${gp ? " prio" : ""}`} style={{ height: GH }} onClick={() => onAlternarGrupo(l.G.g)}>
                     <span className="car">{l.open ? "▼" : "▶"}</span>
                     <div>
-                      <div className="gt">{gp && <span className="star">★{nivel < 99 ? nivel : ""}</span>}{l.G.g}</div>
+                      <div className="gt">{gp && <span className="star">★{nivel < 99 ? nivel : ""}</span>}{marcaGrupo(l.G) && <span className="star" title="Projeto ou prestador prioritário">☆</span>}{l.G.g}</div>
                       <div className="gs">
                         {l.G.its.length} {l.G.its.length === 1 ? "item" : "itens"} · {parts || "—"}
                         {late > 0 && <> · <b style={{ color: GC.late }}>{late} atrasado{late > 1 ? "s" : ""}</b></>}
@@ -202,6 +207,7 @@ export function GanttSvg({
                 <div key={it.key} className="irow" style={{ height: RH }} title={`${it.obra || ""} — clique para ver o histórico`} onClick={() => setAberto(it)}>
                   <div className="it">
                     {agrupar !== "code" && ehPrioritario(it) && <span className="star">★</span>}
+                    {(docsPrio.has(it.code) || prestPrio.has(it.prest)) && <span className="star" title="Projeto ou prestador prioritário">☆</span>}
                     {it.crit && <span className="tag">REV {it.revAT} · crítica</span>}
                     {agrupar !== "code" ? `${it.code} · ` : ""}{tituloItem(it)}
                   </div>
