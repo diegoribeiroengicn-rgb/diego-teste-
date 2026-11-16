@@ -189,3 +189,26 @@ body {
 .gref .scenbar select{min-width:220px;height:32px;border:1px solid var(--line);border-radius:6px;background:#fff;font:inherit;font-weight:600;color:var(--navy);padding:0 8px}
 .gref .scenbar .btn{height:32px}
 @media (max-width:700px){.gref .bar{position:static}}
+.gref dialog{border:0;border-radius:12px;padding:0;max-width:min(1250px,97vw);width:97vw;box-shadow:0 20px 60px rgba(0,0,0,.35);color:var(--txt)}
+.gref dialog::backdrop{background:rgba(11,26,51,.45)}
+.gref dialog .dh{background:var(--navy);color:#fff;padding:10px 14px;display:flex;align-items:center;gap:10px}
+.gref dialog .dh b{font-size:14px}
+.gref dialog .dh button{margin-left:auto}
+.gref dialog .db{padding:12px 14px;max-height:72vh;overflow:auto}
+.gref .ptabs{display:flex;gap:2px;background:#fff;border-bottom:1px solid var(--line);padding:0 10px;overflow-x:auto}
+.gref .ptabs button{border:0;background:none;padding:11px 13px;cursor:pointer;color:var(--muted);font:inherit;font-weight:700;border-bottom:3px solid transparent;white-space:nowrap}
+.gref .ptabs button.on{color:var(--navy);border-bottom-color:var(--gold)}
+.gref .info{background:#EAF1FB;border:1px solid #C5D7F2;color:#173E77;border-radius:8px;padding:8px 10px;font-size:12px}
+.gref .pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:12px}
+.gref .card h3{margin:0 0 8px;font-size:13px;color:var(--navy);font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.gref .card h3 .hint{font-weight:400;color:var(--muted);font-size:11.5px}
+.gref .frm{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center}
+.gref .frm label{font-size:12px}
+.gref .frm input,.gref .frm select{border:1px solid var(--line);border-radius:6px;padding:3px 6px;height:27px;max-width:180px;font:inherit;background:#fff}
+.gref table.pt{border-collapse:collapse;width:100%;font-size:12px}
+.gref table.pt th{background:#EEF2F8;color:var(--navy);text-align:left;padding:5px 6px;font-weight:600;position:sticky;top:0}
+.gref table.pt td{padding:3px 6px;border-bottom:1px solid var(--line2)}
+.gref table.pt input{width:64px;border:1px solid var(--line);border-radius:5px;padding:2px 5px;height:24px;font:inherit}
+.gref table.pt input.ov{border-color:var(--gold);background:#FFFBEF;font-weight:700}
+.gref .scroll{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.gref .cmp{font-size:11.5px;margin-top:4px;font-weight:600}

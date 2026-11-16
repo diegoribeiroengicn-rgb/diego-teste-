@@ -18,16 +18,20 @@ import {
 import { hojeBr } from "@/lib/dias-uteis";
 import { GanttSvg } from "./gantt-svg";
 import { calcularKpis, estaAberto } from "./kpis";
-import { FILTROS_PADRAO, UI_PADRAO, type EntregaFuturaEstado, type FiltrosGanttEstado, type UiGanttEstado } from "./tipos-estado";
+import { PremissasDialog } from "./premissas-dialog";
+import { FILTROS_PADRAO, PREMISSAS_PADRAO, UI_PADRAO, type CenarioSalvo, type EntregaFuturaEstado, type FiltrosGanttEstado, type PremissasEstado, type UiGanttEstado } from "./tipos-estado";
+import { FERIADOS_RJ_ISO } from "@/lib/dias-uteis";
+import { iso2dn } from "@/lib/prestadores-gantt/motor";
 
 const CHAVE_LOCALSTORAGE = "gat_gantt_prestadores_v1";
+const CHAVE_CENARIOS = "gat_gantt_prestadores_cenarios_v1";
 
 function hojeISO(): string {
   const d = hojeBr();
   return d.toISOString().slice(0, 10);
 }
 
-function carregarEstadoSalvo(): { filtros?: FiltrosGanttEstado; ui?: UiGanttEstado; futuras?: EntregaFuturaEstado[] } {
+function carregarEstadoSalvo(): { filtros?: FiltrosGanttEstado; ui?: UiGanttEstado; futuras?: EntregaFuturaEstado[]; premissas?: PremissasEstado } {
   try {
     const bruto = localStorage.getItem(CHAVE_LOCALSTORAGE);
     return bruto ? JSON.parse(bruto) : {};
@@ -36,7 +40,7 @@ function carregarEstadoSalvo(): { filtros?: FiltrosGanttEstado; ui?: UiGanttEsta
   }
 }
 
-function salvarEstado(dados: { filtros: FiltrosGanttEstado; ui: UiGanttEstado; futuras: EntregaFuturaEstado[] }): void {
+function salvarEstado(dados: { filtros: FiltrosGanttEstado; ui: UiGanttEstado; futuras: EntregaFuturaEstado[]; premissas: PremissasEstado }): void {
   try {
     localStorage.setItem(CHAVE_LOCALSTORAGE, JSON.stringify(dados));
   } catch {
@@ -50,16 +54,30 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
   );
   const [ui, setUi] = useState<UiGanttEstado>(() => ({ ...UI_PADRAO, ...carregarEstadoSalvo().ui }));
   const [futuras, setFuturas] = useState<EntregaFuturaEstado[]>(() => carregarEstadoSalvo().futuras ?? []);
+  const [premissas, setPremissas] = useState<PremissasEstado>(() => ({ ...PREMISSAS_PADRAO, ...carregarEstadoSalvo().premissas }));
   const [datasAbertas, setDatasAbertas] = useState(false);
+  const [editandoPremissas, setEditandoPremissas] = useState(false);
+  const [cenarios, setCenarios] = useState<CenarioSalvo[]>(() => {
+    try { return JSON.parse(localStorage.getItem(CHAVE_CENARIOS) || "[]"); } catch { return []; }
+  });
+  const [cenAtivo, setCenAtivo] = useState<number | null>(null);
+  const [comparar, setComparar] = useState("");
 
   useEffect(() => {
-    salvarEstado({ filtros, ui, futuras });
-  }, [filtros, ui, futuras]);
+    salvarEstado({ filtros, ui, futuras, premissas });
+  }, [filtros, ui, futuras, premissas]);
+  useEffect(() => {
+    try { localStorage.setItem(CHAVE_CENARIOS, JSON.stringify(cenarios)); } catch { /* sem armazenamento */ }
+  }, [cenarios]);
 
   const prep = useMemo(() => prepRows(linhasBrutas), [linhasBrutas]);
   const modelo = useMemo(() => buildItems(prep, { inferLinks: true }), [prep]);
   const hist = useMemo(() => histLib(modelo.items), [modelo]);
-  const cal = useMemo(() => new Calendario(), []);
+  const feriadosISO = useMemo(
+    () => [...new Set([...FERIADOS_RJ_ISO, ...premissas.feriadosExtras])].filter((f) => !premissas.feriadosRemovidos.includes(f)),
+    [premissas.feriadosExtras, premissas.feriadosRemovidos],
+  );
+  const cal = useMemo(() => new Calendario(feriadosISO), [feriadosISO]);
 
   const simulado = ui.cenario === "simulado";
   const baseISO = ui.base || hojeISO();
@@ -74,11 +92,25 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
     [linhasBrutas],
   );
 
-  const params = useMemo(
-    () => ({
-      ...defaultParams(baseISO, hist),
-      slaPDefault: ui.slaP,
-      slaIDefault: ui.slaI,
+  function montarParams(prem: PremissasEstado, slaP: number, slaI: number) {
+    const base = defaultParams(baseISO, hist);
+    return {
+      ...base,
+      slaPDefault: slaP,
+      slaIDefault: slaI,
+      slaPOver: prem.slaPOver,
+      slaIOver: prem.slaIOver,
+      prox: prem.prox,
+      critRev: prem.critRev,
+      oldMonths: prem.oldMonths,
+      oldRef: prem.oldRef,
+      overdueMode: prem.overdueMode,
+      overdueSpread: prem.overdueSpread,
+      useL: prem.useL,
+      pLib: base.pLib.map((v, i) => (prem.pLib[i] != null ? (prem.pLib[i] as number) / 100 : v)),
+      maxCycles: prem.maxCycles,
+      minW: prem.minW / 100,
+      volFactor: prem.volFactor,
       includeOld: ui.incluirAntigos,
       horizon: ui.horizonte,
       futuras: simulado
@@ -86,14 +118,19 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
             code: f.code, obra: f.obra, disc: f.disc, analyst: f.analyst, date: f.date, n: f.n, pr: f.pr, slaI: f.slaI,
           }))
         : [],
-    }),
-    [hist, baseISO, ui.slaP, ui.slaI, ui.incluirAntigos, ui.horizonte, futuras, simulado],
+    };
+  }
+
+  const params = useMemo(
+    () => montarParams(premissas, ui.slaP, ui.slaI),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hist, baseISO, premissas, ui.slaP, ui.slaI, ui.incluirAntigos, ui.horizonte, futuras, simulado],
   );
 
   const resultado = useMemo(() => project(modelo, params, cal), [modelo, params, cal]);
 
-  const itensFiltrados = useMemo(() => {
-    let out: ItemGantt[] = resultado.items;
+  function filtrar(todos: ItemGantt[]): ItemGantt[] {
+    let out: ItemGantt[] = todos;
     const termo = filtros.busca.trim().toUpperCase();
     if (termo) {
       out = out.filter(
@@ -120,11 +157,75 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
     if (filtros.apenasCriticas) out = out.filter((it) => it.crit);
     if (filtros.apenasVencidas) out = out.filter((it) => it.prazo === "Vencido");
     if (filtros.apenasPrioritarios) out = out.filter(ehPrioritario);
+    const faixa = (a: string, b: string, chave: "prestDue" | "recv" | "anaDue") => {
+      const lo = iso2dn(a), hi = iso2dn(b);
+      if (lo == null && hi == null) return;
+      out = out.filter((it) => {
+        const v = it.d[chave]?.v;
+        return v != null && (lo == null || v >= lo) && (hi == null || v <= hi);
+      });
+    };
+    faixa(filtros.pd1, filtros.pd2, "prestDue");
+    faixa(filtros.rv1, filtros.rv2, "recv");
+    faixa(filtros.ad1, filtros.ad2, "anaDue");
     return out;
-  }, [resultado, filtros]);
+  }
+
+  const itensFiltrados = useMemo(() => filtrar(resultado.items), [resultado, filtros]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const agregadoFiltrado = useMemo(() => aggregate(itensFiltrados, cal, resultado.base, resultado.hEnd), [itensFiltrados, cal, resultado]);
   const kpis = useMemo(() => calcularKpis(itensFiltrados, agregadoFiltrado), [itensFiltrados, agregadoFiltrado]);
+
+  // Comparação com outro cenário (ou com os prazos padrão): só os indicadores.
+  const kpisRef = useMemo(() => {
+    if (!comparar) return null;
+    let prem = premissas, slaP = ui.slaP, slaI = ui.slaI, nome = "Prazos padrão";
+    if (comparar === "padrao") {
+      prem = { ...premissas, slaPOver: {}, slaIOver: {} }; slaP = 10; slaI = 10;
+    } else {
+      const c = cenarios[Number(comparar)];
+      if (!c) return null;
+      prem = { ...PREMISSAS_PADRAO, ...c.premissas }; slaP = c.slaP; slaI = c.slaI; nome = c.nome;
+    }
+    const res = project(modelo, montarParams(prem, slaP, slaI), cal);
+    const it = filtrar(res.items);
+    return { nome, k: calcularKpis(it, aggregate(it, cal, res.base, res.hEnd)) };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comparar, cenarios, modelo, cal, premissas, ui.slaP, ui.slaI, params, filtros]);
+
+  function delta(atual: number, ref: number | undefined, fmtv: (n: number) => string = (n) => String(Math.round(n))): React.ReactNode {
+    if (!kpisRef || ref == null) return null;
+    if (atual === ref) return <div className="cmp">igual em “{kpisRef.nome}”</div>;
+    const melhor = atual < ref;
+    return <div className="cmp" style={{ color: melhor ? "#1E8449" : "#D64541" }}>{melhor ? "▼" : "▲"} era {fmtv(ref)} em “{kpisRef.nome}”</div>;
+  }
+
+  function salvarCenario() {
+    if (cenAtivo == null) { novoCenario(); return; }
+    setCenarios((l) => l.map((c, i) => (i === cenAtivo ? { ...c, premissas, slaP: ui.slaP, slaI: ui.slaI } : c)));
+    window.alert(`Cenário "${cenarios[cenAtivo].nome}" atualizado.`);
+  }
+  function novoCenario() {
+    const nome = (window.prompt('Nome do novo cenário (ex.: "P267 com SLA de 8 dias"):') || "").trim();
+    if (!nome) return;
+    setCenarios((l) => [...l, { nome, premissas, slaP: ui.slaP, slaI: ui.slaI, criado: new Date().toISOString().slice(0, 10) }]);
+    setCenAtivo(cenarios.length);
+    window.alert(`Cenário "${nome}" salvo neste navegador.\nAltere as premissas em "Editar premissas" e salve outro cenário para comparar.`);
+  }
+  function excluirCenario() {
+    if (cenAtivo == null) return;
+    if (!window.confirm(`Excluir o cenário "${cenarios[cenAtivo].nome}"?`)) return;
+    setCenarios((l) => l.filter((_, i) => i !== cenAtivo));
+    setCenAtivo(null); setComparar("");
+  }
+  function aplicarCenario(v: string) {
+    if (v === "") { setCenAtivo(null); return; }
+    const c = cenarios[Number(v)];
+    if (!c) return;
+    setPremissas({ ...PREMISSAS_PADRAO, ...c.premissas });
+    setUi((u) => ({ ...u, slaP: c.slaP, slaI: c.slaI }));
+    setCenAtivo(Number(v));
+  }
 
   function alternarSelecao(lista: string[], valor: string): string[] {
     return lista.includes(valor) ? lista.filter((v) => v !== valor) : [...lista, valor];
@@ -138,7 +239,7 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
   const setF = (p: Partial<FiltrosGanttEstado>) => setFiltros((f) => ({ ...f, ...p }));
   const setU = (p: Partial<UiGanttEstado>) => setUi((u) => ({ ...u, ...p }));
   function limparFiltros() { setFiltros({ ...FILTROS_PADRAO }); }
-  function restaurarPadrao() { setFiltros({ ...FILTROS_PADRAO }); setUi({ ...UI_PADRAO }); }
+  function restaurarPadrao() { setFiltros({ ...FILTROS_PADRAO }); setUi({ ...UI_PADRAO }); setPremissas({ ...PREMISSAS_PADRAO }); setCenAtivo(null); setComparar(""); }
 
   const baseBr = fmt(resultado.base);
   const fimBr = fmt(resultado.hEnd);
@@ -203,8 +304,13 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
           </div>
         </div>
         {datasAbertas && (
-          <div style={{ width: "100%" }} className="note">
-            Filtros por intervalo de datas (entrega prevista, retorno e conclusão da análise) chegam na próxima etapa.
+          <div id="dateFilters" style={{ display: "flex", width: "100%", gap: 10, flexWrap: "wrap" }}>
+            <div className="fld"><label>Entrega prevista do prestador</label>
+              <div><input type="date" value={filtros.pd1} onChange={(e) => setF({ pd1: e.target.value })} /> a <input type="date" value={filtros.pd2} onChange={(e) => setF({ pd2: e.target.value })} /></div></div>
+            <div className="fld"><label>Retorno/recebimento previsto</label>
+              <div><input type="date" value={filtros.rv1} onChange={(e) => setF({ rv1: e.target.value })} /> a <input type="date" value={filtros.rv2} onChange={(e) => setF({ rv2: e.target.value })} /></div></div>
+            <div className="fld"><label>Conclusão prevista da análise</label>
+              <div><input type="date" value={filtros.ad1} onChange={(e) => setF({ ad1: e.target.value })} /> a <input type="date" value={filtros.ad2} onChange={(e) => setF({ ad2: e.target.value })} /></div></div>
           </div>
         )}
       </div>
@@ -212,19 +318,39 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
       <main>
         <div className="grid kpis" style={{ marginBottom: 12 }}>
           <Kpi ico="📤" lbl="Com o prestador" val={String(kpis.comPrestador)} cls={kpis.comPrestadorAtrasados ? "amber" : ""}
-            det={kpis.comPrestadorAtrasados ? <b style={{ color: "#D64541" }}>{kpis.comPrestadorAtrasados} atrasados</b> : "nenhum atrasado"} />
+            det={<>{kpis.comPrestadorAtrasados ? <b style={{ color: "#D64541" }}>{kpis.comPrestadorAtrasados} atrasados</b> : "nenhum atrasado"}{delta(kpis.comPrestadorAtrasados, kpisRef?.k.comPrestadorAtrasados)}</>} />
           <Kpi ico="🔎" lbl="Em análise na Tecnoplano" val={String(kpis.emAnalise)} cls={kpis.emAnaliseAtrasadas ? "amber" : ""}
-            det={kpis.emAnaliseAtrasadas ? <b style={{ color: "#D64541" }}>{kpis.emAnaliseAtrasadas} atrasadas</b> : "nenhuma atrasada"} />
+            det={<>{kpis.emAnaliseAtrasadas ? <b style={{ color: "#D64541" }}>{kpis.emAnaliseAtrasadas} atrasadas</b> : "nenhuma atrasada"}{delta(kpis.emAnaliseAtrasadas, kpisRef?.k.emAnaliseAtrasadas)}</>} />
           <Kpi ico="★" lbl="Prioritários" val={String(kpis.prioritarios)} cls="gold"
-            det={<>{kpis.prioritarios} análises prioritárias abertas<br /><b style={{ color: kpis.prioritariosAtrasados ? "#D64541" : "inherit" }}>{kpis.prioritariosAtrasados} atrasadas</b></>} />
+            det={<>{kpis.prioritarios} análises prioritárias abertas<br /><b style={{ color: kpis.prioritariosAtrasados ? "#D64541" : "inherit" }}>{kpis.prioritariosAtrasados} atrasadas</b>{delta(kpis.prioritariosAtrasados, kpisRef?.k.prioritariosAtrasados)}</>} />
           <Kpi ico="📈" lbl="Novas ATs previstas" val={kpis.simulados ? `≈${kpis.simulados}` : "—"} cls=""
             det={kpis.simulados ? "estimadas pelo ritmo e entregas futuras" : "previsão desligada"} />
           <Kpi ico="⚠" lbl="Atrasados ou críticos" val={<>{kpis.vencidos}<small> atrasados</small></>} cls={kpis.vencidos ? "red" : ""}
-            det={`${kpis.criticas} com muitas revisões (críticos) · próximos: ${kpis.proximos}`} />
+            det={<>{`${kpis.criticas} com muitas revisões (críticos) · próximos: ${kpis.proximos}`}{delta(kpis.vencidos, kpisRef?.k.vencidos)}</>} />
           <Kpi ico="📈" lbl="Semana mais cheia" val={kpis.picoSemanal.semana != null ? <>{kpis.picoSemanal.v.toFixed(0)}<small> pranchas</small></> : "—"} cls=""
-            det={kpis.picoSemanal.semana != null ? `semana de ${fmt(kpis.picoSemanal.semana)}` : ""} />
+            det={<>{kpis.picoSemanal.semana != null ? `semana de ${fmt(kpis.picoSemanal.semana)}` : ""}{delta(Math.round(kpis.picoSemanal.v), kpisRef ? Math.round(kpisRef.k.picoSemanal.v) : undefined)}</>} />
           <Kpi ico="✓" lbl="Tudo liberado por volta de" val={kpis.conclusaoSemNovasReprovacoes != null ? fmt(kpis.conclusaoSemNovasReprovacoes) : "—"} cls="gold"
-            det={`se aprovado na próxima análise · com revisões prováveis: ${kpis.conclusaoMediana != null ? fmt(kpis.conclusaoMediana) : "—"}`} />
+            det={<>{`se aprovado na próxima análise · com revisões prováveis: ${kpis.conclusaoMediana != null ? fmt(kpis.conclusaoMediana) : "—"}`}{kpis.conclusaoSemNovasReprovacoes != null && delta(kpis.conclusaoSemNovasReprovacoes, kpisRef?.k.conclusaoSemNovasReprovacoes ?? undefined, (n) => fmt(n))}</>} />
+        </div>
+
+        <div className="card scenbar">
+          <div className="sc-l"><span className="sc-t">Cenário</span>
+            <select value={cenAtivo == null ? "" : String(cenAtivo)} onChange={(e) => aplicarCenario(e.target.value)}>
+              <option value="">Atual (em edição)</option>
+              {cenarios.map((c, i) => <option key={i} value={i}>{c.nome}</option>)}
+            </select>
+            <button type="button" className="btn" onClick={() => setEditandoPremissas(true)}>✎ Editar premissas</button>
+            <button type="button" className="btn" onClick={salvarCenario}>💾 Salvar</button>
+            <button type="button" className="btn pri" onClick={novoCenario}>+ Novo cenário</button>
+            <button type="button" className="btn" onClick={excluirCenario} disabled={cenAtivo == null}>Excluir</button>
+          </div>
+          <div className="sc-r"><span className="sc-t">Comparar com</span>
+            <select value={comparar} onChange={(e) => setComparar(e.target.value)}>
+              <option value="">— não comparar —</option>
+              <option value="padrao">Prazos padrão (SLAs iniciais)</option>
+              {cenarios.map((c, i) => <option key={i} value={i}>{c.nome}</option>)}
+            </select>
+          </div>
         </div>
 
         <div className="card" style={{ marginBottom: 10 }}>
@@ -277,6 +403,11 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
           onRemover={removerFutura}
         />
       </main>
+      <PremissasDialog
+        aberto={editandoPremissas} onFechar={() => setEditandoPremissas(false)}
+        nomeCenario={cenAtivo != null && cenarios[cenAtivo] ? ` · cenário: ${cenarios[cenAtivo].nome}` : " · cenário atual (não salvo)"}
+        premissas={premissas} setPremissas={setPremissas} ui={ui} setUi={setUi} hist={hist} itens={modelo.items}
+      />
     </div>
   );
 }

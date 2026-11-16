@@ -22,6 +22,9 @@ export type FiltrosGanttEstado = {
   fase: string;
   /** "pend" (padrão) | "lib" | "todos" */
   statusLib: string;
+  /** Intervalos (ISO) — entrega prevista do prestador, retorno/recebimento
+   * previsto e conclusão prevista da análise. */
+  pd1: string; pd2: string; rv1: string; rv2: string; ad1: string; ad2: string;
 };
 
 export type UiGanttEstado = {
@@ -46,6 +49,7 @@ export const FILTROS_PADRAO: FiltrosGanttEstado = {
   apenasVencidas: false,
   apenasPrioritarios: false,
   codigo: "", obra: "", at: "", disciplina: "", criticidade: "", prazo: "", fase: "", statusLib: "pend",
+  pd1: "", pd2: "", rv1: "", rv2: "", ad1: "", ad2: "",
 };
 
 export const UI_PADRAO: UiGanttEstado = {
@@ -61,3 +65,33 @@ export const UI_PADRAO: UiGanttEstado = {
 };
 
 export type EntregaFuturaEstado = EntregaFutura & { id: string };
+
+/** Premissas editáveis do Gantt (janela "Editar premissas") — nunca alteram
+ * a planilha nem o banco; ficam salvas neste navegador e podem ser
+ * guardadas como cenário. */
+export type PremissasEstado = {
+  slaPOver: Record<string, number>;
+  slaIOver: Record<string, number>;
+  prox: number;
+  critRev: number;
+  oldMonths: number;
+  oldRef: "at" | "projeto" | "ultimo";
+  overdueMode: "base" | "excluir" | "espalhar";
+  overdueSpread: number;
+  useL: boolean;
+  /** Probabilidade (%) de liberação por revisão; `null` = usar o histórico. */
+  pLib: (number | null)[];
+  maxCycles: number;
+  minW: number;
+  volFactor: number;
+  feriadosExtras: string[];
+  feriadosRemovidos: string[];
+};
+
+export const PREMISSAS_PADRAO: PremissasEstado = {
+  slaPOver: {}, slaIOver: {}, prox: 3, critRev: 2, oldMonths: 6, oldRef: "at",
+  overdueMode: "base", overdueSpread: 10, useL: true, pLib: [null, null, null, null],
+  maxCycles: 3, minW: 5, volFactor: 100, feriadosExtras: [], feriadosRemovidos: [],
+};
+
+export type CenarioSalvo = { nome: string; premissas: PremissasEstado; slaP: number; slaI: number; criado: string };
