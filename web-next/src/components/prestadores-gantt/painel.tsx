@@ -19,6 +19,7 @@ import { hojeBr } from "@/lib/dias-uteis";
 import { GanttSvg } from "./gantt-svg";
 import { PainelAnalistas } from "./painel-analistas";
 import { calcularKpis, estaAberto } from "./kpis";
+import { useRouter } from "next/navigation";
 import { PremissasDialog } from "./premissas-dialog";
 import { FILTROS_PADRAO, PREMISSAS_PADRAO, UI_PADRAO, type CenarioSalvo, type EntregaFuturaEstado, type FiltrosGanttEstado, type PremissasEstado, type UiGanttEstado } from "./tipos-estado";
 import { FERIADOS_RJ_ISO } from "@/lib/dias-uteis";
@@ -56,8 +57,10 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
   const [ui, setUi] = useState<UiGanttEstado>(() => ({ ...UI_PADRAO, ...carregarEstadoSalvo().ui }));
   const [futuras, setFuturas] = useState<EntregaFuturaEstado[]>(() => carregarEstadoSalvo().futuras ?? []);
   const [premissas, setPremissas] = useState<PremissasEstado>(() => ({ ...PREMISSAS_PADRAO, ...carregarEstadoSalvo().premissas }));
+  const router = useRouter();
   const [datasAbertas, setDatasAbertas] = useState(false);
   const [editandoPremissas, setEditandoPremissas] = useState(false);
+  const [abaPremissas, setAbaPremissas] = useState<"prio" | "sla" | "cal" | "adv" | undefined>(undefined);
   const [cenarios, setCenarios] = useState<CenarioSalvo[]>(() => {
     try { return JSON.parse(localStorage.getItem(CHAVE_CENARIOS) || "[]"); } catch { return []; }
   });
@@ -241,6 +244,17 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
   }
   const setF = (p: Partial<FiltrosGanttEstado>) => setFiltros((f) => ({ ...f, ...p }));
   const setU = (p: Partial<UiGanttEstado>) => setUi((u) => ({ ...u, ...p }));
+  async function definirPrioridade(codigo: string, nivel: number | null): Promise<string | null> {
+    try {
+      const r = await fetch("/api/prioridades-prestador", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ codigo, nivel }) });
+      const corpo = await r.json().catch(() => ({}));
+      if (!r.ok) return corpo.erro ?? "Não foi possível definir a prioridade.";
+      router.refresh();
+      return null;
+    } catch {
+      return "Não foi possível conectar ao sistema.";
+    }
+  }
   function limparFiltros() { setFiltros({ ...FILTROS_PADRAO }); }
   function restaurarPadrao() { setFiltros({ ...FILTROS_PADRAO }); setUi({ ...UI_PADRAO }); setPremissas({ ...PREMISSAS_PADRAO }); setCenAtivo(null); setComparar(""); }
 
@@ -342,7 +356,7 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
               <option value="">Atual (em edição)</option>
               {cenarios.map((c, i) => <option key={i} value={i}>{c.nome}</option>)}
             </select>
-            <button type="button" className="btn" onClick={() => setEditandoPremissas(true)}>✎ Editar premissas</button>
+            <button type="button" className="btn" onClick={() => { setAbaPremissas(undefined); setEditandoPremissas(true); }}>✎ Editar premissas</button>
             <button type="button" className="btn" onClick={salvarCenario}>💾 Salvar</button>
             <button type="button" className="btn pri" onClick={novoCenario}>+ Novo cenário</button>
             <button type="button" className="btn" onClick={excluirCenario} disabled={cenAtivo == null}>Excluir</button>
@@ -363,6 +377,9 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
             </div>
             <div className="fld"><label>Mostrar</label>
               <Seg grande valor={filtros.apenasPrioritarios ? "prio" : "all"} opcoes={[["all", "Todos"], ["prio", "★ Só prioritários"]]} onChange={(v) => setF({ apenasPrioritarios: v === "prio" })} />
+            </div>
+            <div className="fld"><label>Prioridades</label>
+              <button type="button" className="btn gold" style={{ height: 36 }} onClick={() => { setAbaPremissas("prio"); setEditandoPremissas(true); }}>★ Definir prioridades</button>
             </div>
             <div className="fld"><label>Organizar por</label>
               <Seg grande valor={ui.agrupar} opcoes={[["code", "Projeto"], ["prest", "Prestador"], ["analyst", "Analista"], ["sla", "Prazo (SLA)"]]} onChange={(v) => setU({ agrupar: v as UiGanttEstado["agrupar"] })} />
@@ -429,7 +446,7 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm }: { linhasBruta
       <PremissasDialog
         aberto={editandoPremissas} onFechar={() => setEditandoPremissas(false)}
         nomeCenario={cenAtivo != null && cenarios[cenAtivo] ? ` · cenário: ${cenarios[cenAtivo].nome}` : " · cenário atual (não salvo)"}
-        premissas={premissas} setPremissas={setPremissas} ui={ui} setUi={setUi} hist={hist} itens={modelo.items}
+        premissas={premissas} setPremissas={setPremissas} ui={ui} setUi={setUi} hist={hist} itens={modelo.items} onDefinirPrioridade={definirPrioridade} abaInicial={abaPremissas}
       />
     </div>
   );

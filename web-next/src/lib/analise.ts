@@ -227,3 +227,17 @@ export async function definirPrioridadePrestador(
   }
   return alvos.length;
 }
+
+/** Define (ou remove) a prioridade de TODAS as análises em aberto de um
+ * código de prestador — usada pela tela de prioridades do Gantt. */
+export async function definirPrioridadePorCodigo(
+  codigo: string, nivel: number | null, justificativa: string | null, usuario: string,
+): Promise<number> {
+  const pool = obterPool();
+  const { rows } = await pool.query(
+    "SELECT id FROM prestadores WHERE arquivado_em IS NULL AND codigo = $1 AND status_analise = ANY($2) ORDER BY id LIMIT 1",
+    [codigo, STATUS_ABERTOS],
+  );
+  if (!rows[0]) throw new Error(`Nenhuma análise em aberto para o código ${codigo}.`);
+  return definirPrioridadePrestador(rows[0].id, nivel, justificativa, true, usuario);
+}

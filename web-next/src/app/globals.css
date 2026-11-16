@@ -215,7 +215,7 @@ body {
 /* Gantt — corpo (rótulos, barras, histórico) */
 .gref .gwrap{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:auto;max-height:78vh;position:relative}
 .gref .ginner{position:relative}
-.gref .ghead{position:sticky;top:0;z-index:5;display:flex;background:#fff;border-bottom:1px solid var(--line)}
+.gref .ghead{position:sticky;top:0;z-index:8;display:flex;background:#fff;border-bottom:1px solid var(--line)}
 .gref .gcorner{position:sticky;left:0;z-index:6;background:#fff;border-right:1px solid var(--line);flex:0 0 auto;font-size:11px;color:var(--muted);padding:4px 8px;display:flex;flex-direction:column;justify-content:flex-end}
 .gref .gbody{display:flex}
 .gref .glabels{position:sticky;left:0;z-index:4;background:#fff;border-right:1px solid var(--line);flex:0 0 auto}
@@ -259,3 +259,4 @@ body {
 .gref table.antb tr.total td{background:#EEF2F8;font-weight:800;border-top:2px solid var(--navy)}
 .gref table.antb a.an{color:var(--brand);cursor:pointer;font-weight:700;text-decoration:none}
 .gref table.antb a.an:hover{text-decoration:underline}
+.gref .gpin{position:sticky;top:92px;z-index:7;background:#fff;border-bottom:2px solid var(--gold);box-shadow:0 3px 6px rgba(11,42,91,.12)}

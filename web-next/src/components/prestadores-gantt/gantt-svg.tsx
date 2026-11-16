@@ -135,16 +135,26 @@ export function GanttSvg({
   const dias: number[] = [];
   for (let d = start; d <= end; d++) dias.push(d);
 
-  // Linhas (grupo + itens abertos) com posição vertical
+  // Linhas (grupo + itens abertos) com posição vertical. Com "Organizar por
+  // Projeto", os projetos prioritários (★) ficam num bloco fixo logo abaixo
+  // do cabeçalho — não rolam junto com os demais.
   type Linha = { tipo: "g"; G: Grupo; y: number; open: boolean } | { tipo: "i"; it: ItemGantt; y: number };
-  const linhas: Linha[] = [];
-  let y = 0;
-  grupos.forEach((G) => {
-    const open = autoAbrir || abertos.has(G.g);
-    linhas.push({ tipo: "g", G, y, open }); y += GH;
-    if (open) G.its.forEach((it) => { linhas.push({ tipo: "i", it, y }); y += RH; });
-  });
-  const H = y;
+  const montar = (gs: Grupo[]) => {
+    const linhas: Linha[] = [];
+    let y = 0;
+    gs.forEach((G) => {
+      const open = autoAbrir || abertos.has(G.g);
+      linhas.push({ tipo: "g", G, y, open }); y += GH;
+      if (open) G.its.forEach((it) => { linhas.push({ tipo: "i", it, y }); y += RH; });
+    });
+    return { linhas, H: y };
+  };
+  const ehGrupoPrio = (G: Grupo) => agrupar === "code" && G.its.some((i) => ehPrioritario(i));
+  const blocoFixo = montar(grupos.filter(ehGrupoPrio));
+  const blocoRolante = montar(grupos.filter((G) => !ehGrupoPrio(G)));
+  // Se o bloco fixo ficar alto demais (ex.: muitos grupos abertos), deixa de
+  // fixar para não tomar a tela inteira.
+  const fixar = blocoFixo.linhas.length > 0 && blocoFixo.H <= 320;
 
   useEffect(() => {
     const d = dlgRef.current;
@@ -164,53 +174,8 @@ export function GanttSvg({
     return { late, crit, parts };
   }
 
-  if (!grupos.length) {
-    return <div className="gwrap"><div className="note" style={{ padding: 20 }}>Nenhum item para os filtros atuais.</div></div>;
-  }
-
-  return (
-    <div className="gwrap">
-      <div className="ginner" style={{ width: LW + W }}>
-        <div className="ghead">
-          <div className="gcorner" style={{ width: LW, height: HH }}>
-            <div><b>{grupos.length}</b> {grupos.length === 1 ? "grupo" : "grupos"} · <b>{grupos.reduce((t, g) => t + g.its.length, 0)}</b> itens</div>
-            <div style={{ marginTop: "auto", fontWeight: 600, color: "#0B2A5B" }}>Pranchas para analisar por semana ▸</div>
-          </div>
-          <svg width={W} height={HH} style={{ display: "block" }}>
-            {dias.map((d) => {
-              const dt = new Date(d * 864e5);
-              return (
-                <g key={d}>
-                  {(dt.getUTCDate() === 1 || d === start) && <text x={X(d) + 4} y={14} fontSize={12} fontWeight={700} fill="#0B2A5B">{MES[dt.getUTCMonth()]}/{String(dt.getUTCFullYear()).slice(2)}</text>}
-                  {dt.getUTCDate() === 1 && <line x1={X(d)} x2={X(d)} y1={0} y2={HH} stroke="#C9D2E0" />}
-                  {dow(d) === 1 && <>
-                    <line x1={X(d)} x2={X(d)} y1={20} y2={HH} stroke="#EDF0F5" />
-                    {px * 7 >= 34 && <text x={X(d) + 3} y={32} fontSize={10.5} fill="#5B6B82">{ddmm(d)}</text>}
-                  </>}
-                </g>
-              );
-            })}
-            {semanas.map((w, j) => {
-              const ws = Math.max(w.k, start), we = Math.min(w.k + 6, end);
-              if (we < start) return null;
-              const v = wTot[j], h = Math.round((v / mx) * 38), hp = Math.round((wPri[j] / mx) * 38);
-              const x = X(ws) + 2, ww = Math.max(4, X(we + 1) - X(ws) - 4);
-              const html = `<b>Semana de ${fmt(w.k)}</b><br>Pranchas para analisar: <b>${nf(v)}</b><br>★ dos prioritários: <b>${nf(wPri[j])}</b>`;
-              return (
-                <g key={w.k} onMouseMove={(e) => tip(e, html)} onMouseLeave={sem}>
-                  <rect x={x} y={88 - h} width={ww} height={Math.max(h, 1)} rx={3} fill="#9DB9E6" />
-                  {hp > 0 && <rect x={x} y={88 - hp} width={ww} height={hp} rx={3} fill="#C9A227" />}
-                  {ww >= 18 && v >= 0.5 && <text x={x + ww / 2} y={84 - h} fontSize={10.5} fontWeight={700} textAnchor="middle" fill="#0B2A5B" pointerEvents="none">{nf(v)}</text>}
-                </g>
-              );
-            })}
-            <line x1={X(base)} x2={X(base)} y1={18} y2={HH} stroke={GC.today} strokeWidth={3} />
-            <rect x={X(base) - 22} y={0} width={44} height={17} rx={8} fill={GC.today} />
-            <text x={X(base)} y={12.5} fontSize={10.5} fontWeight={800} textAnchor="middle" fill="#0B2A5B">HOJE</text>
-          </svg>
-        </div>
-
-        <div className="gbody">
+  const corpo = ({ linhas, H }: { linhas: Linha[]; H: number }) => (
+    <div className="gbody">
           <div className="glabels" style={{ width: LW }}>
             {linhas.map((l) => {
               if (l.tipo === "g") {
@@ -334,6 +299,56 @@ export function GanttSvg({
             })}
           </svg>
         </div>
+  );
+
+  if (!grupos.length) {
+    return <div className="gwrap"><div className="note" style={{ padding: 20 }}>Nenhum item para os filtros atuais.</div></div>;
+  }
+
+  return (
+    <div className="gwrap">
+      <div className="ginner" style={{ width: LW + W }}>
+        <div className="ghead">
+          <div className="gcorner" style={{ width: LW, height: HH }}>
+            <div><b>{grupos.length}</b> {grupos.length === 1 ? "grupo" : "grupos"} · <b>{grupos.reduce((t, g) => t + g.its.length, 0)}</b> itens</div>
+            <div style={{ marginTop: "auto", fontWeight: 600, color: "#0B2A5B" }}>Pranchas para analisar por semana ▸</div>
+          </div>
+          <svg width={W} height={HH} style={{ display: "block" }}>
+            {dias.map((d) => {
+              const dt = new Date(d * 864e5);
+              return (
+                <g key={d}>
+                  {(dt.getUTCDate() === 1 || (d === start && !dias.slice(0, Math.ceil(46 / px)).some((x) => new Date(x * 864e5).getUTCDate() === 1))) && <text x={X(d) + 4} y={14} fontSize={12} fontWeight={700} fill="#0B2A5B">{MES[dt.getUTCMonth()]}/{String(dt.getUTCFullYear()).slice(2)}</text>}
+                  {dt.getUTCDate() === 1 && <line x1={X(d)} x2={X(d)} y1={0} y2={HH} stroke="#C9D2E0" />}
+                  {dow(d) === 1 && <>
+                    <line x1={X(d)} x2={X(d)} y1={20} y2={HH} stroke="#EDF0F5" />
+                    {px * 7 >= 34 && <text x={X(d) + 3} y={32} fontSize={10.5} fill="#5B6B82">{ddmm(d)}</text>}
+                  </>}
+                </g>
+              );
+            })}
+            {semanas.map((w, j) => {
+              const ws = Math.max(w.k, start), we = Math.min(w.k + 6, end);
+              if (we < start) return null;
+              const v = wTot[j], h = Math.round((v / mx) * 38), hp = Math.round((wPri[j] / mx) * 38);
+              const x = X(ws) + 2, ww = Math.max(4, X(we + 1) - X(ws) - 4);
+              const html = `<b>Semana de ${fmt(w.k)}</b><br>Pranchas para analisar: <b>${nf(v)}</b><br>★ dos prioritários: <b>${nf(wPri[j])}</b>`;
+              return (
+                <g key={w.k} onMouseMove={(e) => tip(e, html)} onMouseLeave={sem}>
+                  <rect x={x} y={88 - h} width={ww} height={Math.max(h, 1)} rx={3} fill="#9DB9E6" />
+                  {hp > 0 && <rect x={x} y={88 - hp} width={ww} height={hp} rx={3} fill="#C9A227" />}
+                  {ww >= 18 && v >= 0.5 && <text x={x + ww / 2} y={84 - h} fontSize={10.5} fontWeight={700} textAnchor="middle" fill="#0B2A5B" pointerEvents="none">{nf(v)}</text>}
+                </g>
+              );
+            })}
+            <line x1={X(base)} x2={X(base)} y1={18} y2={HH} stroke={GC.today} strokeWidth={3} />
+            <rect x={X(base) - 22} y={0} width={44} height={17} rx={8} fill={GC.today} />
+            <text x={X(base)} y={12.5} fontSize={10.5} fontWeight={800} textAnchor="middle" fill="#0B2A5B">HOJE</text>
+          </svg>
+        </div>
+
+        {fixar && <div className="gpin">{corpo(blocoFixo)}</div>}
+        {corpo(fixar ? blocoRolante : montar(grupos))}
       </div>
 
       {dica && (

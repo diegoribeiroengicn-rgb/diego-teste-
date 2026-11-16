@@ -19,18 +19,31 @@ function Num({ valor, min, max, onChange, ov }: { valor: number | ""; min: numbe
  * nunca altera a planilha nem o banco. A prioridade (★) vem do sistema
  * (nível definido na edição da análise do prestador). */
 export function PremissasDialog({
-  aberto, onFechar, nomeCenario, premissas, setPremissas, ui, setUi, hist, itens,
+  aberto, onFechar, nomeCenario, premissas, setPremissas, ui, setUi, hist, itens, onDefinirPrioridade, abaInicial,
 }: {
   aberto: boolean; onFechar: () => void; nomeCenario: string;
   premissas: PremissasEstado; setPremissas: (p: PremissasEstado) => void;
   ui: UiGanttEstado; setUi: (u: UiGanttEstado) => void;
   hist: FaixaHistorica[]; itens: ItemGantt[];
+  onDefinirPrioridade: (codigo: string, nivel: number | null) => Promise<string | null>;
+  abaInicial?: Aba;
 }) {
+  const [novoCodigo, setNovoCodigo] = useState("");
+  const [novoNivel, setNovoNivel] = useState("3");
+  const [msgPrio, setMsgPrio] = useState<string | null>(null);
+  const [salvandoPrio, setSalvandoPrio] = useState(false);
+  async function definir(codigo: string, nivel: number | null) {
+    setSalvandoPrio(true); setMsgPrio(null);
+    const erro = await onDefinirPrioridade(codigo, nivel);
+    setMsgPrio(erro ?? (nivel ? `${codigo}: prioridade nível ${nivel} definida.` : `${codigo}: prioridade removida.`));
+    setSalvandoPrio(false);
+  }
   const ref = useRef<HTMLDialogElement>(null);
   const [aba, setAba] = useState<Aba>("prio");
   const [novoFeriado, setNovoFeriado] = useState("");
   const [lote, setLote] = useState<{ qual: "P" | "I"; valor: number }>({ qual: "P", valor: 10 });
 
+  useEffect(() => { if (aberto && abaInicial) setAba(abaInicial); }, [aberto, abaInicial]);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
@@ -71,20 +84,39 @@ export function PremissasDialog({
 
         {aba === "prio" && (
           <div className="card">
-            <h3>★ Projetos prioritários <span className="hint">aparecem no topo do Gantt (Organizar por Projeto) com destaque dourado</span></h3>
+            <h3>★ Projetos prioritários <span className="hint">aparecem no topo do Gantt (Organizar por Projeto), fixos, com destaque dourado</span></h3>
             <div className="note" style={{ marginBottom: 8 }}>
-              A prioridade é definida no sistema: <b>Projetos → Editar</b> (análise do prestador) → bloco <b>★ Prioridade</b> (nível 1, 2 ou 3).
-              Nível 3 = SLA 7 du, nível 2 = 5 du, nível 1 = até 3 du. Abaixo, o que está valendo agora:
+              Aqui você define a prioridade de um projeto (código) inteiro. Vale para todas as análises em aberto do código e fica salva no sistema
+              (também aparece na Lista de Prioridades). Nível 3 = SLA 7 du, nível 2 = 5 du, nível 1 = até 3 du.
             </div>
             <table className="pt">
-              <thead><tr><th>Código</th><th>Prestador</th><th>Nível</th><th>Análises abertas</th></tr></thead>
+              <thead><tr><th>Código</th><th>Prestador</th><th>Nível</th><th>Análises abertas</th><th /></tr></thead>
               <tbody>
                 {[...prioritarios.entries()].sort((a, b) => a[1].nivel - b[1].nivel || a[0].localeCompare(b[0])).map(([c, v]) => (
-                  <tr key={c}><td><span className="star">★</span><b>{c}</b></td><td>{v.prest}</td><td>Nível {v.nivel}</td><td>{v.n}</td></tr>
+                  <tr key={c}>
+                    <td><span className="star">★</span><b>{c}</b></td><td>{v.prest}</td>
+                    <td>
+                      <select disabled={salvandoPrio} value={v.nivel} onChange={(e) => definir(c, Number(e.target.value))} style={{ border: "1px solid #DDE3EC", borderRadius: 6, height: 26 }}>
+                        <option value={1}>Nível 1 (até 3 du)</option><option value={2}>Nível 2 (5 du)</option><option value={3}>Nível 3 (7 du)</option>
+                      </select>
+                    </td>
+                    <td>{v.n}</td>
+                    <td style={{ textAlign: "right" }}><button type="button" className="btn sm" disabled={salvandoPrio} onClick={() => definir(c, null)}>remover</button></td>
+                  </tr>
                 ))}
-                {!prioritarios.size && <tr><td colSpan={4} className="note">Nenhum projeto prioritário definido.</td></tr>}
+                {!prioritarios.size && <tr><td colSpan={5} className="note">Nenhum projeto prioritário definido.</td></tr>}
               </tbody>
             </table>
+            <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center", background: "#FFFBEF", border: "1px solid #E9D9A0", borderRadius: 8, padding: "8px 10px" }} className="note">
+              <b>Adicionar prioritário:</b>
+              <input list="dlCodigosPrio" value={novoCodigo} onChange={(e) => setNovoCodigo(e.target.value.toUpperCase())} placeholder="código, ex.: P241" className="btn sm" style={{ width: 150 }} />
+              <datalist id="dlCodigosPrio">{codigos.filter((c) => !prioritarios.has(c)).map((c) => <option key={c} value={c} />)}</datalist>
+              <select value={novoNivel} onChange={(e) => setNovoNivel(e.target.value)} className="btn sm">
+                <option value="1">Nível 1 (até 3 du)</option><option value="2">Nível 2 (5 du)</option><option value="3">Nível 3 (7 du)</option>
+              </select>
+              <button type="button" className="btn sm pri" disabled={salvandoPrio || !novoCodigo.trim()} onClick={async () => { await definir(novoCodigo.trim(), Number(novoNivel)); setNovoCodigo(""); }}>+ Adicionar</button>
+            </div>
+            {msgPrio && <div className="note" style={{ marginTop: 8, color: "#173E77" }}>{msgPrio}</div>}
           </div>
         )}
 
