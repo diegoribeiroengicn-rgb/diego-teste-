@@ -1,6 +1,6 @@
 import type { EntregaFutura } from "@/lib/prestadores-gantt/motor";
 
-export type AgrupamentoGantt = "code" | "prest" | "analyst" | "sla" | "none";
+export type AgrupamentoGantt = "code" | "prest" | "analyst" | "sla" | "disc" | "none";
 
 export type FiltrosGanttEstado = {
   busca: string;

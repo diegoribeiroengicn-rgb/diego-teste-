@@ -53,6 +53,7 @@ const AGRUPADORES: Record<AgrupamentoGantt, (it: ItemGantt) => string> = {
   prest: (it) => it.prest,
   analyst: (it) => `Analista: ${it.analyst}`,
   sla: (it) => `SLA de análise ${it.slaI} dias úteis`,
+  disc: (it) => `Disciplina: ${(it.discAct || it.discs).join("/") || "—"}`,
   none: () => "Todos",
 };
 
@@ -71,13 +72,13 @@ export function GanttSvg({
   zoom: number;
   abertos: Set<string>;
   marcadores: { documentos: string[]; prestadores: string[] };
-  modulo?: "prestadores" | "cessionarios";
+  modulo?: "prestadores" | "cessionarios" | "consolidado";
   /** Vencimento contratual por análise — só Gestor/Admin (nulo para analistas). */
   contratuais?: Record<number, { vencimento: string; sla: number }> | null;
   onAlternarGrupo: (g: string) => void;
   onGrupos: (nomes: string[]) => void;
 }) {
-  const adaptar = (t: string) => (modulo === "cessionarios" ? t.replace("Projeto (obra)", "Tipo").replace(/Prestador/g, "Cessionário").replace(/prestador/g, "cessionário") : t);
+  const adaptar = (t: string) => (modulo === "consolidado" ? t.replace(/Prestador/g, "Solicitante").replace(/prestador/g, "solicitante") : modulo === "cessionarios" ? t.replace("Projeto (obra)", "Tipo").replace(/Prestador/g, "Cessionário").replace(/prestador/g, "cessionário") : t);
   const [dica, setDica] = useState<{ x: number; y: number; html: string } | null>(null);
   const [aberto, setAberto] = useState<ItemGantt | null>(null);
   const docsPrio = useMemo(() => new Set(marcadores.documentos), [marcadores]);
@@ -179,7 +180,9 @@ export function GanttSvg({
     const nAn = G.its.filter((i) => i.phase === "Em análise").length;
     const nPrev = G.its.filter((i) => i.sim).length;
     const nSd = G.its.filter((i) => i.phase === "Sem dados" || i.phase === "HOLD").length;
-    const parts = [nPrest && `${nPrest} ${adaptar("com o prestador")}`, nAn && `${nAn} em análise`, nPrev && `${nPrev} a entregar`, nSd && `${nSd} sem dados/HOLD`].filter(Boolean).join(" · ");
+    const nP = G.its.filter((i) => i.fluxo === "prestadores").length, nC = G.its.filter((i) => i.fluxo === "cessionarios").length;
+    const mix = nP && nC ? `${nP} prest. · ${nC} cess.` : "";
+    const parts = [mix, nPrest && `${nPrest} ${adaptar("com o prestador")}`, nAn && `${nAn} em análise`, nPrev && `${nPrev} a entregar`, nSd && `${nSd} sem dados/HOLD`].filter(Boolean).join(" · ");
     return { late, crit, parts };
   }
 
@@ -212,6 +215,7 @@ export function GanttSvg({
                   <div className="it">
                     {agrupar !== "code" && ehPrioritario(it) && <span className="star">★</span>}
                     {(docsPrio.has(it.code) || prestPrio.has(it.prest)) && <span className="star" title="Projeto ou prestador prioritário">☆</span>}
+                    {it.fluxo && <span className="tag" style={{ background: it.fluxo === "prestadores" ? "#5B6B82" : "#7B4FB3" }}>{it.fluxo === "prestadores" ? "PREST" : "CESS"}</span>}
                     {it.crit && <span className="tag">REV {it.revAT} · crítica</span>}
                     {agrupar !== "code" ? `${it.code} · ` : ""}{tituloItem(it)}
                   </div>

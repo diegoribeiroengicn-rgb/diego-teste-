@@ -471,7 +471,7 @@ export function PainelGanttPrestadores({ linhasBrutas, geradoEm, marcadores, pod
   );
 }
 
-function Kpi({ ico, lbl, val, det, cls }: { ico: string; lbl: string; val: React.ReactNode; det: React.ReactNode; cls?: string }) {
+export function Kpi({ ico, lbl, val, det, cls }: { ico: string; lbl: string; val: React.ReactNode; det: React.ReactNode; cls?: string }) {
   return (
     <div className={`card kpi ${cls || ""}`}>
       <div className="lbl">{ico} {lbl}</div>
@@ -481,7 +481,7 @@ function Kpi({ ico, lbl, val, det, cls }: { ico: string; lbl: string; val: React
   );
 }
 
-function Seg({ valor, opcoes, onChange, grande }: { valor: string; opcoes: [string, string][]; onChange: (v: string) => void; grande?: boolean }) {
+export function Seg({ valor, opcoes, onChange, grande }: { valor: string; opcoes: [string, string][]; onChange: (v: string) => void; grande?: boolean }) {
   return (
     <div className={`seg ${grande ? "big" : ""}`}>
       {opcoes.map(([v, t]) => (
@@ -491,7 +491,7 @@ function Seg({ valor, opcoes, onChange, grande }: { valor: string; opcoes: [stri
   );
 }
 
-function SelectFiltro({
+export function SelectFiltro({
   rotulo, valor, opcoes, onChange, semTodos,
 }: { rotulo: string; valor: string; opcoes: (string | [string, string])[]; onChange: (v: string) => void; semTodos?: boolean }) {
   return (
@@ -504,7 +504,7 @@ function SelectFiltro({
   );
 }
 
-function SeletorMultiplo({
+export function SeletorMultiplo({
   rotulo, opcoes, selecionados, onAlternar, onLimpar,
 }: { rotulo: string; opcoes: string[]; selecionados: string[]; onAlternar: (valor: string) => void; onLimpar: () => void }) {
   const [aberto, setAberto] = useState(false);
