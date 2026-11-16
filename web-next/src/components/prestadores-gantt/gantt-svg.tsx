@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgregadoGantt, EstagioGantt, ItemGantt } from "@/lib/prestadores-gantt/motor";
-import { Calendario, dow, ehPrioritario, fmt } from "@/lib/prestadores-gantt/motor";
+import { Calendario, dn2iso, dow, ehPrioritario, fmt } from "@/lib/prestadores-gantt/motor";
 import { aggregate } from "@/lib/prestadores-gantt/motor";
 import { estaAberto } from "./kpis";
 import type { AgrupamentoGantt } from "./tipos-estado";
@@ -59,7 +59,7 @@ const AGRUPADORES: Record<AgrupamentoGantt, (it: ItemGantt) => string> = {
 type Grupo = { g: string; its: ItemGantt[] };
 
 export function GanttSvg({
-  itens, agregado, base, hEnd, cal, agrupar, mostrarEstimativas, zoom, abertos, marcadores, onAlternarGrupo, onGrupos,
+  itens, agregado, base, hEnd, cal, agrupar, mostrarEstimativas, zoom, abertos, marcadores, modulo = "prestadores", contratuais = null, onAlternarGrupo, onGrupos,
 }: {
   itens: ItemGantt[];
   agregado: AgregadoGantt;
@@ -71,9 +71,13 @@ export function GanttSvg({
   zoom: number;
   abertos: Set<string>;
   marcadores: { documentos: string[]; prestadores: string[] };
+  modulo?: "prestadores" | "cessionarios";
+  /** Vencimento contratual por análise — só Gestor/Admin (nulo para analistas). */
+  contratuais?: Record<number, { vencimento: string; sla: number }> | null;
   onAlternarGrupo: (g: string) => void;
   onGrupos: (nomes: string[]) => void;
 }) {
+  const adaptar = (t: string) => (modulo === "cessionarios" ? t.replace("Projeto (obra)", "Tipo").replace(/Prestador/g, "Cessionário").replace(/prestador/g, "cessionário") : t);
   const [dica, setDica] = useState<{ x: number; y: number; html: string } | null>(null);
   const [aberto, setAberto] = useState<ItemGantt | null>(null);
   const docsPrio = useMemo(() => new Set(marcadores.documentos), [marcadores]);
@@ -88,7 +92,7 @@ export function GanttSvg({
   const W = (end - start + 1) * px;
   const LW = 380, RH = 40, GH = 46, HH = 92;
   const X = (d: number) => (d - start) * px;
-  const tip = (e: React.MouseEvent, html: string) => setDica({ x: e.clientX, y: e.clientY, html });
+  const tip = (e: React.MouseEvent, html: string) => setDica({ x: e.clientX, y: e.clientY, html: adaptar(html) });
   const sem = () => setDica(null);
 
   const estagiosVisiveis = (it: ItemGantt) =>
@@ -175,7 +179,7 @@ export function GanttSvg({
     const nAn = G.its.filter((i) => i.phase === "Em análise").length;
     const nPrev = G.its.filter((i) => i.sim).length;
     const nSd = G.its.filter((i) => i.phase === "Sem dados" || i.phase === "HOLD").length;
-    const parts = [nPrest && `${nPrest} com o prestador`, nAn && `${nAn} em análise`, nPrev && `${nPrev} a entregar`, nSd && `${nSd} sem dados/HOLD`].filter(Boolean).join(" · ");
+    const parts = [nPrest && `${nPrest} ${adaptar("com o prestador")}`, nAn && `${nAn} em análise`, nPrev && `${nPrev} a entregar`, nSd && `${nSd} sem dados/HOLD`].filter(Boolean).join(" · ");
     return { late, crit, parts };
   }
 
@@ -211,7 +215,7 @@ export function GanttSvg({
                     {it.crit && <span className="tag">REV {it.revAT} · crítica</span>}
                     {agrupar !== "code" ? `${it.code} · ` : ""}{tituloItem(it)}
                   </div>
-                  <div className="is" style={{ color: st.c }}>{st.t}</div>
+                  <div className="is" style={{ color: st.c }}>{adaptar(st.t)}</div>
                 </div>
               );
             })}
@@ -280,7 +284,7 @@ export function GanttSvg({
                     return (
                       <g key={si}>
                         {s.e >= start && <rect x={x1} y={yy + 9} width={w} height={RH - 18} rx={5} fill={fill} stroke={stroke} strokeDasharray={dash ? "4 3" : undefined} onMouseMove={(e) => tip(e, html)} onMouseLeave={sem} />}
-                        {s.e >= start && w >= txt.length * 6.2 + 10 && <text x={x1 + w / 2} y={yy + RH / 2 + 4} fontSize={11} fontWeight={600} textAnchor="middle" fill={tc} pointerEvents="none">{txt}</text>}
+                        {s.e >= start && w >= txt.length * 6.2 + 10 && <text x={x1 + w / 2} y={yy + RH / 2 + 4} fontSize={11} fontWeight={600} textAnchor="middle" fill={tc} pointerEvents="none">{adaptar(txt)}</text>}
                         {vencida && xb > xa && (
                           <>
                             <rect x={xa} y={yy + 9} width={xb - xa} height={RH - 18} rx={5} fill={GC.late}
@@ -362,7 +366,7 @@ export function GanttSvg({
       )}
 
       <dialog ref={dlgRef} onClose={() => setAberto(null)} onClick={(e) => e.target === dlgRef.current && setAberto(null)}>
-        {aberto && <HistoricoItem it={aberto} onFechar={() => setAberto(null)} />}
+        {aberto && <HistoricoItem it={aberto} onFechar={() => setAberto(null)} adaptar={adaptar} contratuais={contratuais} />}
       </dialog>
     </div>
   );
@@ -376,7 +380,13 @@ function Marca({ o }: { o: { v: number | null; k: string } | undefined }) {
   return o && o.v != null ? <>{fmt(o.v)}<span className={`dk ${o.k}`}>{DK[o.k]}</span></> : <span className="note">—</span>;
 }
 
-function HistoricoItem({ it, onFechar }: { it: ItemGantt; onFechar: () => void }) {
+function HistoricoItem({ it, onFechar, adaptar, contratuais }: {
+  it: ItemGantt; onFechar: () => void; adaptar: (t: string) => string; contratuais: Record<number, { vencimento: string; sla: number }> | null;
+}) {
+  // Prazo CONTRATUAL: só Gestor/Admin (o servidor não envia o mapa aos demais).
+  const idAtiva = it.active?.[0]?.row ?? it.rows[it.rows.length - 1]?.row;
+  const ctr = contratuais && idAtiva != null ? contratuais[idAtiva] : null;
+  const operIso = it.d.anaDue?.v != null ? dn2iso(it.d.anaDue.v) : null;
   const dts: [string, { v: number | null; k: string } | undefined][] = [
     ["Emissão da AT (M)", it.d.at], ["Enviado pelo prestador", it.d.entrega], ["Entrega prevista do prestador", it.d.prestDue],
     ["Recebimento previsto / real", it.d.recv], ["Conclusão prevista da análise", it.d.anaDue], ["Data Limite registrada (L)", it.d.Lreg],
@@ -396,7 +406,10 @@ function HistoricoItem({ it, onFechar }: { it: ItemGantt; onFechar: () => void }
               <tr><td>REV. AT vigente</td><td>{it.revAT ?? "—"}</td></tr>
               <tr><td>Analista</td><td>{it.analyst}</td></tr>
               <tr><td>Pranchas (ciclo atual)</td><td>{it.pr}</td></tr>
-              <tr><td>SLA prestador / análise</td><td>{it.slaP} / {it.slaI} du</td></tr>
+              <tr><td>{adaptar("SLA prestador / análise")}</td><td>{it.slaP} / {it.slaI} du</td></tr>
+              {ctr && <tr><td>SLA contratual (gestão)</td><td>{ctr.sla} du</td></tr>}
+              {ctr && <tr><td>Vencimento contratual (gestão)</td><td>{ctr.vencimento.split("-").reverse().join("/")}</td></tr>}
+              {ctr && operIso && <tr><td>Operacional x contratual (gestão)</td><td>{operIso < ctr.vencimento ? "operacional antecede o contratual" : operIso > ctr.vencimento ? "operacional ultrapassa o contratual" : "coincidem"}</td></tr>}
               {it.nivelPrioridade != null && <tr><td>Prioridade</td><td><span className="star">★</span>Nível {it.nivelPrioridade}</td></tr>}
               <tr><td>Prazo</td><td><span className={`pill ${CLASSE_PRAZO[it.prazo ?? ""] || "p-sd"}`}>{it.prazo}</span> {it.crit && <span className="pill p-crit">CRÍTICA</span>}</td></tr>
               {it.old && <tr><td>Projeto antigo</td><td>Sim — fora da projeção principal</td></tr>}
@@ -404,7 +417,7 @@ function HistoricoItem({ it, onFechar }: { it: ItemGantt; onFechar: () => void }
           </div>
           <div>
             <table className="mini"><thead><tr><th>Data projetada</th><th>Valor</th></tr></thead><tbody>
-              {dts.filter(([, o]) => o && o.v != null).map(([n, o]) => <tr key={n}><td>{n}</td><td><Marca o={o} /></td></tr>)}
+              {dts.filter(([, o]) => o && o.v != null).map(([n, o]) => <tr key={n}><td>{adaptar(n)}</td><td><Marca o={o} /></td></tr>)}
             </tbody></table>
             {it.pend.length > 0 && <div className="warn" style={{ marginTop: 8 }}>{it.pend.map((p, i) => <div key={i}>{p}</div>)}</div>}
             {it.flags.length > 0 && <div className="info" style={{ marginTop: 8 }}>{it.flags.map((p, i) => <div key={i}>{p}</div>)}</div>}
@@ -414,7 +427,7 @@ function HistoricoItem({ it, onFechar }: { it: ItemGantt; onFechar: () => void }
         <table className="mini"><thead><tr><th>Etapa</th><th>Início</th><th>Fim</th><th>REV</th><th>Tipo</th><th>Prob.</th><th>Pranchas</th></tr></thead><tbody>
           {it.stages.map((s: EstagioGantt, i) => (
             <tr key={i}>
-              <td>{s.kind === "prest" ? "Prestador" : s.kind === "hold" ? "HOLD" : s.cat === "hist" ? "Análise (histórico)" : "Análise interna"}{s.cyc ? ` · ciclo est. ${s.cyc}` : ""}</td>
+              <td>{s.kind === "prest" ? adaptar("Prestador") : s.kind === "hold" ? "HOLD" : s.cat === "hist" ? "Análise (histórico)" : "Análise interna"}{s.cyc ? ` · ciclo est. ${s.cyc}` : ""}</td>
               <td>{fmt(s.s)}</td><td>{fmt(s.e)}</td><td>{s.rev ?? "—"}</td><td>{ROT_DK[s.dk]}</td><td>{nf(s.w * 100)}%</td><td>{nf(s.pr, 1)}</td>
             </tr>
           ))}
