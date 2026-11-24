@@ -12,7 +12,7 @@ export default async function PaginaOprCessionarios({
 }) {
   const { mes: mesParam, ano: anoParam } = await searchParams;
   const hoje = hojeBr();
-  const mes = Number(mesParam) || hoje.getUTCMonth() + 1;
+  const mes = mesParam === "0" ? 0 : Number(mesParam) || hoje.getUTCMonth() + 1; // 0 = ano todo
   const ano = Number(anoParam) || hoje.getUTCFullYear();
   const sessao = await obterSessao();
 

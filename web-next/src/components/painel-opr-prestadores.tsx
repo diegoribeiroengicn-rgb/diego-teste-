@@ -7,7 +7,7 @@ import {
 } from "@/components/opr-cessionarios-charts";
 import { BotaoRelatorio } from "@/components/baixar-relatorio";
 import type { DadosOprPrestadores } from "@/lib/opr-prestadores";
-import { MESES_PT } from "@/lib/meses";
+import { nomeMes } from "@/lib/meses";
 
 function CartaoKpi({ titulo, valor, cor }: { titulo: string; valor: string; cor?: string }) {
   return (
@@ -37,7 +37,7 @@ export function PainelOprPrestadores({
   podeExportar: boolean;
 }) {
   const { resumo } = dados;
-  const tituloMesAno = `${MESES_PT[mes - 1]} ${ano}`;
+  const tituloMesAno = `${nomeMes(mes)} ${ano}`;
 
   return (
     <div className="mx-auto max-w-6xl px-8 py-10">

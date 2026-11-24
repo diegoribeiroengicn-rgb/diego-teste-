@@ -171,13 +171,14 @@ export function PainelRelatoriosMensais({
       <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-4">
           <p className="text-xs text-(--color-text-dim)">
-            {competenciaLabel} × {MESES_PT[mesAnt - 1].charAt(0)}{MESES_PT[mesAnt - 1].slice(1).toLowerCase()} de {anoAnt}
+            {competenciaLabel} × {mesAnt === 0 ? `ano todo de ${anoAnt}` : `${MESES_PT[mesAnt - 1].charAt(0)}${MESES_PT[mesAnt - 1].slice(1).toLowerCase()} de ${anoAnt}`}
           </p>
           <div className="mt-3 grid grid-cols-2 gap-3">
-            <Metrica titulo="Recebidos" valor={comparativoMensal(indicadoresAtual, indicadoresMesAnt, "recebidos")[0]} delta={comparativoMensal(indicadoresAtual, indicadoresMesAnt, "recebidos")[1]} />
-            <Metrica titulo="Concluídos" valor={comparativoMensal(indicadoresAtual, indicadoresMesAnt, "concluidos")[0]} delta={comparativoMensal(indicadoresAtual, indicadoresMesAnt, "concluidos")[1]} />
+            <Metrica titulo="Recebidos" valor={comparativoMensal(indicadoresAtual, indicadoresMesAnt, "recebidos", mes === 0 ? "ano anterior" : "mês anterior")[0]} delta={comparativoMensal(indicadoresAtual, indicadoresMesAnt, "recebidos", mes === 0 ? "ano anterior" : "mês anterior")[1]} />
+            <Metrica titulo="Concluídos" valor={comparativoMensal(indicadoresAtual, indicadoresMesAnt, "concluidos", mes === 0 ? "ano anterior" : "mês anterior")[0]} delta={comparativoMensal(indicadoresAtual, indicadoresMesAnt, "concluidos", mes === 0 ? "ano anterior" : "mês anterior")[1]} />
           </div>
         </div>
+        {mes !== 0 && (
         <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-4">
           <p className="text-xs text-(--color-text-dim)">{competenciaLabel} × mesmo mês de {ano - 1}</p>
           <div className="mt-3 grid grid-cols-2 gap-3">
@@ -185,6 +186,7 @@ export function PainelRelatoriosMensais({
             <Metrica titulo="Concluídos (ano anterior)" valor={comparativoMensal(indicadoresAtual, indicadoresAnoPassado, "concluidos")[0]} delta={comparativoMensal(indicadoresAtual, indicadoresAnoPassado, "concluidos")[1]} />
           </div>
         </div>
+        )}
         <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-1) p-4">
           <p className="text-xs text-(--color-text-dim)">Acumulado {ano}</p>
           <div className="mt-3 grid grid-cols-2 gap-3">

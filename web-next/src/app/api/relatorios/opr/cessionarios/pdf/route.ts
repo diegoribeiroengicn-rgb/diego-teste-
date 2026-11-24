@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { mes, ano } = (await req.json()) as { mes: number; ano: number };
-  if (!mes || !ano) {
+  if (typeof mes !== "number" || mes < 0 || mes > 12 || !ano) {
     return NextResponse.json({ erro: "Mês e ano são obrigatórios." }, { status: 400 });
   }
 

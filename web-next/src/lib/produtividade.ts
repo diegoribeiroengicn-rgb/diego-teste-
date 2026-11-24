@@ -55,13 +55,14 @@ function noMes(data: string | null, mes: number | null, ano: number | null): boo
   if (mes == null && ano == null) return true;
   const d = paraData(data);
   if (!d) return false;
-  if (mes != null && d.getUTCMonth() + 1 !== mes) return false;
+  if (mes != null && mes !== 0 && d.getUTCMonth() + 1 !== mes) return false; // mes 0 = ano todo
   if (ano != null && d.getUTCFullYear() !== ano) return false;
   return true;
 }
 
 function fimDoMesUTC(mes: number, ano: number): number {
-  return Date.UTC(ano, mes, 0, 23, 59, 59);
+  // mes 0 = ano todo: o "fim do período" é 31/12.
+  return Date.UTC(ano, mes === 0 ? 12 : mes, 0, 23, 59, 59);
 }
 
 /** Indicadores de um módulo (Prestadores, Cessionários, ou os dois juntos
@@ -114,20 +115,21 @@ export function linhasDaCompetencia(
 }
 
 export function mesAnterior(mes: number, ano: number): [number, number] {
+  if (mes === 0) return [0, ano - 1]; // ano todo → ano anterior inteiro
   return mes === 1 ? [12, ano - 1] : [mes - 1, ano];
 }
 
 /** [valor atual, texto do delta] para comparação com outra competência —
  * mesma regra de gat/relatorios_mensais.py::comparativo_mensal. */
 export function comparativoMensal(
-  atual: IndicadoresMensais, anterior: IndicadoresMensais, chave: keyof IndicadoresMensais,
+  atual: IndicadoresMensais, anterior: IndicadoresMensais, chave: keyof IndicadoresMensais, rotuloAnterior = "mês anterior",
 ): [number, string | null] {
   const valorAtual = atual[chave];
   const valorAnterior = anterior[chave];
   if (!valorAnterior) return [valorAtual, null];
   const delta = valorAtual - valorAnterior;
   const sinal = delta >= 0 ? "+" : "";
-  return [valorAtual, `${sinal}${delta} vs. mês anterior`];
+  return [valorAtual, `${sinal}${delta} vs. ${rotuloAnterior}`];
 }
 
 /** Indicadores acumulados do ano inteiro — mesma regra de

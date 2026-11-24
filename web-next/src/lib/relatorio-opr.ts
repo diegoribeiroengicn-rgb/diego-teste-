@@ -5,7 +5,7 @@ import { desenharBarrasAgrupadas, desenharBarrasEmpilhadas, desenharDonut } from
 import type { DadosOprCessionarios } from "@/lib/opr-cessionarios";
 import type { DadosOprPrestadores } from "@/lib/opr-prestadores";
 import type { CessionarioAtivo } from "@/lib/cessionarios-ativos";
-import { MESES_PT, MESES_PT_ABREV } from "@/lib/meses";
+import { MESES_PT_ABREV, nomeMes } from "@/lib/meses";
 
 /** Mesma paleta institucional Tecnoplano usada nos gráficos em tela
  * (opr-cessionarios-charts.tsx) e no modelo de referência em Plotly. */
@@ -80,7 +80,7 @@ function construirPagina(
   },
 ): void {
   const { entidade, mes, ano, dados, cessionariosAtivos } = opts;
-  const tituloMesAno = `${MESES_PT[mes - 1]} ${ano}`;
+  const tituloMesAno = `${nomeMes(mes)} ${ano}`;
   const { resumo } = dados;
 
   cabecalhoOpr(doc, `GAT ${entidade}`, tituloMesAno);

@@ -25,6 +25,7 @@ export function SeletorCompetencia({ mes, ano }: { mes: number; ano: number }) {
         onChange={(e) => aplicar(Number(e.target.value), ano)}
         className="rounded-lg border border-(--color-border) bg-(--color-surface-1) px-3 py-2 text-sm text-(--color-text) outline-none transition-colors focus:border-(--color-navy) focus:ring-2 focus:ring-(--color-navy)/15"
       >
+        <option value={0}>Ano todo</option>
         {MESES_PT.map((nome, indice) => (
           <option key={nome} value={indice + 1}>
             {nome.charAt(0) + nome.slice(1).toLowerCase()}

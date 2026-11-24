@@ -86,7 +86,7 @@ function filtrarPorCompetencia(
 ): LinhaEnriquecida[] {
   return linhas.filter((l) => {
     const data = paraData(l[coluna]);
-    return !!data && data.getUTCMonth() + 1 === mes && data.getUTCFullYear() === ano;
+    return !!data && (mes === 0 || data.getUTCMonth() + 1 === mes) && data.getUTCFullYear() === ano; // mes 0 = ano todo
   });
 }
 

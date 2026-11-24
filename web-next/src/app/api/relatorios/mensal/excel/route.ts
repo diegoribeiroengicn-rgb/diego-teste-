@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { modulo, mes, ano } = (await req.json()) as { modulo: ModuloProdutividade | "consolidado"; mes: number; ano: number };
-  if (!modulo || !mes || !ano) {
+  if (!modulo || typeof mes !== "number" || mes < 0 || mes > 12 || !ano) {
     return NextResponse.json({ erro: "Módulo, mês e ano são obrigatórios." }, { status: 400 });
   }
 
