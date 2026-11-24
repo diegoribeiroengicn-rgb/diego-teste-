@@ -76,6 +76,13 @@ export function texto(valor: unknown, maiusculo = false): string | null {
   return maiusculo ? t.toUpperCase() : t;
 }
 
+/** Maiúsculas e sem acento — só para comparar (ELÉTRICA = ELETRICA).
+ * O valor gravado no banco nunca é alterado. */
+export function semAcento(valor: unknown): string | null {
+  const t = texto(valor, true);
+  return t === null ? null : t.normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
 export function inteiro(valor: unknown): number | null {
   if (vazio(valor)) return null;
   const n = Number(valor);
@@ -168,7 +175,7 @@ export type Chave = (string | number | null)[];
 export function chaveRegistro(linha: LinhaPlanilha, campoNomeEntidade: string, campoExtra: string | null = null): Chave {
   const codigo = texto(linha.codigo, true);
   const identificador = codigo || texto(linha[campoNomeEntidade], true);
-  const disciplina = texto(linha.disciplina, true);
+  const disciplina = semAcento(linha.disciplina);
   const revisao = (linha.revisao as number | null) ?? null;
   const numAt = numAtNormalizado(linha.num_at);
   if (numAt !== null) return [identificador, disciplina, revisao, numAt];
@@ -185,7 +192,7 @@ export function chaveRegistro(linha: LinhaPlanilha, campoNomeEntidade: string, c
 export function chaveSemAt(linha: LinhaPlanilha, campoNomeEntidade: string, campoExtra: string | null = null): Chave {
   const codigo = texto(linha.codigo, true);
   const identificador = codigo || texto(linha[campoNomeEntidade], true);
-  const disciplina = texto(linha.disciplina, true);
+  const disciplina = semAcento(linha.disciplina);
   const revisao = (linha.revisao as number | null) ?? null;
   const extras: (string | null)[] = [texto(linha.data_solicitacao)];
   if (campoExtra) extras.push(texto(linha[campoExtra], true));
@@ -439,6 +446,21 @@ export function planejarLinhas(
           existente = candidato;
           chaveEfetiva = chaveFallback;
         }
+      }
+    }
+    if (existente === null && linha.item != null) {
+      // Reserva por Item: a linha da planilha é a mesma (mesmo Item, mesmo
+      // código e disciplina) mas algum campo da chave foi editado depois
+      // (N° AT, Data de Solicitação, Obra). Sem isso a importação criava
+      // um registro novo e deixava o antigo duplicando os indicadores.
+      const candidato = ativos.find((c) =>
+        !usados.has(c) && c.item != null && Number(c.item) === Number(linha.item)
+        && semAcento(c.codigo) === semAcento(linha.codigo)
+        && semAcento(c[campoNomeEntidade]) === semAcento(linha[campoNomeEntidade])
+        && semAcento(c.disciplina) === semAcento(linha.disciplina));
+      if (candidato) {
+        usados.add(candidato);
+        existente = candidato;
       }
     }
     if (existente) encontrados.add(existente);
