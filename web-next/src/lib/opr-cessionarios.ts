@@ -98,11 +98,19 @@ export type IndicadorDisciplina = { disciplina: string; documentos: number; perc
 function indicadoresDisciplinas(linhas: LinhaEnriquecida[]): IndicadorDisciplina[] {
   const base = excluirArts(linhas);
   const porDisciplina = new Map<string, number>();
+  const grafias = new Map<string, Map<string, number>>();
   for (const l of base) {
-    const chave = l.disciplina || "—";
-    porDisciplina.set(chave, (porDisciplina.get(chave) ?? 0) + (l.num_documentos || 0));
+    // Agrupa sem acento/caixa (ELÉTRICA = ELETRICA); o rótulo exibido é a grafia mais comum.
+    const bruto = (l.disciplina || "—").trim();
+    const chave = bruto.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const docs = l.num_documentos || 0;
+    const g = grafias.get(chave) ?? new Map<string, number>();
+    g.set(bruto, (g.get(bruto) ?? 0) + docs);
+    grafias.set(chave, g);
+    porDisciplina.set(chave, (porDisciplina.get(chave) ?? 0) + docs);
   }
-  const entradas = [...porDisciplina.entries()].filter(([, qtd]) => qtd > 0).sort((a, b) => b[1] - a[1]);
+  const entradas = [...porDisciplina.entries()].filter(([, qtd]) => qtd > 0).sort((a, b) => b[1] - a[1])
+    .map(([chave, qtd]) => [[...(grafias.get(chave) ?? new Map([[chave, 0]])).entries()].sort((a, b) => b[1] - a[1])[0][0], qtd] as [string, number]);
   const total = entradas.reduce((soma, [, qtd]) => soma + qtd, 0);
   if (!total) return [];
   return entradas.map(([disciplina, documentos]) => ({
