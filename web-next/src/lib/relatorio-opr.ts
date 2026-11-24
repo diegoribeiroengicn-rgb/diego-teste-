@@ -62,13 +62,19 @@ function cabecalhoOpr(doc: PDFKit.PDFDocument, titulo: string, mesAno: string): 
   doc.y = alturaBanner + 14;
 }
 
-/** Monta o infográfico de uma página (paisagem A4) — mesma estrutura do
- * modelo de referência enviado pelo usuário e de
- * gat/export_pdf.py::gerar_opr_infografico_cessionarios_pdf: Contribuição
- * das Disciplinas, Projetos Liberados no Mês, Liberado/Não Liberado +
- * bloco lateral de texto, Acumulado do Ano (atual × anterior). Os
- * gráficos do original (Plotly rasterizado via Kaleido) são redesenhados
- * aqui como vetores nativos do pdfkit — ver lib/export-pdf-graficos.ts. */
+/** Agrupa disciplinas pequenas em "Outras" para a legenda ficar legível. */
+function agruparDisciplinas(dados: DadosOpr, max = 8) {
+  const todas = dados.disciplinas.map((d) => ({ rotulo: d.disciplina, valor: d.documentos, cor: CORES_DISCIPLINA[d.disciplina] ?? COR_CEU }));
+  if (todas.length <= max) return todas;
+  const topo = todas.slice(0, max);
+  const resto = todas.slice(max).reduce((soma, f) => soma + f.valor, 0);
+  return [...topo, { rotulo: `Outras (${todas.length - max})`, valor: resto, cor: COR_TEXTO_DIM }];
+}
+
+/** Relatório em várias páginas (paisagem A4), gráficos grandes:
+ *  1) Contribuição das Disciplinas + Resumo + Liberado/Não liberado
+ *  2) Projetos liberados por revisão + Acumulado do ano
+ *  3) (só se houver dados) Acumulado do ano anterior, como comparativo. */
 function construirPagina(
   doc: PDFKit.PDFDocument,
   opts: {
@@ -81,64 +87,41 @@ function construirPagina(
 ): void {
   const { entidade, mes, ano, dados, cessionariosAtivos } = opts;
   const tituloMesAno = `${nomeMes(mes)} ${ano}`;
+  const periodo = mes === 0 ? "no Ano" : "no Mês";
   const { resumo } = dados;
-
-  cabecalhoOpr(doc, `GAT ${entidade}`, tituloMesAno);
-
   const inicioX = doc.page.margins.left;
   const larguraTotal = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-  const topoLinha1 = doc.y + 4;
-  const alturaLinha1 = 190;
 
-  const larguraDisciplinas = larguraTotal * 0.3;
-  const larguraRevisao = larguraTotal * 0.3;
-  const larguraDonut = larguraTotal * 0.18;
-  const larguraTexto = larguraTotal * 0.22;
-
+  // ---- Página 1 ----
+  cabecalhoOpr(doc, `GAT ${entidade}`, tituloMesAno);
+  const topo1 = doc.y + 6;
+  const larguraEsq = larguraTotal * 0.58;
   desenharDonut(doc, {
-    x: inicioX, y: topoLinha1, largura: larguraDisciplinas, altura: alturaLinha1,
-    titulo: "Contribuição das Disciplinas",
-    fatias: dados.disciplinas.map((d) => ({ rotulo: d.disciplina, valor: d.documentos, cor: CORES_DISCIPLINA[d.disciplina] ?? COR_CEU })),
+    x: inicioX, y: topo1, largura: larguraEsq, altura: 400,
+    titulo: "Contribuição das Disciplinas (documentos analisados)",
+    legendaLateral: true,
+    fatias: agruparDisciplinas(dados),
   });
 
-  desenharBarrasAgrupadas(doc, {
-    x: inicioX + larguraDisciplinas, y: topoLinha1, largura: larguraRevisao, altura: alturaLinha1,
-    titulo: "Projetos Liberados no Mês",
-    series: [{ rotulo: "Total", cor: COR_VERDE }, { rotulo: "C/ Substituição", cor: COR_DOURADO }],
-    grupos: dados.porRevisao.map((r) => ({
-      rotulo: `R${String(r.revisao).padStart(2, "0")}`,
-      valores: [r.total, r.com_substituicao],
-    })),
-  });
-
-  const xDonut2 = inicioX + larguraDisciplinas + larguraRevisao;
-  desenharDonut(doc, {
-    x: xDonut2, y: topoLinha1, largura: larguraDonut, altura: alturaLinha1 - 56,
-    valorAbsoluto: true,
-    fatias: [
-      { rotulo: "LIBERADO", valor: resumo.liberados, cor: COR_VERDE },
-      { rotulo: "NÃO LIBERADO", valor: resumo.nao_liberados, cor: COR_VERMELHO },
-    ],
-  });
-
-  const xTexto = xDonut2 + larguraDonut;
-  let yTexto = topoLinha1;
+  const xDir = inicioX + larguraEsq + 24;
+  const larguraDir = larguraTotal - larguraEsq - 24;
+  let yDir = topo1;
   if (cessionariosAtivos !== undefined) {
-    doc.font("Helvetica-Bold").fontSize(8.5).fillColor(NAVY).text("CESSIONÁRIOS ATIVOS", xTexto, yTexto, { width: larguraTexto });
-    yTexto += 13;
+    doc.font("Helvetica-Bold").fontSize(11).fillColor(NAVY).text("CESSIONÁRIOS ATIVOS", xDir, yDir, { width: larguraDir });
+    yDir += 17;
     if (cessionariosAtivos.length === 0) {
-      doc.font("Helvetica").fontSize(7.5).fillColor("#64748B").text("Nenhum cadastrado.", xTexto, yTexto, { width: larguraTexto });
-      yTexto += 11;
+      doc.font("Helvetica").fontSize(10).fillColor("#64748B").text("Nenhum cadastrado.", xDir, yDir, { width: larguraDir });
+      yDir += 15;
     } else {
       for (const c of cessionariosAtivos) {
-        doc.font("Helvetica").fontSize(7.5).fillColor("#334155").text(`• ${c.quantidade} ${c.categoria}`, xTexto, yTexto, { width: larguraTexto });
-        yTexto += 11;
+        doc.font("Helvetica").fontSize(10).fillColor("#334155").text(`• ${c.quantidade} ${c.categoria}`, xDir, yDir, { width: larguraDir });
+        yDir += 15;
       }
     }
-    yTexto += 6;
+    yDir += 8;
   }
-  doc.font("Helvetica-Bold").fontSize(8.5).fillColor(NAVY).text("RESUMO", xTexto, yTexto, { width: larguraTexto });
-  yTexto += 13;
+  doc.font("Helvetica-Bold").fontSize(11).fillColor(NAVY).text("RESUMO", xDir, yDir, { width: larguraDir });
+  yDir += 17;
   for (const texto of [
     `${resumo.analises_emitidas} análises emitidas`,
     `${resumo.documentos} docs analisados`,
@@ -146,31 +129,59 @@ function construirPagina(
     `${resumo.no_prazo} no prazo (${resumo.no_prazo_pct}%)`,
     `${resumo.atrasados} atrasados (${resumo.atrasados_pct}%)`,
   ]) {
-    doc.font("Helvetica").fontSize(7.5).fillColor("#334155").text(texto, xTexto, yTexto, { width: larguraTexto });
-    yTexto += 11;
+    doc.font("Helvetica").fontSize(11).fillColor("#334155").text(texto, xDir, yDir, { width: larguraDir });
+    yDir += 17;
   }
+  yDir += 10;
+  desenharDonut(doc, {
+    x: xDir, y: yDir, largura: larguraDir, altura: Math.max(180, doc.page.height - doc.page.margins.bottom - yDir - 6),
+    titulo: "Liberado × Não liberado",
+    valorAbsoluto: true,
+    fatias: [
+      { rotulo: "LIBERADO", valor: resumo.liberados, cor: COR_VERDE },
+      { rotulo: "NÃO LIBERADO", valor: resumo.nao_liberados, cor: COR_VERMELHO },
+    ],
+  });
 
-  const topoLinha2 = topoLinha1 + alturaLinha1 + 14;
-  const alturaLinha2 = 160;
-  const larguraMetade = larguraTotal / 2 - 6;
-
+  // ---- Página 2 ----
+  doc.addPage();
+  cabecalhoOpr(doc, `GAT ${entidade}`, tituloMesAno);
+  const topo2 = doc.y + 6;
+  const alturaUtil = doc.page.height - doc.page.margins.bottom - topo2;
+  const alturaRev = alturaUtil * 0.42;
+  desenharBarrasAgrupadas(doc, {
+    x: inicioX, y: topo2, largura: larguraTotal, altura: alturaRev,
+    titulo: `Projetos Liberados ${periodo} (por revisão)`,
+    series: [{ rotulo: "Total", cor: COR_VERDE }, { rotulo: "C/ Substituição", cor: COR_DOURADO }],
+    grupos: dados.porRevisao.map((r) => ({
+      rotulo: `R${String(r.revisao).padStart(2, "0")}`,
+      valores: [r.total, r.com_substituicao],
+    })),
+  });
   const coresAcumulado = [COR_VERMELHO, COR_DOURADO, COR_VERDE];
+  const pontosDe = (lista: DadosOpr["acumuladoAtual"]) =>
+    lista.map((a) => ({ rotulo: MESES_PT_ABREV[a.mes - 1], segmentos: [a.atrasado, a.no_prazo, a.adiantado], total: a.total }));
   desenharBarrasEmpilhadas(doc, {
-    x: inicioX, y: topoLinha2, largura: larguraMetade, altura: alturaLinha2,
-    titulo: `Acumulado do Ano de ${ano}`,
+    x: inicioX, y: topo2 + alturaRev + 14, largura: larguraTotal, altura: alturaUtil - alturaRev - 14 - 16,
+    titulo: `Acumulado do Ano de ${ano} — documentos por situação de prazo`,
     cores: coresAcumulado,
-    pontos: dados.acumuladoAtual.map((a) => ({
-      rotulo: MESES_PT_ABREV[a.mes - 1], segmentos: [a.atrasado, a.no_prazo, a.adiantado], total: a.total,
-    })),
+    pontos: pontosDe(dados.acumuladoAtual),
   });
-  desenharBarrasEmpilhadas(doc, {
-    x: inicioX + larguraMetade + 12, y: topoLinha2, largura: larguraMetade, altura: alturaLinha2,
-    titulo: `Acumulado do Ano de ${ano - 1}`,
-    cores: coresAcumulado,
-    pontos: dados.acumuladoAnterior.map((a) => ({
-      rotulo: MESES_PT_ABREV[a.mes - 1], segmentos: [a.atrasado, a.no_prazo, a.adiantado], total: a.total,
-    })),
-  });
+  doc.font("Helvetica").fontSize(8).fillColor("#334155")
+    .text("Legenda: verde = adiantado · laranja = no prazo · vermelho = atrasado", inicioX, doc.page.height - doc.page.margins.bottom - 10, { width: larguraTotal, lineBreak: false });
+
+  // ---- Página 3 (comparativo, só se houver dados) ----
+  if (dados.acumuladoAnterior.some((a) => a.total > 0)) {
+    doc.addPage();
+    cabecalhoOpr(doc, `GAT ${entidade}`, `Comparativo — ${ano - 1}`);
+    const topo3 = doc.y + 6;
+    desenharBarrasEmpilhadas(doc, {
+      x: inicioX, y: topo3, largura: larguraTotal, altura: doc.page.height - doc.page.margins.bottom - topo3 - 20,
+      titulo: `Acumulado do Ano de ${ano - 1} (ano anterior, para comparação)`,
+      cores: coresAcumulado,
+      pontos: pontosDe(dados.acumuladoAnterior),
+    });
+  }
 }
 
 export async function gerarOprCessionariosPdf(

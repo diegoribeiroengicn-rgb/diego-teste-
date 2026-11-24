@@ -20,22 +20,24 @@ function pontoArco(cx: number, cy: number, raio: number, anguloGraus: number): [
  * GraficoLiberadoDonut em opr-cessionarios-charts.tsx. */
 export function desenharDonut(
   doc: PDFKit.PDFDocument,
-  opts: { x: number; y: number; largura: number; altura: number; titulo?: string; fatias: FatiaDonut[]; valorAbsoluto?: boolean },
+  opts: { x: number; y: number; largura: number; altura: number; titulo?: string; fatias: FatiaDonut[]; valorAbsoluto?: boolean; legendaLateral?: boolean },
 ): void {
   const { x, y, largura, altura } = opts;
+  const lateral = !!opts.legendaLateral;
   const NAVY = "#1B3A8A";
   let topo = y;
   if (opts.titulo) {
-    doc.font("Helvetica-Bold").fontSize(9.5).fillColor(NAVY).text(opts.titulo, x, topo, { width: largura });
-    topo += 16;
+    doc.font("Helvetica-Bold").fontSize(12).fillColor(NAVY).text(opts.titulo, x, topo, { width: largura });
+    topo += 20;
   }
 
   const total = opts.fatias.reduce((s, f) => s + f.valor, 0);
-  const alturaLegenda = 10 * opts.fatias.length + 4;
+  const alturaLegenda = lateral ? 0 : 10 * opts.fatias.length + 4;
   const alturaDonut = altura - (topo - y) - alturaLegenda;
-  const cx = x + largura / 2;
+  const larguraAnel = lateral ? largura * 0.5 : largura;
+  const cx = x + larguraAnel / 2;
   const cy = topo + alturaDonut / 2;
-  const raioExterno = Math.min(largura, alturaDonut) / 2 - 4;
+  const raioExterno = Math.min(larguraAnel, alturaDonut) / 2 - 4;
   const raioInterno = raioExterno * 0.52;
 
   if (total <= 0) {
@@ -80,6 +82,19 @@ export function desenharDonut(
     }
   }
 
+  if (lateral) {
+    const passo = 18;
+    let lyL = cy - (opts.fatias.length * passo) / 2;
+    const xL = x + larguraAnel + 10;
+    for (const fatia of opts.fatias) {
+      const pct = Math.round((1000 * fatia.valor) / total) / 10;
+      doc.fillColor(fatia.cor).rect(xL, lyL + 2, 10, 10).fill();
+      doc.font("Helvetica").fontSize(10).fillColor("#334155")
+        .text(`${fatia.rotulo} — ${pct}% (${fatia.valor})`, xL + 15, lyL, { width: x + largura - xL - 15, lineBreak: false });
+      lyL += passo;
+    }
+    return;
+  }
   let ly = cy + alturaDonut / 2 + 6;
   for (const fatia of opts.fatias) {
     doc.fillColor(fatia.cor).rect(x + 2, ly + 1, 7, 7).fill();
@@ -101,11 +116,11 @@ export function desenharBarrasAgrupadas(
   const NAVY = "#1B3A8A";
   let topo = y;
   if (opts.titulo) {
-    doc.font("Helvetica-Bold").fontSize(9.5).fillColor(NAVY).text(opts.titulo, x, topo, { width: largura });
-    topo += 16;
+    doc.font("Helvetica-Bold").fontSize(12).fillColor(NAVY).text(opts.titulo, x, topo, { width: largura });
+    topo += 20;
   }
-  const alturaLegenda = 12;
-  const alturaEixo = 12;
+  const alturaLegenda = 14;
+  const alturaEixo = 16;
   const alturaGrafico = altura - (topo - y) - alturaLegenda - alturaEixo;
   const baseY = topo + alturaGrafico;
 
@@ -118,7 +133,7 @@ export function desenharBarrasAgrupadas(
     doc.font("Helvetica").fontSize(9).fillColor("#64748B").text("Sem dados no período.", x, baseY - 20, { width: largura, align: "center" });
   } else {
     const larguraGrupo = largura / grupos.length;
-    const larguraBarra = Math.min(16, (larguraGrupo * 0.6) / series.length);
+    const larguraBarra = Math.min(40, (larguraGrupo * 0.6) / series.length);
     const espacoEntreBarras = 3;
 
     grupos.forEach((grupo, i) => {
@@ -130,11 +145,11 @@ export function desenharBarrasAgrupadas(
         const by = baseY - h;
         doc.fillColor(series[s].cor).rect(bx, by, larguraBarra, h).fill();
         if (valor > 0) {
-          doc.font("Helvetica").fontSize(7.5).fillColor("#0F172A").text(String(valor), bx - 2, by - 10, { width: larguraBarra + 4, align: "center" });
+          doc.font("Helvetica").fontSize(10).fillColor("#0F172A").text(String(valor), bx - 2, by - 13, { width: larguraBarra + 4, align: "center" });
         }
         bx += larguraBarra + espacoEntreBarras;
       });
-      doc.font("Helvetica").fontSize(8).fillColor("#334155").text(grupo.rotulo, x + larguraGrupo * i, baseY + 2, { width: larguraGrupo, align: "center" });
+      doc.font("Helvetica").fontSize(10).fillColor("#334155").text(grupo.rotulo, x + larguraGrupo * i, baseY + 2, { width: larguraGrupo, align: "center" });
     });
   }
 
@@ -160,11 +175,11 @@ export function desenharBarrasEmpilhadas(
   const NAVY = "#1B3A8A";
   let topo = y;
   if (opts.titulo) {
-    doc.font("Helvetica-Bold").fontSize(9.5).fillColor(NAVY).text(opts.titulo, x, topo, { width: largura });
-    topo += 16;
+    doc.font("Helvetica-Bold").fontSize(12).fillColor(NAVY).text(opts.titulo, x, topo, { width: largura });
+    topo += 20;
   }
-  const alturaEixo = 12;
-  const alturaRotuloTotal = 12;
+  const alturaEixo = 16;
+  const alturaRotuloTotal = 16;
   const alturaGrafico = altura - (topo - y) - alturaEixo - alturaRotuloTotal;
   const baseY = topo + alturaRotuloTotal + alturaGrafico;
 
@@ -174,7 +189,7 @@ export function desenharBarrasEmpilhadas(
   doc.strokeColor("#CBD5E1").lineWidth(0.6).moveTo(x, baseY).lineTo(x + largura, baseY).stroke();
 
   const larguraGrupo = largura / Math.max(1, pontos.length);
-  const larguraBarra = Math.min(22, larguraGrupo * 0.6);
+  const larguraBarra = Math.min(48, larguraGrupo * 0.6);
 
   pontos.forEach((ponto, i) => {
     const centroGrupo = x + larguraGrupo * i + larguraGrupo / 2;
@@ -185,18 +200,18 @@ export function desenharBarrasEmpilhadas(
       if (h > 0) {
         doc.fillColor(cores[s]).rect(bx, by - h, larguraBarra, h).fill();
         const percentual = ponto.total ? Math.round((100 * valor) / ponto.total) : 0;
-        if (h > 18) {
-          doc.font("Helvetica-Bold").fontSize(6.5).fillColor("#FFFFFF").text(String(valor), bx - 2, by - h / 2 - 7, { width: larguraBarra + 4, align: "center" });
-          doc.font("Helvetica").fontSize(5.5).fillColor("#FFFFFF").text(`${percentual}%`, bx - 2, by - h / 2 + 1, { width: larguraBarra + 4, align: "center" });
+        if (h > 26) {
+          doc.font("Helvetica-Bold").fontSize(9).fillColor("#FFFFFF").text(String(valor), bx - 2, by - h / 2 - 9, { width: larguraBarra + 4, align: "center" });
+          doc.font("Helvetica").fontSize(7.5).fillColor("#FFFFFF").text(`${percentual}%`, bx - 2, by - h / 2 + 2, { width: larguraBarra + 4, align: "center" });
         } else if (h > 9) {
-          doc.font("Helvetica").fontSize(6.5).fillColor("#FFFFFF").text(String(valor), bx - 2, by - h / 2 - 4, { width: larguraBarra + 4, align: "center" });
+          doc.font("Helvetica").fontSize(8).fillColor("#FFFFFF").text(String(valor), bx - 2, by - h / 2 - 4, { width: larguraBarra + 4, align: "center" });
         }
       }
       by -= h;
     });
     if (ponto.total > 0) {
-      doc.font("Helvetica-Bold").fontSize(7.5).fillColor(NAVY).text(String(ponto.total), bx - 6, by - 11, { width: larguraBarra + 12, align: "center" });
+      doc.font("Helvetica-Bold").fontSize(10).fillColor(NAVY).text(String(ponto.total), bx - 6, by - 13, { width: larguraBarra + 12, align: "center" });
     }
-    doc.font("Helvetica").fontSize(7).fillColor("#334155").text(ponto.rotulo, x + larguraGrupo * i, baseY + 2, { width: larguraGrupo, align: "center" });
+    doc.font("Helvetica").fontSize(10).fillColor("#334155").text(ponto.rotulo, x + larguraGrupo * i, baseY + 2, { width: larguraGrupo, align: "center" });
   });
 }
